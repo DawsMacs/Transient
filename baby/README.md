@@ -43,6 +43,84 @@ cargo test --offline                 # 61 tests, including numerical checks of t
 ./target/release/baby energy         # what one question and one learning step cost, counted
 ```
 
+## Does learning stay light when the world gets big? (2026-10-20)
+
+Everything before this was measured on 13 units and 792 lessons. `baby scale` (`scale.rs`) generates a much larger synthetic world and measures it: 20 to 600 units (60% fact units, then rules,
+selects and built expressions across nine semantics), vocabularies of 1,000 to 10,000 subjects shared across units, six overlapping phrasing styles, label noise, misspelt questions, and traps that must be refused.
+`--sweep 20,60,200,600` runs each size in its own process so peak memory is honest. Same seed throughout. One laptop core.
+
+**What the first run found** (before any change; WRONG was 0.00 % everywhere, all 467 traps refused):
+
+| units | lessons | teach | one new fact | going back over everything (`reorganise`) |
+|---|---|---|---|---|
+| 20 | 828 | 4.6 s | 4.7 ms | 1.6 s |
+| 60 | 2,520 | 13.2 s | 11.3 ms | 9.4 s |
+| 200 | 8,580 | 41.8 s | **40.1 ms** | **99.9 s** |
+
+Learning one lesson grew with the whole world (O(lessons): every `learn` recomputed the word weights and the routing table from every lesson, and cloned every lesson to find the next fact number), and reorganising
+was roughly O(units^2). At 200 units quality had also slipped (3 of 18 comparison units had mislabelled themselves, rewordings 97.5 %, never-taught 94.8 %) with WRONG still 0.
+
+**What changed, each measured or tested:**
+
+1. **Incremental tables.** `Weights::add` and a sparse `Routing` (counts per word per unit, `add_lesson`) take one more lesson in time proportional to its words. The routing score drops two terms that are identical for every unit
+   (they cancel in the margin, which is all that is used) so the table no longer stores vocabulary x units floats. A test pins that incrementally kept tables are *exactly equal* to a rebuild after a mix of real operations.
+   A lesson that only corrects an answer no longer rebuilds anything. Result: **a new fact costs 0.4 ms at every size from 20 to 600 units** (was 40 ms at 200). Answering also got cheaper: 85 -> 57 counted operations
+   per question (159x fewer than the slow way, was 106x), same answers.
+2. **Cross-validation folds that cannot be peeked through.** Memory matches by *set* of words, so the swapped twin of a commutative fact ("which is bigger two or three" / "three or two") held in another fold let `remember` look perfect
+   and tie with `select`; the cheaper one won and the unit became memorise-only. Facts that share a bag of words now go in one fold. A seed-sweep test pins it (it failed on seed 10 before the fix).
+3. **Stratified folds for merges.** A unit of five lessons was judged on whatever a random split left it: it could join a rule family on only 17 of 24 seeds. Each part's facts are now spread over the folds
+   (24 of 24 seeds, and multiplication is rejected on 24 of 24).
+4. **Merging by set, not by pair.** `reorganise` tested every pair and started over after every merge; each merge then re-ran cross-validation on the whole growing family. Profiling (not guessing) showed the merge test cost 20-30 ms
+   and the re-learning *after* it 6.9 s for 564 lessons. Now a whole set of rule units is tested at once ("does one rule fit every part?"), halved only when it does not, and the merged unit is settled from the evidence that justified the merge.
+   **99.9 s -> 0.32 s at 200 units, 1.35 s at 600.**
+5. **The network is only tried where it can matter** (cheap mechanisms show some structure, 25 % up to the bar). It was trained and cross-validated for every unit that was a plain table and never won. Teaching 25,776 lessons:
+   127 s -> **2.65 s** (792 lessons: 3.8 s -> 0.34 s). No scorecard moved.
+
+**Clean world after the changes** (final sweep): 
+
+| units | lessons | teach | peak MB | new fact | repeat lesson | answer | reorganise | file | mechanism right | reworded / never taught | WRONG | traps answered |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 20 | 828 | 0.08 s | 5.5 | 0.38 ms | 0.65 ms | 6 us | 0.03 s | 33 KB | 100 % | 100 / 100 % | 0.00 | 0 |
+| 60 | 2,520 | 0.35 s | 8.8 | 0.64 ms | 0.66 ms | 10 us | 0.09 s | 97 KB | 100 % | 100 / 100 % | 0.00 | 0 |
+| 200 | 8,580 | 0.85 s | 21 | 0.41 ms | 0.61 ms | 7 us | 0.32 s | 331 KB | 100 % | 100 / 100 % | 0.00 | 0 |
+| 600 | 25,776 | 2.65 s | 56 | 0.57 ms | 0.55 ms | 11 us | 1.35 s | 1,008 KB | 100 % | 100 / 100 % | 0.00 | 0 |
+
+A 10,000-subject vocabulary (200 units) behaves the same (0.9 s to teach, 21 MB, 100 %, 0 wrong, 467 traps refused). Memory is about 2 KB per lesson including the test data; the file is 40 bytes per lesson.
+
+**Mistakes made on the way (recorded on purpose):**
+
+- **My first generator made rewordings that used a word the unit had never been taught** ("what is bafoba sedavubi" where "what" never appeared in that unit). The baby refused 30 % of them. I first read that as a weakness; it is the
+  guard that closed the "code for five" bluff working as designed. The generator was wrong; a test now pins that every reworded question uses only words its unit was taught.
+- **I attributed the 3 mislabelled units to scale.** They were a CV flaw (change 2) that scale merely made frequent: at 20 and 60 units the luck happened to hold.
+- **A test failed after change 2 and I first suspected the change.** It was a test that passed on seed 1 by luck (the small unit joined the family on 17 of 24 seeds with the old folds, 18 with the new); the real flaw was
+  variance in the merge test (change 3). Leave-one-out predictions were perfect, 5-fold ones were not: the clue.
+- The "settled" shortcut and the network trial were tuned on a clean world; label noise (below) found them wanting.
+
+**Label noise: the honest part, and it is NOT solved.** With 2 % of taught answers wrong (60 and 200 units):
+
+| | 60 units | 200 units |
+|---|---|---|
+| rewordings right / refused / WRONG | 81.5 / 17.6 / 0.83 % | 78.3 / 20.7 / 1.01 % |
+| never taught right / refused / WRONG | 62.2 / 37.8 / 0.00 % | 56.1 / 43.3 / **0.58 %** |
+| units with the mechanism they should have | 90 % | 85 % |
+| must-refuse traps answered | 0 of 140 | **1 of 467** |
+| the lessons whose answer was corrupted, answered with the corrupted answer | 40 % | 22 % |
+
+So **the "0 % wrong" claim holds on clean lessons and does not survive 2 % wrong lessons**: about 1 % wrong, and a fifth of questions refused that a clean world answers. What the scale test did fix under noise:
+the first noisy run was *much* worse (WRONG 6.1 % never-taught, 9.2 % beyond the taught range, learning a lesson 176 ms) because a mechanism with 28 % held-back accuracy was allowed to answer: the bar to replace memory was 25 %, which clean
+lessons never test. It is now 90 % (`RELIABLE`; test pinned), and a reliable rule may leave one lesson in twenty unexplained instead of re-deciding everything. What remains, and why:
+
+- A few wrong lessons skew the *exact* least-squares fit, so rule units drop to 70-89 % held-back and fall back to memorise-only (refusals, not wrong answers), and the 3 program units that needed an exact expression
+  cannot find one. A **robust fit** (drop lessons that disagree *and whose operator word is otherwise consistent*, so scattered noise is ignored but a polluting second rule is still caught and split) is the next step.
+- The remaining WRONG comes from memory repeating a corrupted phrasing. Each fact has three phrasings, so **plurality voting among matching lessons, refusing on a tie**, would recover most of it (and would also refuse when two lessons
+  with the same words disagree: the apart/minus family of trap).
+- Noisy units that are not settled still cost 80-250 ms per lesson when a lesson touches them (a new fact in a settled fact unit stays 0.4 ms).
+
+**Honest limits.** Still synthetic and tidy in structure: made-up words, number words 0-10, four phrasings per fact, a vocabulary with no frequency distribution (no Zipf), no ambiguity between entities and words, no
+real misspellings that land on other words. `typo` questions are all refused (none answered), so spelling robustness at scale is untested here (the letters reader exists in the older network but is not in the school). Discovery
+(`baby discover`) still has its own quadratic pair loops (3.6 s on 792 lessons) and was not scaled. Teaching cost is now a property of the *generator* as much as of the baby: real text will have far more distinct units and
+far less regular ones. 600 units / 26,000 lessons / 10,000 words is a long way from millions of sentences.
+
 ## Learning is light (2026-10-20)
 
 Daws: training is enormously intensive today, and learning with Adaptive Learning should be light enough that nearly anyone can do it, with no data centre. That is
@@ -781,7 +859,7 @@ The road there before `program`, because the dead ends are the useful part:
 
 ## Next (candidates; the freedom to reorder is mine)
 
-1. **Does learning stay light when the world gets bigger?** Test it: many more units, noisy lessons, overlapping phrasings, a vocabulary of thousands. The cheap path and the pen are untested there.
+1. ~~Does learning stay light when the world gets bigger?~~ Answered for clean lessons up to 600 units (see the scale section; learning one lesson is flat at ~0.5 ms). **Open: label noise** (robust rule fitting; plurality voting in memory, refusing on a tie), a Zipf-shaped vocabulary, discovery at scale, and the pen with thousands of waiting lessons.
 2. **Compress what it keeps without forgetting anything**: a compact binary format, and the phrasings of a fact stored as templates plus facts.
 3. **Incremental and exact updates**, sparse updates, small integers, and the real energy meter to replace time and memory as the measure.
 4. **Let it propose its own mechanisms** when nothing generalises (the units that stay "memorise only").

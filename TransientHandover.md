@@ -22,7 +22,7 @@ re-deriving anything. Order of reading: this file, then `TransientVision.md` (Da
 
 ## 2. Where the work stands (2026-10-20)
 
-All code is in `~/Transient/baby/` (pure Rust, **zero dependencies**, builds offline, **61 tests pass**). It is a Cargo workspace; `runs/` and `target/` are gitignored.
+All code is in `~/Transient/baby/` (pure Rust, **zero dependencies**, builds offline, **69 tests pass**). It is a Cargo workspace; `runs/` and `target/` are gitignored.
 **Git (since 2026-10-20):** `~/Transient` is a git repo, `origin` = `git@github.com:DawsMacs/TransientAI.git` (public, Daws's global account `DawsMacs`, SSH). Daws authorised commits and pushes to that repo for this work. Licence: `AGPL-3.0-or-later` (SPDX headers in `baby/src/*.rs`, `REUSE.toml`, `LICENSE`, `LICENSES/`). Contributions use a DCO, not a CLA (`CONTRIBUTING.md`). The repo is public, so never commit anything from `.local/`, and keep the sibling project's details out.
 
 The headline artefact is **"the baby"** (`baby school` / `baby ask`), a unified system:
@@ -51,7 +51,7 @@ The headline artefact is **"the baby"** (`baby school` / `baby ask`), a unified 
 
 ```
 cd ~/Transient
-cargo test --release --offline          # 61 passed (about 20 s)
+cargo test --release --offline          # 69 passed (about 15 s)
 cargo build --release --offline
 ./target/release/baby school            # teaches 13 units (~4 s); prints how it learned each + the honest scorecard (wrong must be 0.0%)
 ./target/release/baby ask "how far apart are two and nine"      # seven, with how it knew
@@ -86,13 +86,13 @@ plus a progress log kept by the assistant.
 
 ## 5. The plan and what is next (PLAN, in order)
 
-**Immediate (I had just said "moving on to the scale test"; nothing of it is built):**
+**Immediate (the scale test was built and run on 2026-10-20; see `baby/README.md`, "Does learning stay light when the world gets big?"):**
 
-1. **Scale test: does learning stay light when the world gets big?** This is the real test of Daws's "nearly anyone, no data centre" claim and nothing yet answers it. Build a synthetic generator in `kinds.rs` (or a new
-   `scale.rs`) that yields many more units (50 to 500: mixes of fact, rule, select, built-expression kinds), larger entity vocabularies (1k to 10k words), overlapping phrasings, and **noise** (a fraction of wrong
-   answers; spelling errors). Measure teach time, peak memory, per-lesson cost, routing accuracy, wrong-rate (must stay 0), pen behaviour, `reorganise` cost, as lessons grow 10x, 100x. **Expected bottlenecks to look
-   for first** (I read the code, did not measure): `rebuild_tables()` recomputes `Weights` and the routing table over *all* lessons on *every* `learn` (O(total lessons) per lesson: needs incremental df/routing updates);
-   `reorganise` merge test is O(units^2) cross-validations; `discover` pair loops are O(groups^2); `all_items()` clones every lesson; `Remembered::from_items` rebuilt per lesson.
+1. **Scale test, continued.** DONE for clean lessons up to 600 units / 26k lessons / 10k vocabulary (`baby scale --sweep 20,60,200,600`; learning one fact is flat at ~0.5 ms; teaching 26k lessons 2.65 s; WRONG 0). What it fixed: incremental
+   weights + sparse routing, folds that cannot be peeked through (word-bag twins), stratified merge folds, set-wise merging, network only where it can matter, `RELIABLE` = 0.9 bar for any mechanism to answer. **OPEN, do next:**
+   - **Label noise (2 % wrong lessons) gives ~1 % WRONG and ~20 % extra refusals.** Robust rule fitting (drop lessons that disagree *only if their operator word is otherwise consistent*, so a polluting second rule is still caught by split);
+     plurality-voting memory that refuses on a tie (also guards the apart/minus family); a unit that is mostly a rule should not flip to memorise-only on a few wrong lessons.
+   - Zipf-shaped vocabulary, entity/word ambiguity, misspellings that land on other words; `baby discover` at scale (still quadratic pair loops, 3.6 s on 792); the pen with thousands of waiting lessons (`process_pen` re-clusters on every lesson).
 2. **Compact storage format** that loses nothing (binary, word table + ids, phrasings stored as templates plus facts); forgetting (`--compact`) then becomes a separate saving for what is truly redundant.
 3. **Incremental and exact updates** (add one lesson to a fitted rule without refitting; sparse updates; small integers instead of floats) and the **real energy meter** (needs Daws's one-time
    `sudo chmod a+r /sys/class/powercap/intel-rapl:0/energy_uj`, never run it yourself; `perf` counters are blocked, `perf_event_paranoid=4`).
