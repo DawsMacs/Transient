@@ -1,2 +1,150 @@
-# TransientAI
-Fitting powerful intelligence into your pocket, for many reasons like not needing to pay for one, or keeping full ownership of AI for yourself.
+<p align="center">
+  <img src="assets/banner.svg" alt="TransientAI" width="100%">
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img alt="License: AGPL-3.0-or-later" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-blue"></a>
+  <a href="https://github.com/DawsMacs/TransientAI/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/DawsMacs/TransientAI/actions/workflows/ci.yml/badge.svg"></a>
+  <img alt="Rust, zero dependencies" src="https://img.shields.io/badge/rust-zero%20dependencies-orange">
+</p>
+
+**TransientAI is an experimental learning system written in Rust, built to run on ordinary consumer hardware.** It explores
+*adaptive learning*: a system that keeps learning while it is used, decides for itself *how* to learn each kind of thing, and is
+measured by what it costs (operations, memory, estimated joules) rather than by parameter count alone.
+
+The current artefact is `baby/`: about 7.5k lines of Rust, **no dependencies**, builds offline, 61 tests. It is a research prototype
+evaluated on a synthetic curriculum. It is not a language model and makes no claim to be one yet.
+
+> **Status:** active research. Every number below comes from tidy synthetic lessons and *estimated* energy. Read
+> [Limitations](#limitations) before drawing conclusions.
+
+## What `baby` does
+
+1. **Learns from units of lessons.** A unit is a group of related question/answer pairs (capitals, sums, "which is bigger", ...).
+   The teacher can group them, or `baby discover` finds the units itself from an unlabelled heap.
+2. **Chooses how to learn each unit, from evidence.** For every unit it picks among five mechanisms using cross-validation on facts
+   it holds back, preferring the cheaper on ties:
+
+   | mechanism | what it does | typical use |
+   |---|---|---|
+   | `remember` | store the lesson, answer by weighted similarity (inverted index) | facts: capitals, colours, codes |
+   | `rule` | exact ridge fit of a per-word linear combination of quantities | sums, differences, doubling, halving |
+   | `select` | pick the larger or smaller of two numbers | comparisons |
+   | `program` | enumerative search over small expressions (`+ - x max min apart half`, up to 7 pieces) | multiplication, "how far apart" |
+   | `network` | small bag-of-words net | rarely needed |
+
+3. **Routes questions with a precomputed table** of how telling each word's *shape* is for each unit (numbers count as "a number"),
+   then lets that unit's mechanism answer or decline.
+4. **Explains every answer and every refusal.** It says how it knew, and refuses (with a reason) on unmet words, unrecognised
+   kinds, memorise-only units it was not told the fact for, and mechanism-level declines (negative results, out-of-line numbers,
+   missing operands).
+5. **Keeps learning after training.** A surprise gate skips lessons it can already work out; consistent lessons refit a unit in
+   place; unrecognised lessons wait in a *pen* and open a new unit once enough gather; `baby sleep` merges units that follow one
+   rule, splits units that stopped following one, and can forget lessons that are fully explained (`--compact`).
+
+## Measurements
+
+All on the synthetic curriculum in `baby/src/kinds.rs` (13 units, 792 lessons), one laptop core, no GPU.
+
+| claim | result |
+|---|---|
+| scorecard: taught / reworded / never taught / beyond range | right 100 / 100 / 95.1 / 100 %, **0 % wrong**, the rest refused; identical on seeds 1-5, for the taught school and the self-organised one |
+| answering effort | 8,977 -> 85 operations per question (106x fewer); about 56x less *estimated* energy; same answers |
+| fitting a rule | exact solve vs 800-pass SGD: 392x fewer operations, 56x faster, same rule |
+| teaching 792 lessons from nothing | 3.8 s, 11.9 MB peak |
+| a lesson it already understands / a new phrasing / a new kind | 0.18 ms (not stored) / 3 ms / 1 ms (a unit opens at the 6th) |
+| storage | school file 29 KB, of which 1.3 KB is what was learned; `--compact` keeps 49 % of the file, still answers all 792 taught lessons, 0 % wrong |
+| unit discovery from 792 unlabelled, shuffled lessons | 9 units found (13 named by the teacher), scorecard identical |
+
+The scorecard reports **WRONG separately from refused**: a refusal is an acceptable answer, a bluff is not.
+
+## Quick start
+
+Requires a stable Rust toolchain (edition 2021). No other dependencies, no network.
+
+```bash
+cargo test --release --offline         # 61 tests (about 20 s)
+cargo build --release --offline
+./target/release/baby school           # teach 13 units (~4 s), print how each was learned and the scorecard
+./target/release/baby ask "how far apart are two and nine"   # answers, and says how it knew
+./target/release/baby ask "three minus five"                 # refuses: negative result
+./target/release/baby discover --out runs/discovered.school  # find the units from unlabelled lessons
+./target/release/baby cost             # time and memory of learning
+```
+
+If the scorecard's WRONG column is ever above 0.0 %, or a refusal battery in `school.rs` starts answering, treat it as a
+regression: honesty is the property this project protects first.
+
+## Code map
+
+All under `baby/src/`.
+
+| file | role |
+|---|---|
+| `school.rs` | the unified system: units, routing table, recognition floor, `ask`, `learn`, pen, `reorganise`, `compact`, save/load |
+| `mechanisms.rs` | the five mechanisms, cross-validation, mechanism choice, the inverted-index memory |
+| `discover.rs` | unit discovery from unlabelled lessons (anchor words, fact and rule-coherence merges) |
+| `program.rs` | expression search and ambiguity detection (by behaviour, not by taught examples) |
+| `quantity.rs` | number line, per-word operator weights, exact ridge fit |
+| `kinds.rs` | the synthetic curriculum |
+| `ledger.rs` | counted operations and words moved, priced with published 45 nm figures; optional RAPL reader |
+| `memory.rs`, `store.rs` | user-taught open-vocabulary facts and the weighted-Jaccard fact store |
+| `net.rs`, `model.rs`, `data.rs`, `know.rs`, `life.rs`, `curious.rs`, `rules.rs`, `rng.rs` | the earlier from-scratch network and its experiments, plumbing |
+| `main.rs` | the CLI (`baby <command>`) |
+
+## How results are judged
+
+- **WRONG is reported apart from refused.** Accuracy alone hides bluffing.
+- **Adversarial batteries are part of the tests.** The same trap (`|a-b|`, `a-b` and `10-n` agree on every taught lesson) caught
+  the system three times; ambiguity is now defined by behaviour, merges are checked per group, and operand order is kept.
+- **Energy is estimated**, as counted operations times published per-operation costs. Ratios are the trustworthy part. A real
+  meter (RAPL) is wired in but needs a one-time permission change on the host.
+- **Dead ends are written down.** `baby/README.md` records wrong hypotheses and bugs next to the results.
+
+## Limitations
+
+- Lessons are synthetic and regular (numbers 0-10, a handful of templates). "0 % wrong" is a spot check on in-style questions
+  plus hand-written must-refuse batteries, not a proof.
+- The five mechanisms, the expression language, the number line (taught by counting lessons) and the thresholds are the author's
+  design choices. The system selects and fits among them; it does not invent a sixth.
+- Nothing here yet shows behaviour on real text, at thousands of units, or at "frontier" quality. Those are the open questions the
+  roadmap exists to answer.
+
+## Roadmap
+
+1. **Scale test:** many more units, thousand-word vocabularies, noisy and overlapping lessons; measure teach time, memory, routing
+   accuracy and wrong-rate as the lesson count grows 10x and 100x (known suspects: per-lesson table rebuilds, quadratic merge and
+   discovery loops).
+2. **Compact lossless storage format**, then incremental and exact updates, then the real energy meter.
+3. **Mechanisms it proposes itself** for units where nothing generalises; richer expression space; digits as numbers; a number
+   line it discovers rather than is taught.
+4. **Bridge to real data:** small factoid and word-problem corpora, to see which of units, mechanisms, discovery and refusal survive.
+5. **Controlled comparison:** a matched mini transformer against `baby`-style systems at three or more sizes, on quality per joule,
+   retention after new learning, adaptation speed and scaling slope.
+6. **Growth:** a unit that starts tiny and adds capacity only when it saturates (function-preserving growth).
+
+## Ambition
+
+The long-term target is capable, continually learning AI that fits a consumer device's RAM, storage and power budget, and that
+anyone can run and teach on their own hardware. Whether an architecture like this can reach that is unknown; the repository exists
+to find out by measurement. The reasoning behind the project, in the author's own words, is in
+[`TransientVision.md`](TransientVision.md) and [`docs/Direction.md`](docs/Direction.md).
+
+## Documents
+
+| file | contents |
+|---|---|
+| [`baby/README.md`](baby/README.md) | the experiment log: every result, dead end and bug, newest first |
+| [`LEARNING.md`](LEARNING.md) | learning-efficiency research notes and sources |
+| [`docs/Direction.md`](docs/Direction.md) | strategy, hardware terrain, language choice, candidate architectures |
+| [`TransientVision.md`](TransientVision.md) | the author's dated vision entries |
+| [`TransientHandover.md`](TransientHandover.md) | current state and next steps, for resuming work |
+
+## Licence
+
+Copyright (C) 2026 DawsMacs. Licensed under the **GNU Affero General Public License, version 3 or (at your option) any later
+version** (`AGPL-3.0-or-later`). The aim is that this work stays open: anyone may use, study, change and share it, and anyone who
+distributes it, or lets others use a modified version over a network, must offer their users the corresponding source under the
+same terms. See [`LICENSE`](LICENSE); per-file licensing is declared in [`REUSE.toml`](REUSE.toml) and SPDX headers.
+
+Contributions are welcome under the same licence; see [`CONTRIBUTING.md`](CONTRIBUTING.md).

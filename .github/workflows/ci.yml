@@ -1,0 +1,22 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build (no dependencies, no network needed)
+        run: cargo build --release --offline
+      - name: Tests (includes the must-refuse batteries)
+        run: cargo test --release --offline
+      - name: Scorecard must report 0.0% wrong
+        run: |
+          ./target/release/baby school | tee school.out
+          rows=$(grep -E '^ +(taught|reworded|never taught|beyond the taught range) ' school.out)
+          test "$(echo "$rows" | wc -l)" -eq 4
+          if echo "$rows" | grep -vE ' 0\.0% *$'; then echo "WRONG column above 0.0%"; exit 1; fi

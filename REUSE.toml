@@ -1,0 +1,18 @@
+# REUSE (https://reuse.software) licensing declaration for TransientAI.
+#
+# Source files carry their own SPDX headers. This file covers everything that cannot: documentation,
+# manifests, the lock file, images, CI configuration. The license texts live in LICENSES/ and LICENSE.
+version = 1
+SPDX-PackageName = "TransientAI"
+SPDX-PackageDownloadLocation = "https://github.com/DawsMacs/TransientAI"
+
+[[annotations]]
+path = [
+  "README.md", "CONTRIBUTING.md", "LEARNING.md", "TransientHandover.md", "TransientVision.md", "CLAUDE.md",
+  "docs/**", "baby/README.md",
+  "Cargo.toml", "Cargo.lock", "baby/Cargo.toml", "REUSE.toml", ".gitignore",
+  "assets/**", ".github/**",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 DawsMacs"
+SPDX-License-Identifier = "AGPL-3.0-or-later"
