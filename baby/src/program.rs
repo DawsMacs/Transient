@@ -349,7 +349,7 @@ impl ProgramRule {
             return None;
         }
         let y = self.expr.eval(nums[0], *nums.get(1).unwrap_or(&0.0));
-        let (word, dist) = self.line.nearest(y)?;
+        let (word, dist) = self.line.say(y, crate::quantity::uses_digits(q))?;
         if dist < 0.2 { Some(word) } else { None }
     }
 }

@@ -20,6 +20,28 @@ pub struct NumberLine {
     pub(crate) value: HashMap<String, f32>,
 }
 
+/// The largest number written in digits that counts as a number ("9999"). A longer string of digits is a code or a year, not a quantity.
+const MAX_DIGITS: usize = 4;
+
+/// The value of a word written in digits ("17"), if it is one.
+pub fn digits_value(w: &str) -> Option<f32> {
+    if (1..=MAX_DIGITS).contains(&w.len()) && w.bytes().all(|b| b.is_ascii_digit()) {
+        w.parse::<u32>().ok().map(|v| v as f32)
+    } else {
+        None
+    }
+}
+
+/// Is this word a number, in words or in digits?
+pub fn is_number(w: &str) -> bool {
+    NUM.contains(&w) || digits_value(w).is_some()
+}
+
+/// Does this question write any of its numbers in digits? Then it is answered in digits.
+pub fn uses_digits(q: &str) -> bool {
+    tokenize(q).iter().any(|w| digits_value(w).is_some())
+}
+
 /// The counting lessons: (word, the word that comes after it).
 pub fn counting_lessons() -> Vec<(String, String)> {
     NUM.windows(2).map(|w| (w[0].to_string(), w[1].to_string())).collect()
@@ -50,8 +72,23 @@ impl NumberLine {
         NumberLine { value }
     }
 
+    /// A number word's value, or a digit string's.
     pub fn value(&self, w: &str) -> Option<f32> {
-        self.value.get(w).copied()
+        self.value.get(w).copied().or_else(|| digits_value(w))
+    }
+
+    /// Say a result as a number: in digits (when the question used them) if it lands on a whole number, else the nearest number word.
+    /// The second part is how far off it was. A negative or oversized result is never said.
+    pub fn say(&self, y: f32, digits: bool) -> Option<(String, f32)> {
+        if digits {
+            let r = y.round();
+            if r < 0.0 || r > 9999.0 {
+                return None;
+            }
+            Some(((r as u32).to_string(), (y - r).abs()))
+        } else {
+            self.nearest(y)
+        }
     }
 
     /// The word whose value is closest, and how far off it is.
@@ -272,8 +309,7 @@ impl Quantity {
         if engaged.iter().any(|o| o[1].abs() > 0.3) && how_many < 2 {
             return None;
         }
-        let (word, dist) = self.line.nearest(self.predict(&nums, &rest))?;
-        Some((word, dist))
+        self.line.say(self.predict(&nums, &rest), uses_digits(q))
     }
 
     pub fn operator(&self, word: &str) -> Option<[f32; 3]> {

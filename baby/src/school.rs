@@ -207,6 +207,35 @@ pub struct Reorg {
     pub split: Vec<(String, String, usize)>,
 }
 
+/// A digit string with a sign, decimal point, slash, comma or percent attached ("-3", "3.5", "1/2", "1,000", "50%"): not a plain whole
+/// number. Returns the offending text.
+fn unreadable_number(q: &str) -> Option<String> {
+    let chars: Vec<char> = q.chars().collect();
+    let digit = |i: usize| chars.get(i).map_or(false, |c| c.is_ascii_digit());
+    let mut i = 0;
+    while i < chars.len() {
+        if !digit(i) {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while digit(i) {
+            i += 1;
+        }
+        let before = if start > 0 { chars[start - 1] } else { ' ' };
+        let after = chars.get(i).copied().unwrap_or(' ');
+        let separator = |c: char| matches!(c, '.' | ',' | '/' | ':');
+        let bad_before = matches!(before, '-' | '+' | '$' | '#') || (separator(before) && start >= 2 && chars[start - 2].is_ascii_digit());
+        let bad_after = after == '%' || (separator(after) && digit(i + 1));
+        if bad_before || bad_after {
+            let from = if bad_before { start - 1 } else { start };
+            let to = if bad_after { (i + 2).min(chars.len()) } else { i };
+            return Some(chars[from..to].iter().collect());
+        }
+    }
+    None
+}
+
 /// A lesson's identity: the words in the order they were said. ("five minus two" and "two minus five" are different questions.)
 fn lesson_key(q: &str) -> String {
     tokenize(q).join(" ")
@@ -353,6 +382,11 @@ impl School {
         let tokens = tokenize(q);
         ledger.int_ops += tokens.len() as u64;
         ledger.words_read += tokens.len() as u64;
+        // Numbers are plain whole numbers. A sign, a decimal point, a fraction slash, a thousands comma or a percent attached to a digit
+        // would be silently dropped by reading words ("-3" would become 3), so such a question is refused rather than misread.
+        if let Some(bad) = unreadable_number(q) {
+            return Reply { answer: None, unit: None, how: format!("I only read plain whole numbers, not '{bad}' (signs, decimals, fractions, percentages)") };
+        }
         // A word it has never met cannot be part of something it knows how to answer.
         let unmet: Vec<String> = tokens.iter().filter(|w| !self.knows(w)).cloned().collect();
         if !unmet.is_empty() {
@@ -1188,6 +1222,32 @@ mod tests {
     }
 
     #[test]
+    fn digits_are_numbers_the_answer_follows_the_question_and_the_old_refusals_still_hold() {
+        let s = trained();
+        let said = |q: &str| s.ask(q).answer;
+        // taught in words only; digits are numbers too, and the answer is in the form the question used
+        assert_eq!(said("what is 3 plus 4").as_deref(), Some("7"));
+        assert_eq!(said("what is 17 plus 25").as_deref(), Some("42"));
+        assert_eq!(said("what is 3 plus four").as_deref(), Some("7"), "any digit makes the answer digits");
+        assert_eq!(said("what is three plus four").as_deref(), Some("seven"));
+        assert_eq!(said("what is 12 times 12").as_deref(), Some("144"), "a built expression reaches past the words");
+        assert_eq!(said("which is bigger 7 or 12").as_deref(), Some("12"));
+        assert_eq!(said("how far apart are 3 and 40").as_deref(), Some("37"));
+        assert_eq!(said("what is double 21").as_deref(), Some("42"));
+        assert_eq!(said("what comes after 99").as_deref(), Some("100"));
+        assert_eq!(said("what is 3 plus 4?").as_deref(), Some("7"), "ordinary punctuation is fine");
+        assert_eq!(said("what is 3 plus 4.").as_deref(), Some("7"));
+        // the same refusals as in words
+        for q in [
+            "three minus 5", "what is 2 minus 5", "half of 9", "what is 3 times 4 times 5", "what is 99999 plus 1", "what is 3 plus", "what is plus 4",
+            "what is the code for 7", "color of 5", "capital of 7", "what is 3.5 plus 2", "what is -3 plus 5", "what is 1,000 plus 5", "what is 1/2 plus 1", "what is 50% plus 5", "what is 3 plus +4", "what is $5 plus 5",
+        ] {
+            let r = s.ask(q);
+            assert!(r.answer.is_none(), "answered '{q}' with {:?} ({})", r.answer, r.how);
+        }
+    }
+
+    #[test]
     fn nonsense_unrelated_and_out_of_range_questions_are_refused_never_answered() {
         let s = trained();
         for q in [
@@ -1195,7 +1255,7 @@ mod tests {
             "double banana", "what is hot times cold", "how far apart are paris and rome", "which is bigger paris or rome",
             "what comes after banana", "half of cat", "what is the meaning of life", "who won the world cup", "tell me a joke", "hello",
             "what time is it", "what is five times five", "what is ten plus ten", "three minus five", "what comes after ten",
-            "half of seven", "what is 3 plus 4",
+            "half of seven",
         ] {
             let r = s.ask(q);
             assert!(r.answer.is_none(), "answered '{q}' with {:?} ({})", r.answer, r.how);

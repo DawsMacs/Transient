@@ -64,7 +64,7 @@ struct Args {
 
 impl Args {
     fn parse(raw: &[String]) -> Args {
-        const FLAGS: [&str; 10] = ["curriculum", "quiet", "tsv", "verbose", "guess", "piece-keys", "full", "compact", "no-reorg", "row"];
+        const FLAGS: [&str; 11] = ["curriculum", "quiet", "tsv", "verbose", "guess", "piece-keys", "full", "compact", "no-reorg", "row", "digits"];
         let mut positional = Vec::new();
         let mut opts = HashMap::new();
         let mut i = 0;
@@ -1281,6 +1281,9 @@ fn cmd_scale(a: &Args) {
             if a.flag("no-reorg") {
                 cmd.arg("--no-reorg");
             }
+            if a.flag("digits") {
+                cmd.arg("--digits");
+            }
             let out = cmd.output().expect("run a size");
             let text = String::from_utf8_lossy(&out.stdout);
             let mut row = Vec::new();
@@ -1312,7 +1315,7 @@ fn cmd_scale(a: &Args) {
         }
         return;
     }
-    let c = scale::Config { units: a.get("units", 20), entities: a.get("entities", 1000), facts_per_unit: facts, noise, typos, seed };
+    let c = scale::Config { units: a.get("units", 20), entities: a.get("entities", 1000), facts_per_unit: facts, noise, typos, digits: a.flag("digits"), seed };
     let row = scale::run(&c, !a.flag("no-reorg"), cap);
     if a.flag("row") {
         println!("ROW {}", row.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join(" "));

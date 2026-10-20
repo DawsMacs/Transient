@@ -33,6 +33,8 @@ pub struct Config {
     pub facts_per_unit: usize,
     pub noise: f32,
     pub typos: f32,
+    /// Numeric units use digits: operands 0-30 (taught up to 12), answers up to 99, instead of the words zero to ten.
+    pub digits: bool,
     pub seed: u64,
 }
 
@@ -110,54 +112,62 @@ fn templ(t: [&str; 4], attr: &str) -> [String; 4] {
     [t[0].replace("{A}", attr), t[1].replace("{A}", attr), t[2].replace("{A}", attr), t[3].replace("{A}", attr)]
 }
 
-/// (taught-range facts, beyond-range facts) for a numeric unit, mirroring `kinds.rs`: the taught range is numbers up to five.
-fn numeric_facts(sem: Sem, attr: &str) -> (Vec<Fact>, Vec<Fact>) {
-    let n = |i: usize| NUM[i].to_string();
+/// (taught-range facts, beyond-range facts) for a numeric unit, mirroring `kinds.rs`: the taught range is small numbers. In words that is
+/// up to five of zero to ten; in digits up to twelve of 0 to 30 (and answers stay under 100), sampled so a unit has a few dozen facts.
+fn numeric_facts(sem: Sem, attr: &str, digits: bool, rng: &mut Rng) -> (Vec<Fact>, Vec<Fact>) {
+    let (max, near_to, ans_max) = if digits { (30usize, 12usize, 99usize) } else { (10, 5, 10) };
+    let n = |i: usize| if digits { i.to_string() } else { NUM[i].to_string() };
     let mut out: (Vec<Fact>, Vec<Fact>) = (Vec::new(), Vec::new());
     fn put(out: &mut (Vec<Fact>, Vec<Fact>), is_near: bool, f: Fact) {
         if is_near { out.0.push(f) } else { out.1.push(f) }
     }
     match sem {
         Sem::Sum | Sem::Times | Sem::Apart | Sem::Minus => {
-            for a in 0..=10usize {
-                for b in 0..=10usize {
+            for a in 0..=max {
+                for b in 0..=max {
                     let ans = match sem {
-                        Sem::Sum if a + b <= 10 => a + b,
-                        Sem::Times if a * b <= 10 => a * b,
+                        Sem::Sum if a + b <= ans_max => a + b,
+                        Sem::Times if a * b <= ans_max => a * b,
                         Sem::Apart => a.abs_diff(b),
                         Sem::Minus if b <= a => a - b,
                         _ => continue,
                     };
-                    let is_near = if sem == Sem::Minus { a <= 5 } else { a <= 5 && b <= 5 };
+                    let is_near = if sem == Sem::Minus { a <= near_to } else { a <= near_to && b <= near_to };
                     put(&mut out, is_near, Fact { slots: vec![n(a), n(b)], answer: n(ans), templates: templ(BINARY, attr) });
                 }
             }
         }
         Sem::Max | Sem::Min => {
-            for a in 0..=10usize {
-                for b in 0..=10usize {
+            for a in 0..=max {
+                for b in 0..=max {
                     if a != b {
                         let ans = if sem == Sem::Max { a.max(b) } else { a.min(b) };
-                        put(&mut out, a <= 5 && b <= 5, Fact { slots: vec![n(a), n(b)], answer: n(ans), templates: templ(SELECT, attr) });
+                        put(&mut out, a <= near_to && b <= near_to, Fact { slots: vec![n(a), n(b)], answer: n(ans), templates: templ(SELECT, attr) });
                     }
                 }
             }
         }
         Sem::After => {
-            for a in 0..=9usize {
-                put(&mut out, a <= 6, Fact { slots: vec![n(a)], answer: n(a + 1), templates: templ(UNARY, attr) });
+            for a in 0..max {
+                put(&mut out, a <= near_to + 1, Fact { slots: vec![n(a)], answer: n(a + 1), templates: templ(UNARY, attr) });
             }
         }
         Sem::Double => {
-            for a in 0..=5usize {
-                out.0.push(Fact { slots: vec![n(a)], answer: n(2 * a), templates: templ(UNARY, attr) });
+            for a in 0..=(ans_max / 2).min(max) {
+                put(&mut out, a <= near_to, Fact { slots: vec![n(a)], answer: n(2 * a), templates: templ(UNARY, attr) });
             }
         }
         Sem::Half => {
-            for a in 0..=5usize {
-                out.0.push(Fact { slots: vec![n(2 * a)], answer: n(a), templates: templ(UNARY, attr) });
+            for a in 0..=(ans_max / 2).min(max) {
+                put(&mut out, a <= near_to, Fact { slots: vec![n(2 * a)], answer: n(a), templates: templ(UNARY, attr) });
             }
         }
+    }
+    if digits {
+        rng.shuffle(&mut out.0);
+        rng.shuffle(&mut out.1);
+        out.0.truncate(36);
+        out.1.truncate(30);
     }
     out
 }
@@ -165,7 +175,7 @@ fn numeric_facts(sem: Sem, attr: &str) -> (Vec<Fact>, Vec<Fact>) {
 /// Misspell one word of a question by dropping a letter from its longest word that is not a number word.
 fn misspell(q: &str, rng: &mut Rng) -> String {
     let mut words: Vec<String> = q.split_whitespace().map(|w| w.to_string()).collect();
-    let cands: Vec<usize> = (0..words.len()).filter(|&i| words[i].len() >= 6 && !NUM.contains(&words[i].as_str())).collect();
+    let cands: Vec<usize> = (0..words.len()).filter(|&i| words[i].len() >= 6 && !crate::quantity::is_number(&words[i])).collect();
     if let Some(&i) = cands.get(rng.below(cands.len().max(1))) {
         let at = rng.below(words[i].len());
         words[i].remove(at);
@@ -198,7 +208,7 @@ pub fn generate(c: &Config) -> ScaleWorld {
                 Sem::Max | Sem::Min => "select",
                 Sem::Times | Sem::Apart => "program",
             });
-            numeric_facts(sem, &attr)
+            numeric_facts(sem, &attr, c.digits, &mut rng)
         } else {
             let style = FACT_STYLES[rng.below(FACT_STYLES.len())];
             let mut ents = Vec::new();
@@ -230,7 +240,10 @@ pub fn generate(c: &Config) -> ScaleWorld {
                 } else if t < 3 {
                     if rng.uniform() < c.noise {
                         item.answer = if numeric {
-                            NUM[(NUM.iter().position(|x| *x == f.answer).unwrap() + 1 + rng.below(10)) % 11].to_string()
+                            match f.answer.parse::<usize>() {
+                                Ok(v) => (v + 1 + rng.below(9)).to_string(),
+                                Err(_) => NUM[(NUM.iter().position(|x| *x == f.answer).unwrap() + 1 + rng.below(10)) % 11].to_string(),
+                            }
                         } else {
                             word(answer_base + rng.below((c.entities / 4).max(8)), 3)
                         };
@@ -280,13 +293,15 @@ pub fn generate(c: &Config) -> ScaleWorld {
         must_refuse.push((fill("what is the {A} of {0}", other_attr, &[word(other_ents[0], 3)]) + " " + attr, "two attributes at once"));
     }
     for (_, attr, sem) in &numeric_units {
+        let num = |words: &str, digits: &str| -> String { if c.digits { digits.to_string() } else { words.to_string() } };
         match sem {
-            Sem::Sum => must_refuse.push((fill("what is {0} {A} {1}", attr, &["nine".into(), "nine".into()]), "result beyond the number line")),
-            Sem::Minus => must_refuse.push((fill("what is {0} {A} {1}", attr, &["two".into(), "five".into()]), "negative result")),
-            Sem::Times => must_refuse.push((fill("what is {0} {A} {1}", attr, &["six".into(), "seven".into()]), "result beyond the number line")),
+            // in words a result past "ten" has no word, so it must be refused; in digits it is simply a bigger number
+            Sem::Sum if !c.digits => must_refuse.push((fill("what is {0} {A} {1}", attr, &["nine".into(), "nine".into()]), "result beyond the number line")),
+            Sem::Minus => must_refuse.push((fill("what is {0} {A} {1}", attr, &[num("two", "2"), num("five", "5")]), "negative result")),
+            Sem::Times if !c.digits => must_refuse.push((fill("what is {0} {A} {1}", attr, &["six".into(), "seven".into()]), "result beyond the number line")),
             _ => {}
         }
-        must_refuse.push((fill("what is {A} {0} {1} {2}", attr, &["two".into(), "three".into(), "four".into()]), "too many operands"));
+        must_refuse.push((fill("what is {A} {0} {1} {2}", attr, &[num("two", "2"), num("three", "3"), num("four", "4")]), "too many operands"));
     }
     ScaleWorld { names, expect, world: w, corrupted, misspelt, must_refuse }
 }
@@ -551,7 +566,7 @@ mod tests {
     use super::*;
 
     fn cfg(units: usize) -> Config {
-        Config { units, entities: 400, facts_per_unit: 10, noise: 0.0, typos: 0.1, seed: 1 }
+        Config { units, entities: 400, facts_per_unit: 10, noise: 0.0, typos: 0.1, digits: false, seed: 1 }
     }
 
     #[test]

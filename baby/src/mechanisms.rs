@@ -263,7 +263,7 @@ impl Remembered {
         }
         let n_facts = items.iter().map(|i| i.fact).collect::<std::collections::BTreeSet<_>>().len();
         let bar = 3.max((n_facts * 2 + 4) / 5);
-        let glue = facts.into_iter().filter(|(w, f)| f.len() >= bar && !crate::data::NUM.contains(&w.as_str())).map(|(w, _)| w).collect();
+        let glue = facts.into_iter().filter(|(w, f)| f.len() >= bar && !crate::quantity::is_number(w)).map(|(w, _)| w).collect();
         Remembered::new(items.iter().map(|i| (key(&i.query), i.answer.clone())).collect(), items.iter().map(|i| tokenize(&i.query)).collect(), glue)
     }
 
