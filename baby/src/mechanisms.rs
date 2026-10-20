@@ -228,6 +228,8 @@ impl SelectRule {
 #[derive(Clone)]
 pub struct Remembered {
     pub memory: Vec<(Vec<String>, String)>,
+    /// Each remembered question's words in the order they were said (`memory` keeps only the set, so rewordings match).
+    order: Vec<Vec<String>>,
     /// For each non-glue word, which remembered questions contain it: lets recall look at a handful of questions, not all of them.
     index: HashMap<String, Vec<usize>>,
     /// Words that turn up across many different facts of the unit ("capital", "of", "code", "for"): they set the kind of
@@ -236,7 +238,7 @@ pub struct Remembered {
 }
 
 impl Remembered {
-    pub fn new(memory: Vec<(Vec<String>, String)>, glue: std::collections::HashSet<String>) -> Remembered {
+    pub fn new(memory: Vec<(Vec<String>, String)>, order: Vec<Vec<String>>, glue: std::collections::HashSet<String>) -> Remembered {
         let mut index: HashMap<String, Vec<usize>> = HashMap::new();
         for (i, (k, _)) in memory.iter().enumerate() {
             for t in k {
@@ -245,10 +247,13 @@ impl Remembered {
                 }
             }
         }
-        Remembered { memory, index, glue }
+        Remembered { memory, order, index, glue }
     }
 
-    /// Glue = a word found in at least three different facts (and a tenth of them).
+    /// Glue = a word found in at least three different facts and in at least two fifths of them: "what", "is", "the", and the unit's own
+    /// word ("capital"). It used to be a tenth, which made the number words of a numeric unit glue too, so the fill-the-blank check
+    /// could not see that "two three four" is not "two ... four". A number word is never glue, however common it is in a small numeric
+    /// unit ("one" is in over 40% of the times facts, and is not "what is").
     pub fn from_items(items: &[Item]) -> Remembered {
         let mut facts: HashMap<String, std::collections::BTreeSet<usize>> = HashMap::new();
         for it in items {
@@ -257,9 +262,14 @@ impl Remembered {
             }
         }
         let n_facts = items.iter().map(|i| i.fact).collect::<std::collections::BTreeSet<_>>().len();
-        let bar = 3.max(n_facts / 10);
-        let glue = facts.into_iter().filter(|(_, f)| f.len() >= bar).map(|(w, _)| w).collect();
-        Remembered::new(items.iter().map(|i| (key(&i.query), i.answer.clone())).collect(), glue)
+        let bar = 3.max((n_facts * 2 + 4) / 5);
+        let glue = facts.into_iter().filter(|(w, f)| f.len() >= bar && !crate::data::NUM.contains(&w.as_str())).map(|(w, _)| w).collect();
+        Remembered::new(items.iter().map(|i| (key(&i.query), i.answer.clone())).collect(), items.iter().map(|i| tokenize(&i.query)).collect(), glue)
+    }
+
+    /// The content words (not glue) of a question, in the order said, repeats kept ("three times three" is not "three times two").
+    fn content<'a>(&self, tokens: &'a [String]) -> Vec<&'a str> {
+        tokens.iter().filter(|t| !self.glue.contains(*t)).map(|t| t.as_str()).collect()
     }
 
     pub fn recall(&self, q: &str, w: &Weights) -> Option<String> {
@@ -270,6 +280,7 @@ impl Remembered {
     /// compared (the others could never be answered from anyway: every content word of the question must be in the one it matches).
     pub fn recall_counted(&self, q: &str, w: &Weights, ledger: &mut Ledger, indexed: bool) -> Option<String> {
         let k = key(q);
+        let asked = tokenize(q);
         let candidates: Vec<usize> = if indexed {
             let mut v: Vec<usize> = k
                 .iter()
@@ -284,23 +295,42 @@ impl Remembered {
         } else {
             (0..self.memory.len()).collect()
         };
-        let mut best: Option<(f32, usize)> = None;
+        // Every remembered lesson that is close enough and has the question's content words gets a vote, weighted by how close. The plurality
+        // answers; a tie refuses. (Taking only the single closest let one wrong lesson out of three phrasings of a fact win, and let two
+        // lessons with the same words but different answers, "five minus two" and "two minus five", be settled by their order.)
+        // (Voting uses a looser closeness than answering: a wordier phrasing of the same fact scores about 0.45, and must still be heard;
+        // but nothing is answered unless at least one lesson is close, 0.5.)
+        let mut votes: Vec<(&str, f32)> = Vec::new();
+        let mut any_close = false;
         for i in candidates {
             let (sim, steps) = w.similarity_steps(&k, &self.memory[i].0);
             ledger.int_ops += steps;
             ledger.words_read += steps;
             ledger.macs += steps / 2;
-            if sim >= 0.5 && best.map_or(true, |(s, _)| sim > s) {
-                best = Some((sim, i));
+            // The word that fills the blank must be the same one. A question about "five" is not answered with what was taught about "one".
+            if sim < 0.3 || k.iter().any(|t| !self.glue.contains(t) && !self.memory[i].0.contains(t)) {
+                continue;
+            }
+            // Same words in a different order is a different question: "two minus five" is not "five minus two". The content words
+            // (not the glue) must be the remembered question's, in its order and with its repeats.
+            if self.content(&asked) != self.content(&self.order[i]) {
+                continue;
+            }
+            any_close |= sim >= 0.5;
+            match votes.iter_mut().find(|(a, _)| *a == self.memory[i].1) {
+                Some(v) => v.1 += sim,
+                None => votes.push((&self.memory[i].1, sim)),
             }
         }
-        let (_, i) = best?;
-        let (best_key, answer) = (&self.memory[i].0, &self.memory[i].1);
-        // The word that fills the blank must be the same one. A question about "five" is not answered with what was taught about "one".
-        if k.iter().any(|t| !self.glue.contains(t) && !best_key.contains(t)) {
+        votes.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        if !any_close {
             return None;
         }
-        Some(answer.clone())
+        match votes.as_slice() {
+            [] => None,
+            [(a, _)] => Some(a.to_string()),
+            [(a, x), (_, y), ..] => (x - y > 0.05 * x).then(|| a.to_string()),
+        }
     }
 }
 
@@ -571,6 +601,45 @@ impl Baby {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn lesson(fact: usize, t: usize, q: &str, a: &str) -> Item {
+        Item { unit: 0, fact, template: t, query: q.to_string(), answer: a.to_string() }
+    }
+
+    #[test]
+    fn memory_outvotes_one_wrong_phrasing_and_refuses_when_lessons_tie() {
+        let mut items = Vec::new();
+        let countries = [("peru", "lima"), ("chad", "ndjamena"), ("cuba", "havana"), ("iran", "tehran"), ("mali", "bamako"), ("laos", "vientiane"),
+                         ("togo", "lome"), ("fiji", "suva"), ("niue", "alofi"), ("oman", "muscat"), ("qatar", "doha"), ("kenya", "nairobi")];
+        for (f, (country, capital)) in countries.iter().enumerate() {
+            items.push(lesson(f, 0, &format!("capital of {country}"), capital));
+            items.push(lesson(f, 1, &format!("what is the capital of {country}"), capital));
+            items.push(lesson(f, 2, &format!("{country} capital"), capital));
+        }
+        // one phrasing of one fact was taught wrongly
+        items[0].answer = "quito".into();
+        let w = Weights::from(&items);
+        let mem = Remembered::from_items(&items);
+        assert_eq!(mem.recall("capital of peru", &w).as_deref(), Some("lima"), "two phrasings out of three outvote the wrong one");
+        assert_eq!(mem.recall("peru capital", &w).as_deref(), Some("lima"));
+        assert_eq!(mem.recall("capital of chad", &w).as_deref(), Some("ndjamena"));
+        // the same words in a different order are a different question: each gets its own lesson's answer, never the other's
+        let tie = vec![lesson(0, 0, "five minus two", "three"), lesson(1, 0, "two minus five", "negative"), lesson(2, 0, "ten minus one", "nine"),
+                       lesson(3, 0, "ten minus two", "eight"), lesson(4, 0, "nine minus one", "eight"), lesson(5, 0, "four minus one", "three")];
+        let w = Weights::from(&tie);
+        let mem = Remembered::from_items(&tie);
+        assert_eq!(mem.recall("five minus two", &w).as_deref(), Some("three"));
+        assert_eq!(mem.recall("two minus five", &w).as_deref(), Some("negative"));
+        assert_eq!(mem.recall("three minus five", &w), None, "never taught, and the words of two taught ones, in another order");
+        // a repeated operand is not the operand once: "three minus three" is not "three minus two"
+        let rep = vec![lesson(0, 0, "three minus two", "one"), lesson(1, 0, "four minus two", "two"), lesson(2, 0, "five minus two", "three"), lesson(3, 0, "five minus one", "four")];
+        let w = Weights::from(&rep);
+        assert_eq!(Remembered::from_items(&rep).recall("three minus three", &w), None);
+        // two lessons that say the same words in the same order with different answers are a genuine tie, and it refuses
+        let same = vec![lesson(0, 0, "ten minus one", "nine"), lesson(1, 0, "ten minus one", "eight"), lesson(2, 0, "ten minus two", "eight"), lesson(3, 0, "nine minus one", "eight")];
+        let w = Weights::from(&same);
+        assert_eq!(Remembered::from_items(&same).recall("ten minus one", &w), None);
+    }
 
     #[test]
     fn a_mechanism_that_is_usually_wrong_on_facts_it_was_not_shown_is_not_allowed_to_answer() {

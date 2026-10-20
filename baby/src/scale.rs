@@ -23,7 +23,7 @@ use crate::kinds::{Item, World};
 use crate::ledger::{EnergyModel, Ledger};
 use crate::rng::Rng;
 use crate::school::School;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 #[derive(Clone, Debug)]
@@ -41,8 +41,8 @@ pub struct ScaleWorld {
     /// The mechanism each unit should end up with: facts are remembered, sums and the like are rules, and so on.
     pub expect: Vec<&'static str>,
     pub world: World,
-    /// Queries whose taught answer was deliberately made wrong.
-    pub corrupted: HashSet<String>,
+    /// Queries whose taught answer was deliberately made wrong, with the answer they should have had.
+    pub corrupted: HashMap<String, String>,
     /// Misspelt rewordings and the answer they should have had.
     pub misspelt: Vec<(String, String)>,
     /// Questions that must never be answered: (query, why it is a trap).
@@ -184,7 +184,7 @@ pub fn generate(c: &Config) -> ScaleWorld {
     // (unit index, attribute word, entities the unit holds) for the traps below.
     let mut fact_units: Vec<(usize, String, Vec<usize>)> = Vec::new();
     let mut numeric_units: Vec<(usize, String, Sem)> = Vec::new();
-    let mut corrupted = HashSet::new();
+    let mut corrupted: HashMap<String, String> = HashMap::new();
 
     for u in 0..c.units {
         let attr = word(1_000_000 + u * 7 + 1, 4);
@@ -235,7 +235,7 @@ pub fn generate(c: &Config) -> ScaleWorld {
                             word(answer_base + rng.below((c.entities / 4).max(8)), 3)
                         };
                         if item.answer != f.answer {
-                            corrupted.insert(item.query.clone());
+                            corrupted.insert(item.query.clone(), f.answer.clone());
                         }
                     }
                     w.train.push(item);
@@ -336,8 +336,13 @@ fn sample<T>(v: &[T], cap: usize) -> impl Iterator<Item = &T> {
 fn grade(school: &School, items: &[Item], cap: usize) -> (Tally, f64) {
     let mut t = Tally::default();
     let mut routed = 0usize;
+    let mut shown = 0;
     for it in sample(items, cap) {
         let r = school.ask(&it.query);
+        if r.answer.is_some() && r.answer.as_deref() != Some(it.answer.as_str()) && shown < 3 && std::env::var("SCALE_WRONG").is_ok() {
+            shown += 1;
+            println!("      WRONG: {:?} should be {:?}, got {:?}: {}", it.query, it.answer, r.answer, r.how);
+        }
         t.add(&it.answer, &r.answer);
         routed += (r.unit == Some(it.unit)) as usize;
     }
@@ -382,9 +387,17 @@ pub fn run(c: &Config, reorg: bool, grade_cap: usize) -> Vec<(&'static str, f64)
     println!("  scorecard (up to {grade_cap} questions each):");
     let (mut taught_clean, mut taught_noisy) = (Tally::default(), Tally::default());
     let mut routed_taught = 0usize;
+    let mut repeated_wrong = 0usize;
     for it in sample(&sw.world.train, grade_cap) {
         let r = school.ask(&it.query);
-        if sw.corrupted.contains(&it.query) { taught_noisy.add(&it.answer, &r.answer) } else { taught_clean.add(&it.answer, &r.answer) }
+        match sw.corrupted.get(&it.query) {
+            // graded against the TRUTH, not against what it was told: right = it was not fooled, repeated = it said the wrong lesson back
+            Some(truth) => {
+                taught_noisy.add(truth, &r.answer);
+                repeated_wrong += (r.answer.as_deref() == Some(it.answer.as_str())) as usize;
+            }
+            None => taught_clean.add(&it.answer, &r.answer),
+        }
         routed_taught += (r.unit == Some(it.unit)) as usize;
     }
     let (reworded, route_re) = grade(&school, &sw.world.reworded, grade_cap);
@@ -411,7 +424,7 @@ pub fn run(c: &Config, reorg: bool, grade_cap: usize) -> Vec<(&'static str, f64)
     }
     println!("    taught                {}", taught_clean.show());
     if taught_noisy.n() > 0 {
-        println!("    taught, answer was corrupted  {}   <- WRONG here is the baby faithfully repeating a wrong lesson", taught_noisy.show());
+        println!("    taught, but told wrong  {}   (graded against the truth; it repeated the wrong lesson {} times)", taught_noisy.show(), repeated_wrong);
     }
     println!("    reworded              {}   routed to the right unit {:.1}%", reworded.show(), route_re);
     println!("    never taught          {}", never.show());
@@ -423,7 +436,11 @@ pub fn run(c: &Config, reorg: bool, grade_cap: usize) -> Vec<(&'static str, f64)
     for (q, why) in &sw.must_refuse {
         let e = trap_by.entry(why).or_default();
         e.0 += 1;
-        e.1 += school.ask(q).answer.is_some() as usize;
+        let r = school.ask(q);
+        e.1 += r.answer.is_some() as usize;
+        if r.answer.is_some() {
+            println!("      ANSWERED a trap ({why}): {q:?} -> {:?}, {}", r.answer, r.how);
+        }
     }
     let (traps, answered): (usize, usize) = trap_by.values().fold((0, 0), |a, b| (a.0 + b.0, a.1 + b.1));
     println!("    must-refuse traps     {} asked, {} ANSWERED", traps, answered);
@@ -579,6 +596,6 @@ mod tests {
         let sw = generate(&c);
         let frac = sw.corrupted.len() as f32 / sw.world.train.len() as f32;
         assert!((0.12..0.28).contains(&frac), "{frac}");
-        assert!(sw.world.reworded.iter().all(|i| !sw.corrupted.contains(&i.query)));
+        assert!(sw.world.reworded.iter().all(|i| !sw.corrupted.contains_key(&i.query)));
     }
 }

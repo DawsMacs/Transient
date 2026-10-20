@@ -12,7 +12,7 @@
 *adaptive learning*: a system that keeps learning while it is used, decides for itself *how* to learn each kind of thing, and is
 measured by what it costs (operations, memory, estimated joules) rather than by parameter count alone.
 
-The current artefact is `baby/`: about 8k lines of Rust, **no dependencies**, builds offline, 69 tests. It is a research prototype
+The current artefact is `baby/`: about 8k lines of Rust, **no dependencies**, builds offline, 70 tests. It is a research prototype
 evaluated on a synthetic curriculum. It is not a language model and makes no claim to be one yet.
 
 > **Status:** active research. Every number below comes from tidy synthetic lessons and *estimated* energy. Read
@@ -54,7 +54,7 @@ All on the synthetic curriculum in `baby/src/kinds.rs` (13 units, 792 lessons), 
 | teaching 792 lessons from nothing | 0.34 s, 11.9 MB peak |
 | a lesson it already understands / a new phrasing / a new kind | 0.19 ms (not stored) / 0.4 ms / 1 ms (a unit opens at the 6th) |
 | **scale** (clean synthetic world, 20 -> 600 units, 828 -> 25,776 lessons, up to 10,000-word vocabulary) | teaching 26k lessons 2.65 s and 56 MB; learning one new fact **0.4-0.6 ms at every size**; answering ~10 us; reorganising 1.35 s; 100 % right, **0 % wrong**, all traps refused |
-| **label noise** (2 % of taught answers wrong) | **not solved:** about 1 % wrong, ~20 % more refusals (see Limitations) |
+| **label noise** (2 % of taught answers wrong, 60-200 units) | **0 % wrong**, wrongly taught lessons answered with the truth by voting memory; coverage drops (never-taught 55-62 % right, rest refused) |
 | storage | school file 29 KB, of which 1.3 KB is what was learned; `--compact` keeps 49 % of the file, still answers all 792 taught lessons, 0 % wrong |
 | unit discovery from 792 unlabelled, shuffled lessons | 9 units found (13 named by the teacher), scorecard identical |
 
@@ -65,7 +65,7 @@ The scorecard reports **WRONG separately from refused**: a refusal is an accepta
 Requires a stable Rust toolchain (edition 2021). No other dependencies, no network.
 
 ```bash
-cargo test --release --offline         # 69 tests (about 15 s)
+cargo test --release --offline         # 70 tests (about 15 s)
 cargo build --release --offline
 ./target/release/baby school           # teach 13 units (~4 s), print how each was learned and the scorecard
 ./target/release/baby ask "how far apart are two and nine"   # answers, and says how it knew
@@ -111,15 +111,14 @@ All under `baby/src/`.
   plus hand-written must-refuse batteries, not a proof.
 - The five mechanisms, the expression language, the number line (taught by counting lessons) and the thresholds are the author's
   design choices. The system selects and fits among them; it does not invent a sixth.
-- **Label noise breaks the 0 % wrong claim.** With 2 % wrong taught answers, about 1 % of answers are wrong and about a fifth of questions are refused that a clean world
-  answers. Honesty on clean lessons is measured; honesty under noise is the current work.
+- **Noise costs coverage.** With 2 % wrong taught answers the baby stays at 0 % wrong, but refuses far more unseen questions (rules become unreliable under an exact fit).
+  Only 2 % label noise at 60-200 units was tested; other noise kinds (ambiguous entities, real misspellings) were not.
 - Nothing here yet shows behaviour on real text, at millions of lessons, or at "frontier" quality. Those are the open questions the
   roadmap exists to answer.
 
 ## Roadmap
 
-1. **Scale test, continued:** clean worlds are done to 600 units (learning one lesson is flat). Next: noisy lessons (robust rule
-   fitting, voting memory that refuses on a tie), a Zipf-shaped vocabulary, discovery at scale (its pair loops are still quadratic).
+1. **Scale test, continued:** clean worlds are done to 600 units (learning one lesson is flat). Next: robust rule fitting for noisy lessons, a Zipf-shaped vocabulary, discovery at scale (its pair loops are still quadratic).
 2. **Compact lossless storage format**, then incremental and exact updates, then the real energy meter.
 3. **Mechanisms it proposes itself** for units where nothing generalises; richer expression space; digits as numbers; a number
    line it discovers rather than is taught.

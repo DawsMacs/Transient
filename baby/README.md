@@ -96,25 +96,35 @@ A 10,000-subject vocabulary (200 units) behaves the same (0.9 s to teach, 21 MB,
   variance in the merge test (change 3). Leave-one-out predictions were perfect, 5-fold ones were not: the clue.
 - The "settled" shortcut and the network trial were tuned on a clean world; label noise (below) found them wanting.
 
-**Label noise: the honest part, and it is NOT solved.** With 2 % of taught answers wrong (60 and 200 units):
+**Label noise (2 % of taught answers wrong), in three rounds.** The first noisy run broke the headline claim; fixing it took three more findings, and the second round contained a mistake of mine.
 
-| | 60 units | 200 units |
-|---|---|---|
-| rewordings right / refused / WRONG | 81.5 / 17.6 / 0.83 % | 78.3 / 20.7 / 1.01 % |
-| never taught right / refused / WRONG | 62.2 / 37.8 / 0.00 % | 56.1 / 43.3 / **0.58 %** |
-| units with the mechanism they should have | 90 % | 85 % |
-| must-refuse traps answered | 0 of 140 | **1 of 467** |
-| the lessons whose answer was corrupted, answered with the corrupted answer | 40 % | 22 % |
+| 2 % noise, 60 / 200 units | round 1 (clean-world code) | after the 90 % bar + settled fixes | after voting memory + order + number words |
+|---|---|---|---|
+| taught, right / WRONG | 91.0 / 1.87 % | 82.3 / 0.20 % | **100.0 / 0.00 %** (both sizes) |
+| lessons taught *wrongly*, answered with the truth | (mislabelled, see below) | 40 % | **100 %**, repeated the wrong lesson 0 times |
+| reworded, WRONG | 2.50 % | 0.83 % | **0.00 %** |
+| never taught, right / WRONG | 77.3 / 6.12 % | 62.2 / 0.00 % | 62.2 and 55.5 / **0.00 %** |
+| beyond the taught range, WRONG | 9.18 % | 0.00 % | **0.00 %** |
+| must-refuse traps answered | 1 of 140 | 0 of 140, 1 of 467 | **0 of 140, 0 of 467** |
 
-So **the "0 % wrong" claim holds on clean lessons and does not survive 2 % wrong lessons**: about 1 % wrong, and a fifth of questions refused that a clean world answers. What the scale test did fix under noise:
-the first noisy run was *much* worse (WRONG 6.1 % never-taught, 9.2 % beyond the taught range, learning a lesson 176 ms) because a mechanism with 28 % held-back accuracy was allowed to answer: the bar to replace memory was 25 %, which clean
-lessons never test. It is now 90 % (`RELIABLE`; test pinned), and a reliable rule may leave one lesson in twenty unexplained instead of re-deciding everything. What remains, and why:
+What each step was:
 
-- A few wrong lessons skew the *exact* least-squares fit, so rule units drop to 70-89 % held-back and fall back to memorise-only (refusals, not wrong answers), and the 3 program units that needed an exact expression
-  cannot find one. A **robust fit** (drop lessons that disagree *and whose operator word is otherwise consistent*, so scattered noise is ignored but a polluting second rule is still caught and split) is the next step.
-- The remaining WRONG comes from memory repeating a corrupted phrasing. Each fact has three phrasings, so **plurality voting among matching lessons, refusing on a tie**, would recover most of it (and would also refuse when two lessons
-  with the same words disagree: the apart/minus family of trap).
-- Noisy units that are not settled still cost 80-250 ms per lesson when a lesson touches them (a new fact in a settled fact unit stays 0.4 ms).
+1. **A mechanism with 28 % held-back accuracy was allowed to answer.** The bar to replace memory was 25 %, which clean lessons (evidence about 1.0 or about 0) never test. It is now 90 % (`RELIABLE`; test pinned), and a reliable rule
+   may leave one lesson in twenty unexplained instead of re-deciding everything (so a noisy-but-reliable unit stops costing 160 ms a lesson).
+2. **Voting memory.** Memory used to answer from the single closest lesson, so one wrong phrasing out of three won. Now every lesson with the question's content words votes, weighted by closeness; the plurality answers, a tie refuses.
+   Voters need only 0.3 closeness (a wordier phrasing of the same fact scores about 0.45 and must be heard) but something must be close (0.5). Wrongly taught facts are now corrected by their own other phrasings, which is redundancy the
+   baby had all along.
+3. **Memory ignored word order and repeated operands, so the same trap came back a fourth time.** In memorise-only numeric units "two nidovubi five" (a negative result) retrieved "five nidovubi two", and "three times three" retrieved
+   "three times two" because the content words were compared as a *set*. Content words are now compared as a *sequence*, repeats kept. And "glue" (words ignored by the fill-the-blank guard) used to be any word in a tenth of a unit's
+   facts, which made number words glue; it is now two fifths of the facts, and a number word is never glue ("one" is in over 40 % of the times facts and is not "what is"). Each of those was found by printing the wrong answers
+   (`SCALE_WRONG=1`), not by reasoning: the examples named the cause every time.
+
+**A mistake in my harness.** It graded the wrongly taught lessons against the answer they were *taught*, so "right" meant "repeated the wrong lesson". The first noisy tables therefore reported "40 % faithfully repeated" when the truth was
+40 % repeated and 40 % refused. It now grades against the truth and counts repeats separately.
+
+**What noise still costs is coverage, not honesty.** Never-taught and beyond-range questions are refused much more (55-62 % right instead of 100 %): a few wrong lessons skew the *exact* least-squares fit, so rule units fall to 70-89 %
+held-back, miss the 90 % bar and become memorise-only, and the 3 program units that need an exact expression cannot find one. A **robust fit** (drop lessons that disagree *only if their operator word is otherwise consistent*, so scattered
+noise is ignored while a polluting second rule is still caught by split) would recover that, and is the remaining noise work. Noisy units that are not settled still cost 80-250 ms a lesson (a new fact in a settled fact unit stays 0.5 ms).
 
 **Honest limits.** Still synthetic and tidy in structure: made-up words, number words 0-10, four phrasings per fact, a vocabulary with no frequency distribution (no Zipf), no ambiguity between entities and words, no
 real misspellings that land on other words. `typo` questions are all refused (none answered), so spelling robustness at scale is untested here (the letters reader exists in the older network but is not in the school). Discovery
@@ -859,7 +869,7 @@ The road there before `program`, because the dead ends are the useful part:
 
 ## Next (candidates; the freedom to reorder is mine)
 
-1. ~~Does learning stay light when the world gets bigger?~~ Answered for clean lessons up to 600 units (see the scale section; learning one lesson is flat at ~0.5 ms). **Open: label noise** (robust rule fitting; plurality voting in memory, refusing on a tie), a Zipf-shaped vocabulary, discovery at scale, and the pen with thousands of waiting lessons.
+1. ~~Does learning stay light when the world gets bigger?~~ Answered for clean lessons up to 600 units (see the scale section; learning one lesson is flat at ~0.5 ms). **Open: label noise coverage** (robust rule fitting; honesty under 2 % noise is solved, coverage is not), a Zipf-shaped vocabulary, discovery at scale, and the pen with thousands of waiting lessons.
 2. **Compress what it keeps without forgetting anything**: a compact binary format, and the phrasings of a fact stored as templates plus facts.
 3. **Incremental and exact updates**, sparse updates, small integers, and the real energy meter to replace time and memory as the measure.
 4. **Let it propose its own mechanisms** when nothing generalises (the units that stay "memorise only").

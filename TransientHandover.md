@@ -22,7 +22,7 @@ re-deriving anything. Order of reading: this file, then `TransientVision.md` (Da
 
 ## 2. Where the work stands (2026-10-20)
 
-All code is in `~/Transient/baby/` (pure Rust, **zero dependencies**, builds offline, **69 tests pass**). It is a Cargo workspace; `runs/` and `target/` are gitignored.
+All code is in `~/Transient/baby/` (pure Rust, **zero dependencies**, builds offline, **70 tests pass**). It is a Cargo workspace; `runs/` and `target/` are gitignored.
 **Git (since 2026-10-20):** `~/Transient` is a git repo, `origin` = `git@github.com:DawsMacs/TransientAI.git` (public, Daws's global account `DawsMacs`, SSH). Daws authorised commits and pushes to that repo for this work. Licence: `AGPL-3.0-or-later` (SPDX headers in `baby/src/*.rs`, `REUSE.toml`, `LICENSE`, `LICENSES/`). Contributions use a DCO, not a CLA (`CONTRIBUTING.md`). The repo is public, so never commit anything from `.local/`, and keep the sibling project's details out.
 
 The headline artefact is **"the baby"** (`baby school` / `baby ask`), a unified system:
@@ -51,7 +51,7 @@ The headline artefact is **"the baby"** (`baby school` / `baby ask`), a unified 
 
 ```
 cd ~/Transient
-cargo test --release --offline          # 69 passed (about 15 s)
+cargo test --release --offline          # 70 passed (about 15 s)
 cargo build --release --offline
 ./target/release/baby school            # teaches 13 units (~4 s); prints how it learned each + the honest scorecard (wrong must be 0.0%)
 ./target/release/baby ask "how far apart are two and nine"      # seven, with how it knew
@@ -90,8 +90,7 @@ plus a progress log kept by the assistant.
 
 1. **Scale test, continued.** DONE for clean lessons up to 600 units / 26k lessons / 10k vocabulary (`baby scale --sweep 20,60,200,600`; learning one fact is flat at ~0.5 ms; teaching 26k lessons 2.65 s; WRONG 0). What it fixed: incremental
    weights + sparse routing, folds that cannot be peeked through (word-bag twins), stratified merge folds, set-wise merging, network only where it can matter, `RELIABLE` = 0.9 bar for any mechanism to answer. **OPEN, do next:**
-   - **Label noise (2 % wrong lessons) gives ~1 % WRONG and ~20 % extra refusals.** Robust rule fitting (drop lessons that disagree *only if their operator word is otherwise consistent*, so a polluting second rule is still caught by split);
-     plurality-voting memory that refuses on a tie (also guards the apart/minus family); a unit that is mostly a rule should not flip to memorise-only on a few wrong lessons.
+   - **Label noise (2 % wrong lessons): honesty SOLVED (0 % WRONG at 60 and 200 units; voting memory denoises wrongly taught facts; memory respects content-word order and repeats; number words are never glue), coverage OPEN:** rule units fall below the 90 % bar and become memorise-only, so never-taught questions are refused (55-62 % right). Do robust rule fitting (drop lessons that disagree only if their operator word is otherwise consistent, so a polluting second rule is still caught by split).
    - Zipf-shaped vocabulary, entity/word ambiguity, misspellings that land on other words; `baby discover` at scale (still quadratic pair loops, 3.6 s on 792); the pen with thousands of waiting lessons (`process_pen` re-clusters on every lesson).
 2. **Compact storage format** that loses nothing (binary, word table + ids, phrasings stored as templates plus facts); forgetting (`--compact`) then becomes a separate saving for what is truly redundant.
 3. **Incremental and exact updates** (add one lesson to a fitted rule without refitting; sparse updates; small integers instead of floats) and the **real energy meter** (needs Daws's one-time
