@@ -22,7 +22,7 @@ re-deriving anything. Order of reading: this file, then `TransientVision.md` (Da
 
 ## 2. Where the work stands (2026-10-20)
 
-All code is in `~/Transient/baby/` (pure Rust, **zero dependencies**, builds offline, **73 tests pass**). It is a Cargo workspace; `runs/` and `target/` are gitignored.
+All code is in `~/Transient/baby/` (pure Rust, **zero dependencies**, builds offline, **74 tests pass**). It is a Cargo workspace; `runs/` and `target/` are gitignored.
 **Git (since 2026-10-20):** `~/Transient` is a git repo, `origin` = `git@github.com:DawsMacs/TransientAI.git` (public, Daws's global account `DawsMacs`, SSH). Daws authorised commits and pushes to that repo for this work. Licence: `AGPL-3.0-or-later` (SPDX headers in `baby/src/*.rs`, `REUSE.toml`, `LICENSE`, `LICENSES/`). Contributions use a DCO, not a CLA (`CONTRIBUTING.md`). The repo is public, so never commit anything from `.local/`, and keep the sibling project's details out.
 
 The headline artefact is **"the baby"** (`baby school` / `baby ask`), a unified system:
@@ -51,7 +51,7 @@ The headline artefact is **"the baby"** (`baby school` / `baby ask`), a unified 
 
 ```
 cd ~/Transient
-cargo test --release --offline          # 73 passed (about 15 s)
+cargo test --release --offline          # 74 passed (about 15 s)
 cargo build --release --offline
 ./target/release/baby school            # teaches 13 units (~4 s); prints how it learned each + the honest scorecard (wrong must be 0.0%)
 ./target/release/baby ask "how far apart are two and nine"      # seven, with how it knew
