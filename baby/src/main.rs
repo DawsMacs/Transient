@@ -6,6 +6,7 @@
 //!   baby learn  "what is two multiplied by three" six --unit times    keep learning AFTER school: add a lesson, re-work how that unit is learned
 //!   baby discover [--seed N] [--out PATH]   hand it a heap of UNLABELLED lessons: it finds the units itself, then is scored like the others
 //!   baby cost                               what LEARNING costs: time and memory to teach it, a new lesson, a new kind, and to tidy up
+//!   baby scale  [--units N --entities N --facts N --noise F --typos F --seed N --grade N --no-reorg | --sweep 20,60,200]   does learning stay light as the world grows?
 //!   baby sleep  [--compact]                 re-sort the pen, merge/split units that follow one rule, optionally forget what is explained
 //!   baby effort                             what answering costs (operations, words moved, estimated joules): the slow way vs the baby's way
 //!   baby ask    "what is two times four"    ask it; it answers, says how it knew, or says why it won't (uses the school)
@@ -41,6 +42,7 @@ mod program;
 mod quantity;
 mod rng;
 mod rules;
+mod scale;
 mod school;
 mod store;
 
@@ -62,7 +64,7 @@ struct Args {
 
 impl Args {
     fn parse(raw: &[String]) -> Args {
-        const FLAGS: [&str; 8] = ["curriculum", "quiet", "tsv", "verbose", "guess", "piece-keys", "full", "compact"];
+        const FLAGS: [&str; 10] = ["curriculum", "quiet", "tsv", "verbose", "guess", "piece-keys", "full", "compact", "no-reorg", "row"];
         let mut positional = Vec::new();
         let mut opts = HashMap::new();
         let mut i = 0;
@@ -1261,6 +1263,62 @@ fn peak_memory_kb() -> u64 {
         .unwrap_or(0)
 }
 
+/// `baby scale`: the world gets bigger; does learning stay light and the baby stay honest? One size per process (so peak memory is honest);
+/// `--sweep` runs several sizes by starting this program once per size and prints the table at the end.
+fn cmd_scale(a: &Args) {
+    let seed: u64 = a.get("seed", 1);
+    let noise: f32 = a.get("noise", 0.0);
+    let typos: f32 = a.get("typos", 0.05);
+    let facts: usize = a.get("facts", 12);
+    let cap: usize = a.get("grade", 2500);
+    if let Some(sweep) = a.opts.get("sweep") {
+        let exe = std::env::current_exe().expect("own path");
+        let mut rows: Vec<Vec<(String, f64)>> = Vec::new();
+        for u in sweep.split(',').filter_map(|s| s.trim().parse::<usize>().ok()) {
+            let entities = a.get("entities", (u * 20).clamp(1000, 10_000));
+            let mut cmd = std::process::Command::new(&exe);
+            cmd.args(["scale", "--units", &u.to_string(), "--entities", &entities.to_string(), "--facts", &facts.to_string(), "--noise", &noise.to_string(), "--typos", &typos.to_string(), "--seed", &seed.to_string(), "--grade", &cap.to_string(), "--row"]);
+            if a.flag("no-reorg") {
+                cmd.arg("--no-reorg");
+            }
+            let out = cmd.output().expect("run a size");
+            let text = String::from_utf8_lossy(&out.stdout);
+            let mut row = Vec::new();
+            for line in text.lines() {
+                match line.strip_prefix("ROW ") {
+                    Some(r) => row = r.split_whitespace().filter_map(|kv| kv.split_once('=')).map(|(k, v)| (k.to_string(), v.parse().unwrap_or(0.0))).collect(),
+                    None => println!("{line}"),
+                }
+            }
+            if !out.status.success() {
+                println!("  (size {u} failed: {})", String::from_utf8_lossy(&out.stderr).lines().last().unwrap_or(""));
+            }
+            rows.push(row);
+        }
+        let get = |r: &Vec<(String, f64)>, k: &str| r.iter().find(|(n, _)| n == k).map(|(_, v)| *v);
+        let cols: [(&str, &str, usize); 17] = [
+            ("units", "units", 6), ("lessons", "lessons", 8), ("teach_s", "teach s", 8), ("peak_mb", "peak MB", 8), ("known_ms", "known ms", 9), ("newfact_ms", "newfact ms", 11),
+            ("retaught_ms", "retaught ms", 12), ("ask_us", "ask us", 8), ("ask_uj", "ask uJ", 8), ("reorg_s", "reorg s", 8), ("file_kb", "file KB", 9), ("agree", "mech %", 7),
+            ("reworded_ok", "reword %", 9), ("never_ok", "never %", 8), ("route", "route %", 8), ("typo_wrong", "typo W%", 8), ("traps_answered", "trapsAns", 9),
+        ];
+        println!("\nTABLE");
+        println!("{}", cols.iter().map(|(_, h, w)| format!("{:>w$}", h, w = *w)).collect::<Vec<_>>().join(" "));
+        for r in &rows {
+            println!("{}", cols.iter().map(|(k, _, w)| format!("{:>w$}", get(r, k).map_or("-".to_string(), |v| if v.abs() >= 100.0 { format!("{v:.0}") } else { format!("{v:.2}") }), w = *w)).collect::<Vec<_>>().join(" "));
+        }
+        println!("wrong columns: taught/reworded/never/beyond (WRONG %, must be 0 without noise):");
+        for r in &rows {
+            println!("  {:>5} units: {:.2} / {:.2} / {:.2} / {:.2}  after reorganising {:.2}", get(r, "units").unwrap_or(0.0), get(r, "taught_wrong").unwrap_or(0.0), get(r, "reworded_wrong").unwrap_or(0.0), get(r, "never_wrong").unwrap_or(0.0), get(r, "beyond_wrong").unwrap_or(0.0), get(r, "reorg_wrong").unwrap_or(f64::NAN));
+        }
+        return;
+    }
+    let c = scale::Config { units: a.get("units", 20), entities: a.get("entities", 1000), facts_per_unit: facts, noise, typos, seed };
+    let row = scale::run(&c, !a.flag("no-reorg"), cap);
+    if a.flag("row") {
+        println!("ROW {}", row.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join(" "));
+    }
+}
+
 fn cmd_cost(a: &Args) {
     let seed: u64 = a.get("seed", 1);
     let world = kinds::world(seed);
@@ -1348,6 +1406,7 @@ fn main() {
         Some("school") => cmd_school(&args),
         Some("learn") => cmd_learn(&args),
         Some("cost") => cmd_cost(&args),
+        Some("scale") => cmd_scale(&args),
         Some("grade") => cmd_grade(&args),
         Some("storage") => cmd_storage(&args),
         Some("sleep") => cmd_sleep(&args),
@@ -1360,7 +1419,7 @@ fn main() {
         Some("life") => cmd_life(&args),
         Some("energy") => cmd_energy(&args),
         _ => {
-            eprintln!("usage: baby <school|ask|learn|sleep|storage|cost|grade|discover|teach|effort|data|train|know|curious|rules|kinds|eval|life|energy> ...  (see the top of src/main.rs)");
+            eprintln!("usage: baby <school|ask|learn|sleep|storage|cost|scale|grade|discover|teach|effort|data|train|know|curious|rules|kinds|eval|life|energy> ...  (see the top of src/main.rs)");
             std::process::exit(2);
         }
     }

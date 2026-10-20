@@ -117,11 +117,21 @@ fn each_group(ctx: &Ctx, groups: &[Vec<usize>], which: &[usize], all: &Weights, 
 
 /// Would one rule or selection (a mechanism with a setting per operation word) be right for EACH of these two sets of lessons, on
 /// facts held back? Used to decide whether two units that were taught separately are really one.
+#[cfg(test)]
 pub fn can_merge(a: &[Item], b: &[Item], all: &Weights, seed: u64) -> bool {
+    can_merge_many(&[a, b], all, seed).is_some()
+}
+
+/// The same question for any number of parts at once: is there ONE rule (or one selection) that is right, on facts held back, for
+/// every part? Each part is judged on its own share of the folds (see `cv_correct_strata`), so a small part cannot hide behind a big
+/// one, and one test over many units costs about what one test over two does, instead of a test per pair. Returns the mechanism that
+/// fits them all (an index into `Mech::ALL`: the rule before the selection) and its accuracy on held-back facts over every part, so
+/// the merged unit can be settled from this evidence without working it all out again.
+pub fn can_merge_many(parts: &[&[Item]], all: &Weights, seed: u64) -> Option<(usize, f64)> {
     let mut items = Vec::new();
     let mut owner = Vec::new();
     let mut base = 0usize;
-    for (k, part) in [a, b].iter().enumerate() {
+    for (k, part) in parts.iter().enumerate() {
         let mut map: HashMap<usize, usize> = HashMap::new();
         for it in part.iter() {
             let next = base + map.len();
@@ -132,13 +142,16 @@ pub fn can_merge(a: &[Item], b: &[Item], all: &Weights, seed: u64) -> bool {
         base += map.len();
     }
     if items.iter().map(|i| i.fact).collect::<HashSet<_>>().len() < 5 {
-        return false;
+        return None;
     }
-    cv_correct(&items, all, seed, &[1, 2]).iter().any(|c| {
-        (0..2).all(|k| {
+    let mechs = [1usize, 2];
+    let correct = crate::mechanisms::cv_correct_strata(&items, all, seed, &mechs, &owner);
+    correct.iter().enumerate().find_map(|(m, c)| {
+        let every_part_fits = (0..parts.len()).all(|k| {
             let mine: Vec<usize> = (0..items.len()).filter(|&i| owner[i] == k).collect();
             mine.iter().filter(|&&i| c[i]).count() as f64 / mine.len().max(1) as f64 >= 0.95
-        })
+        });
+        every_part_fits.then(|| (mechs[m], c.iter().filter(|x| **x).count() as f64 / items.len().max(1) as f64))
     })
 }
 

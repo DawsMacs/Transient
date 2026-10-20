@@ -50,11 +50,15 @@ impl Mech {
 }
 
 /// How much each word counts: rare across everything taught counts more; a word never met counts the most.
+///
+/// Kept so that one more lesson can be added in time proportional to its words (`add`), not to everything ever taught: the weights of
+/// the whole world used to be recomputed from every lesson on every new one, which made learning slower the more it knew.
+#[derive(PartialEq, Debug)]
 pub struct Weights {
     df: HashMap<String, u32>,
     n: u32,
-    /// In how many different units of lessons each word has turned up.
-    spread: HashMap<String, usize>,
+    /// In which units of lessons each word has turned up (sorted). How many different ones is the word's *spread*.
+    units: HashMap<String, Vec<usize>>,
 }
 
 impl Weights {
@@ -64,21 +68,26 @@ impl Weights {
 
     /// From (unit, words) lists, one per taught question.
     pub fn from_lists(lists: Vec<(usize, Vec<String>)>) -> Weights {
-        let mut df: HashMap<String, u32> = HashMap::new();
-        let mut units: HashMap<String, std::collections::BTreeSet<usize>> = HashMap::new();
-        let n = lists.len() as u32;
-        for (unit, mut seen) in lists {
-            for w in &seen {
-                units.entry(w.clone()).or_default().insert(unit);
-            }
-            seen.sort();
-            seen.dedup();
-            for w in seen {
-                *df.entry(w).or_insert(0) += 1;
+        let mut w = Weights { df: HashMap::new(), n: 0, units: HashMap::new() };
+        for (unit, words) in &lists {
+            w.add(*unit, words);
+        }
+        w
+    }
+
+    /// One more taught question: its words, and the unit it was taught in.
+    pub fn add(&mut self, unit: usize, words: &[String]) {
+        self.n += 1;
+        let mut seen: Vec<&String> = words.iter().collect();
+        seen.sort();
+        seen.dedup();
+        for w in seen {
+            *self.df.entry(w.clone()).or_insert(0) += 1;
+            let in_units = self.units.entry(w.clone()).or_default();
+            if let Err(at) = in_units.binary_search(&unit) {
+                in_units.insert(at, unit);
             }
         }
-        let spread = units.into_iter().map(|(w, u)| (w, u.len())).collect();
-        Weights { df, n, spread }
     }
 
     pub fn knows(&self, word: &str) -> bool {
@@ -92,44 +101,12 @@ impl Weights {
     /// A word that turns up in several different units (what, is, the...) carries no instruction of its own: an operation word
     /// belongs to one kind of lesson. (Frequency alone would call "plus" filler just because there are many sums.)
     pub fn is_filler(&self, word: &str) -> bool {
-        self.spread.get(word).map_or(false, |s| *s >= 2)
+        self.units.get(word).map_or(false, |s| s.len() >= 2)
     }
 
     pub fn w(&self, word: &str) -> f32 {
         let d = self.df.get(word).copied().unwrap_or(0);
         (((1 + self.n) as f32) / ((1 + d) as f32)).ln().max(0.0) + 0.05
-    }
-
-    /// Save as lines: a header, then one line per word.
-    pub fn dump(&self, tag: &str, out: &mut String) {
-        use std::fmt::Write;
-        let mut words: Vec<&String> = self.df.keys().collect();
-        words.sort();
-        writeln!(out, "{tag} {} {}", self.n, words.len()).unwrap();
-        for w in words {
-            writeln!(out, "w {w} {} {}", self.df[w], self.spread.get(w).copied().unwrap_or(0)).unwrap();
-        }
-    }
-
-    pub fn load<'a>(tag: &str, lines: &mut impl Iterator<Item = &'a str>) -> Result<Weights, String> {
-        let head = lines.next().ok_or("missing weights header")?;
-        let p: Vec<&str> = head.split_whitespace().collect();
-        if p.len() != 3 || p[0] != tag {
-            return Err(format!("expected '{tag}' header, found '{head}'"));
-        }
-        let n: u32 = p[1].parse().map_err(|e| format!("{e}"))?;
-        let count: usize = p[2].parse().map_err(|e| format!("{e}"))?;
-        let (mut df, mut spread) = (HashMap::new(), HashMap::new());
-        for _ in 0..count {
-            let l = lines.next().ok_or("truncated weights")?;
-            let f: Vec<&str> = l.split_whitespace().collect();
-            if f.len() != 4 || f[0] != "w" {
-                return Err(format!("bad weights line '{l}'"));
-            }
-            df.insert(f[1].to_string(), f[2].parse().map_err(|e| format!("{e}"))?);
-            spread.insert(f[1].to_string(), f[3].parse().map_err(|e| format!("{e}"))?);
-        }
-        Ok(Weights { df, n, spread })
     }
 
     /// Weighted Jaccard of two sorted, de-duplicated word lists.
@@ -410,19 +387,77 @@ pub fn shape(q: &str, line: &NumberLine) -> Vec<String> {
     out
 }
 
+/// Which facts memory cannot tell apart: two facts are one group if any phrasing of one has the same bag of words as a phrasing of the
+/// other (union-find). Returns each fact's group (the smallest fact id in it).
+fn fact_groups(items: &[Item]) -> HashMap<usize, usize> {
+    let mut parent: HashMap<usize, usize> = items.iter().map(|i| (i.fact, i.fact)).collect();
+    fn find(p: &mut HashMap<usize, usize>, x: usize) -> usize {
+        let mut r = x;
+        while p[&r] != r {
+            r = p[&r];
+        }
+        let mut c = x;
+        while p[&c] != r {
+            let n = p[&c];
+            p.insert(c, r);
+            c = n;
+        }
+        r
+    }
+    let mut seen: HashMap<Vec<String>, usize> = HashMap::new();
+    for i in items {
+        match seen.get(&key(&i.query)) {
+            Some(&other) => {
+                let (a, b) = (find(&mut parent, i.fact), find(&mut parent, other));
+                if a != b {
+                    parent.insert(a.max(b), a.min(b));
+                }
+            }
+            None => {
+                seen.insert(key(&i.query), i.fact);
+            }
+        }
+    }
+    let facts: Vec<usize> = parent.keys().copied().collect();
+    facts.into_iter().map(|f| (f, find(&mut parent, f))).collect()
+}
+
 /// Hold back some facts of one unit, learn with each of `mechs` from the rest, and say which held-back items each got right.
 /// Result: for each mechanism, one flag per item (items that were never held back count as wrong, but with five folds all are).
 pub fn cv_correct(unit_items: &[Item], weights: &Weights, seed: u64, mechs: &[usize]) -> Vec<Vec<bool>> {
+    cv_correct_strata(unit_items, weights, seed, mechs, &vec![0; unit_items.len()])
+}
+
+/// As `cv_correct`, with the folds stratified: `strata[i]` says which part item `i` belongs to, and each part's facts are spread
+/// evenly over the folds. Needed when one part is small next to the other (testing whether a unit of five lessons fits a rule learned
+/// with a big family): a random split can leave a fold holding most of the small part, so it is judged on what it was barely taught.
+pub fn cv_correct_strata(unit_items: &[Item], weights: &Weights, seed: u64, mechs: &[usize], strata: &[usize]) -> Vec<Vec<bool>> {
     let mut facts: Vec<usize> = unit_items.iter().map(|i| i.fact).collect();
     facts.sort();
     facts.dedup();
-    Rng::new(seed.wrapping_add(31)).shuffle(&mut facts);
-    let folds = facts.len().min(5).max(2);
+    // Facts that memory cannot tell apart belong in the same fold: "two or three" and "three or two" are different facts but the
+    // same bag of words, so if one is taught and the other held back, memory "predicts" it by looking it up. Without this a
+    // commutative rule looks exactly like a table whenever the twins happen to fall in different folds.
+    let group = fact_groups(unit_items);
+    let mut groups: Vec<usize> = facts.iter().map(|f| group[f]).collect();
+    groups.sort();
+    groups.dedup();
+    Rng::new(seed.wrapping_add(31)).shuffle(&mut groups);
+    let folds = groups.len().min(5).max(2);
+    // Deal each stratum's groups round-robin over the folds (one stratum: the plain shuffled split).
+    let stratum_of: HashMap<usize, usize> = unit_items.iter().enumerate().map(|(i, it)| (group[&it.fact], strata[i])).collect();
+    let mut order: Vec<usize> = (0..groups.len()).collect();
+    order.sort_by_key(|&i| stratum_of[&groups[i]]); // stable: keeps the shuffled order inside a stratum
+    let mut fold_of: HashMap<usize, usize> = HashMap::new();
+    for (k, &i) in order.iter().enumerate() {
+        fold_of.insert(groups[i], k % folds);
+    }
     let mut correct = vec![vec![false; unit_items.len()]; mechs.len()];
     for f in 0..folds {
-        let held: Vec<usize> = facts.iter().enumerate().filter(|(i, _)| i % folds == f).map(|(_, x)| *x).collect();
-        let test_idx: Vec<usize> = (0..unit_items.len()).filter(|&i| held.contains(&unit_items[i].fact)).collect();
-        let learn: Vec<Item> = unit_items.iter().filter(|i| !held.contains(&i.fact)).cloned().collect();
+        let held_groups: std::collections::HashSet<usize> = groups.iter().filter(|g| fold_of[g] == f).copied().collect();
+        let is_held = |fact: usize| held_groups.contains(&group[&fact]);
+        let test_idx: Vec<usize> = (0..unit_items.len()).filter(|&i| is_held(unit_items[i].fact)).collect();
+        let learn: Vec<Item> = unit_items.iter().filter(|i| !is_held(i.fact)).cloned().collect();
         for (k, mi) in mechs.iter().enumerate() {
             let fitted = fit(Mech::ALL[*mi], &learn, weights, seed);
             for &t in &test_idx {
@@ -445,24 +480,34 @@ pub fn evidence(unit_items: &[Item], weights: &Weights, seed: u64) -> [f64; 5] {
     [all[0], all[1], all[2], all[3], all[4]]
 }
 
-/// As `evidence`, but the expensive mechanism (the network) is only tried if the cheaper ones did not already generalise
-/// (98% or better on facts held back). A network trained and cross-validated for nothing is pure waste.
+/// As `evidence`, but the expensive mechanism (the network) is only tried when the cheaper ones show some structure without being
+/// reliable (25% up to the bar). Where they already generalise it is waste, and where they show nothing at all (an arbitrary table of
+/// facts) a network cannot do better on facts it was not shown, but cross-validating one costs about 100 ms a unit.
 pub fn evidence_thrifty(unit_items: &[Item], weights: &Weights, seed: u64) -> [f64; 5] {
     let cheap = cv_accuracy(unit_items, weights, seed, &[0, 1, 2, 3]);
     let best = cheap.iter().cloned().fold(0.0, f64::max);
-    let network = if best >= 0.98 { 0.0 } else { cv_accuracy(unit_items, weights, seed, &[4])[0] };
+    let network = if !(0.25..RELIABLE).contains(&best) { 0.0 } else { cv_accuracy(unit_items, weights, seed, &[4])[0] };
     [cheap[0], cheap[1], cheap[2], cheap[3], network]
 }
 
-/// The best mechanism; a tie (within two points) goes to the cheaper one. A mechanism must clear a small bar to replace plain
-/// memory: if nothing shows any real ability to answer facts it was not taught, the safe thing is to remember what it was told.
+/// How often a mechanism other than plain memory must be right on facts held back before it may answer for a unit. A unit that is
+/// wrong most of the time on facts it was not shown must not answer them: it stays memorise-only and refuses. (The bar used to be 0.25,
+/// which clean lessons never tested, since their evidence is about 1.0 or about 0. With 2% wrong lessons, units at 0.28 answered, and were wrong.)
+pub const RELIABLE: f64 = 0.9;
+
+/// The best mechanism; a tie (within two points) goes to the cheaper one. A mechanism must clear a bar to replace plain memory:
+/// if nothing shows a reliable ability to answer facts it was not taught, the safe thing is to remember what it was told.
 /// With fewer than five distinct facts there is not enough evidence to trust anything but memory.
 pub fn choose_mechanism(ev: &[f64; 5], facts: usize) -> Mech {
     let best = ev.iter().cloned().fold(0.0, f64::max);
     if best < 0.25 || facts < 5 {
+        return Mech::Remember;
+    }
+    let (i, m) = Mech::ALL.iter().enumerate().find(|(i, _)| ev[*i] >= best - 0.02).map(|(i, m)| (i, *m)).unwrap();
+    if m != Mech::Remember && ev[i] < RELIABLE {
         Mech::Remember
     } else {
-        Mech::ALL.iter().enumerate().find(|(i, _)| ev[*i] >= best - 0.02).map(|(_, m)| *m).unwrap()
+        m
     }
 }
 
@@ -526,6 +571,45 @@ impl Baby {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_mechanism_that_is_usually_wrong_on_facts_it_was_not_shown_is_not_allowed_to_answer() {
+        // [remember, rule, select, program, network] held-back accuracy
+        assert_eq!(choose_mechanism(&[0.0, 0.0, 0.28, 0.2, 0.0], 29), Mech::Remember, "28% is not a basis for answering");
+        assert_eq!(choose_mechanism(&[0.0, 0.5, 0.4, 0.3, 0.0], 30), Mech::Remember);
+        assert_eq!(choose_mechanism(&[0.0, 0.0, 0.0, 0.0, 0.30], 22), Mech::Remember);
+        assert_eq!(choose_mechanism(&[0.1, 0.89, 0.2, 0.0, 0.0], 30), Mech::Remember);
+        assert_eq!(choose_mechanism(&[0.1, 0.90, 0.2, 0.0, 0.0], 30), Mech::Rule);
+        assert_eq!(choose_mechanism(&[0.0, 1.0, 0.0, 1.0, 0.0], 30), Mech::Rule, "ties still go to the cheaper");
+        assert_eq!(choose_mechanism(&[0.6, 0.0, 0.0, 0.0, 0.0], 30), Mech::Remember);
+        assert_eq!(choose_mechanism(&[0.0, 1.0, 0.0, 0.0, 0.0], 4), Mech::Remember, "too few facts");
+    }
+
+    /// "which is bigger two or three" and "... three or two" are different facts but the same bag of words, so memory (which ignores
+    /// order) answers one from the other. Held-back evidence must not credit memory for that, or a commutative rule is mistaken for
+    /// a table whenever its twins happen to land in different folds. (Found at 200 units: 3 of 11 such units were mislabelled.)
+    #[test]
+    fn a_commutative_rule_is_never_mistaken_for_a_table_by_where_the_folds_fall() {
+        let line = ["zero", "one", "two", "three", "four", "five"];
+        let mut items = Vec::new();
+        let mut fact = 0;
+        for a in 0..=5usize {
+            for b in 0..=5usize {
+                if a != b {
+                    for (t, form) in ["which is zorbat {a} or {b}", "zorbat {a} or {b}", "{a} or {b} which is zorbat"].iter().enumerate() {
+                        let q = form.replace("{a}", line[a]).replace("{b}", line[b]);
+                        items.push(Item { unit: 0, fact, template: t, query: q, answer: line[a.max(b)].to_string() });
+                    }
+                    fact += 1;
+                }
+            }
+        }
+        let weights = Weights::from(&items);
+        for seed in 1..=12u64 {
+            let ev = evidence_thrifty(&items, &weights, seed);
+            assert_eq!(choose_mechanism(&ev, fact), Mech::Select, "seed {seed}: evidence {ev:?}");
+        }
+    }
     use crate::kinds;
 
     #[test]

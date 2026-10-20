@@ -60,53 +60,97 @@ impl SchoolUnit {
     }
 }
 
-/// How telling each word's *shape* is for each unit: ln(P(word | unit) / P(word)). A question's score for a unit is the sum over its
-/// words, so sending it takes a lookup and a few additions per word.
+/// How telling each word's *shape* is for each unit. A question's score for a unit is the sum, over its words, of
+/// ln(P(word | unit) / P(word)); sending it takes a lookup and a few additions per word.
+///
+/// Kept as counts, sparsely: for each word only the units it occurs in, so the table grows with what was taught, not with
+/// vocabulary x units, and one more lesson touches only its own words (`add_lesson`). Scores drop two terms that are the same for every
+/// unit (they cancel in the margin between the best unit and the runner-up, which is all that is ever used):
+///   score(u) = sum over known words t of ln(1 + 2 * count(t, u))  -  (number of known words) * ln(1 + lessons(u)).
+#[derive(PartialEq, Debug)]
 struct Routing {
-    table: HashMap<String, Vec<f32>>,
-    units: usize,
+    rows: HashMap<String, Vec<Cell>>,
+    /// ln(1 + lessons in the unit), kept so a question costs a lookup, not a logarithm per unit.
+    ln_lessons: Vec<f32>,
+    lessons: Vec<u32>,
+    cells: usize,
+}
+
+#[derive(PartialEq, Debug, Clone, Copy)]
+struct Cell {
+    unit: u32,
+    /// How many of the unit's lessons contain the word.
+    count: u32,
+    /// ln(1 + 2 * count)
+    gain: f32,
 }
 
 impl Routing {
     fn build(units: &[SchoolUnit], line: &NumberLine) -> Routing {
-        let n_units = units.len();
-        let mut count: HashMap<String, Vec<f32>> = HashMap::new();
-        let mut per_unit = vec![0.0f32; n_units];
+        let mut r = Routing { rows: HashMap::new(), ln_lessons: Vec::new(), lessons: Vec::new(), cells: 0 };
         for (u, unit) in units.iter().enumerate() {
+            r.ensure_units(u + 1);
             for l in &unit.lessons {
-                per_unit[u] += 1.0;
-                for t in shape(&l.query, line) {
-                    count.entry(t).or_insert_with(|| vec![0.0; n_units])[u] += 1.0;
+                r.add_lesson(u, &shape(&l.query, line));
+            }
+        }
+        r
+    }
+
+    fn ensure_units(&mut self, n: usize) {
+        while self.lessons.len() < n {
+            self.lessons.push(0);
+            self.ln_lessons.push(0.0);
+        }
+    }
+
+    /// One more lesson in unit `u`, given the shape of its question.
+    fn add_lesson(&mut self, u: usize, shape: &[String]) {
+        self.ensure_units(u + 1);
+        self.lessons[u] += 1;
+        self.ln_lessons[u] = (self.lessons[u] as f32 + 1.0).ln();
+        for t in shape {
+            let row = self.rows.entry(t.clone()).or_default();
+            match row.binary_search_by_key(&(u as u32), |c| c.unit) {
+                Ok(i) => {
+                    row[i].count += 1;
+                    row[i].gain = (1.0 + 2.0 * row[i].count as f32).ln();
+                }
+                Err(i) => {
+                    row.insert(i, Cell { unit: u as u32, count: 1, gain: 3.0f32.ln() });
+                    self.cells += 1;
                 }
             }
         }
-        let total: f32 = per_unit.iter().sum();
-        let table = count
-            .into_iter()
-            .map(|(t, c)| {
-                let all: f32 = c.iter().sum();
-                let p_t = (all + 0.5) / (total + 1.0);
-                let scores = (0..n_units).map(|u| (((c[u] + 0.5) / (per_unit[u] + 1.0)) / p_t).ln()).collect();
-                (t, scores)
-            })
-            .collect();
-        Routing { table, units: n_units }
     }
 
     fn scores(&self, shape: &[String], ledger: &mut Ledger) -> Vec<f32> {
-        let mut s = vec![0.0f32; self.units];
+        let units = self.lessons.len();
+        let mut s = vec![0.0f32; units];
+        let (mut known, mut touched) = (0usize, 0usize);
         for t in shape {
-            if let Some(row) = self.table.get(t) {
-                for (u, x) in row.iter().enumerate() {
-                    s[u] += x;
+            if let Some(row) = self.rows.get(t) {
+                known += 1;
+                touched += row.len();
+                for c in row {
+                    s[c.unit as usize] += c.gain;
                 }
             }
         }
-        ledger.words_read += (shape.len() * (1 + self.units)) as u64;
-        ledger.macs += (shape.len() * self.units) as u64;
-        ledger.touch(self.table.len() * self.units * 4);
+        for (x, l) in s.iter_mut().zip(&self.ln_lessons) {
+            *x -= known as f32 * l;
+        }
+        ledger.words_read += (shape.len() + touched + units) as u64;
+        ledger.macs += (touched + units) as u64;
+        ledger.touch(self.cells * std::mem::size_of::<Cell>());
         s
     }
+}
+
+/// Units that follow one rule together, and the held-back evidence that says so (mechanism index into `Mech::ALL`, accuracy).
+struct Group {
+    units: Vec<usize>,
+    fit: Option<(usize, f64)>,
 }
 
 pub struct School {
@@ -258,10 +302,21 @@ impl School {
     /// with the number of words, so a short question like "one plus zero" would look less recognisable than a long one.)
     pub fn route(&self, q: &str, ledger: &mut Ledger) -> (usize, f32) {
         let s = self.routing.scores(&shape(q, &self.line), ledger);
-        let mut order: Vec<usize> = (0..s.len()).collect();
-        order.sort_by(|a, b| s[*b].partial_cmp(&s[*a]).unwrap());
-        let margin = if s.len() > 1 { s[order[0]] - s[order[1]] } else { s[order[0]] };
-        (order[0], margin)
+        // best and runner-up in one pass (the earlier unit wins a tie)
+        let (mut best, mut second) = (0usize, None::<usize>);
+        for u in 1..s.len() {
+            if s[u] > s[best] {
+                second = Some(best);
+                best = u;
+            } else if second.map_or(true, |k| s[u] > s[k]) {
+                second = Some(u);
+            }
+        }
+        let margin = match second {
+            Some(k) => s[best] - s[k],
+            None => s[best],
+        };
+        (best, margin)
     }
 
     /// Words it knows (from any lesson, or the number line).
@@ -374,10 +429,20 @@ impl School {
 
     // ---- learning after school ----
 
+    /// Recompute the weights and the routing table from every lesson. Needed when lessons move between units (merge, split, compact);
+    /// taking on one more lesson uses `add_to_tables` instead.
     fn rebuild_tables(&mut self) {
         self.renumber();
-        self.weights = Weights::from(&all_items(&self.units));
+        self.weights = Weights::from_lists(
+            self.units.iter().enumerate().flat_map(|(u, unit)| unit.lessons.iter().map(move |l| (u, tokenize(&l.query)))).collect(),
+        );
         self.routing = Routing::build(&self.units, &self.line);
+    }
+
+    /// One more lesson in unit `u`: update the weights and the routing table by its own words only.
+    fn add_to_tables(&mut self, u: usize, query: &str) {
+        self.weights.add(u, &tokenize(query));
+        self.routing.add_lesson(u, &shape(query, &self.line));
     }
 
     /// Work out again how to learn a unit, from every lesson it now has.
@@ -395,21 +460,26 @@ impl School {
     }
 
     /// The cheap way to take on a lesson when nothing structural has changed: refit the unit's current mechanism on all its lessons and
-    /// check it still explains every one. If so there is nothing to re-decide (no cross-validation). Returns false when it does not,
+    /// check it still explains (nearly) every one. If so there is nothing to re-decide (no cross-validation). Returns false when it does not,
     /// or when there is no settled mechanism to refit: then the unit must be worked out again from scratch.
     fn refit_in_place(&mut self, u: usize) -> bool {
         let unit = &self.units[u];
-        let settled_rule = matches!(unit.chosen, Mech::Rule | Mech::Select | Mech::Program) && unit.best_evidence() >= 0.95;
-        // A unit of facts that is already known not to be workable-out is re-tested only every ten new facts.
-        let settled_facts = unit.chosen == Mech::Remember && unit.best_evidence() < 0.25 && unit.facts() >= 10 && unit.facts() % 10 != 0;
+        let settled_rule = matches!(unit.chosen, Mech::Rule | Mech::Select | Mech::Program) && unit.best_evidence() >= mechanisms::RELIABLE;
+        // A unit that is known not to be reliably workable-out (nothing clears the bar) is re-tested only every ten new facts: re-deciding
+        // costs a cross-validation of every mechanism, which for a unit that is mostly a rule with a few wrong lessons is 60-260 ms.
+        let settled_facts = unit.chosen == Mech::Remember && unit.best_evidence() < mechanisms::RELIABLE && unit.facts() >= 10 && unit.facts() % 10 != 0;
         if !(settled_rule || settled_facts) {
             return false;
         }
         let items = unit.lessons.clone();
         let chosen = unit.chosen;
         let state = fit(chosen, &items, &self.weights, self.seed);
-        if settled_rule && !items.iter().all(|l| predict(&state, &l.query, &self.weights).as_deref() == Some(l.answer.as_str())) {
-            return false;
+        // A reliable rule may leave a few lessons unexplained (wrong answers happen); more than one in twenty and it is time to look again.
+        if settled_rule {
+            let unexplained = items.iter().filter(|l| predict(&state, &l.query, &self.weights).as_deref() != Some(l.answer.as_str())).count();
+            if unexplained * 20 > items.len() {
+                return false;
+            }
         }
         let unit = &mut self.units[u];
         unit.remember = Remembered::from_items(&items);
@@ -467,15 +537,16 @@ impl School {
         let key = lesson_key(query);
         let corrected;
         if let Some(existing) = self.units[u].lessons.iter_mut().find(|l| lesson_key(&l.query) == key) {
+            // the words are unchanged, so the weights and the routing table are too
             existing.answer = answer.to_string();
             corrected = true;
         } else {
-            let fact = all_items(&self.units).iter().map(|l| l.fact).max().map_or(0, |m| m + 1);
+            let fact = self.units.iter().flat_map(|x| x.lessons.iter()).map(|l| l.fact).max().map_or(0, |m| m + 1);
             let template = self.units[u].lessons.len() % 4;
             self.units[u].lessons.push(Item { unit: u, fact, template, query: query.to_string(), answer: answer.to_string() });
+            self.add_to_tables(u, query);
             corrected = false;
         }
-        self.rebuild_tables();
         if !self.refit_in_place(u) {
             self.relearn_unit(u);
         }
@@ -489,6 +560,15 @@ impl School {
                 l.unit = i;
             }
         }
+    }
+
+    /// (For tests) are the incrementally kept weights and routing table exactly what a rebuild from every lesson gives?
+    #[cfg(test)]
+    fn tables_equal_a_rebuild(&self) -> bool {
+        let weights = Weights::from_lists(
+            self.units.iter().enumerate().flat_map(|(u, unit)| unit.lessons.iter().map(move |l| (u, tokenize(&l.query)))).collect(),
+        );
+        weights == self.weights && Routing::build(&self.units, &self.line) == self.routing
     }
 
     fn word_keyed(&self, u: usize) -> bool {
@@ -590,28 +670,51 @@ impl School {
             }
         }
 
-        // 2. Merge what turns out to be one.
+        // 2. Merge what turns out to be one. Rule units (and selection units) that one rule fits are tested as a whole set, not pair by
+        //    pair; only when the set does not fit as one is it halved. (A pair scan that starts over after every merge cost O(units^2)
+        //    cross-validations, and every merge re-validated the whole growing family: 100 s at 200 units.)
         loop {
-            let n = self.units.len();
-            let mut found = None;
-            'outer: for a in 0..n {
-                for b in a + 1..n {
-                    if self.word_keyed(a) && self.word_keyed(b) && crate::discover::can_merge(&self.units[a].lessons, &self.units[b].lessons, &self.weights, self.seed) {
-                        found = Some((a, b));
-                        break 'outer;
-                    }
+            let mut groups: Vec<Group> = Vec::new();
+            for mech in [Mech::Rule, Mech::Select] {
+                let cands: Vec<usize> = (0..self.units.len()).filter(|&u| self.word_keyed(u) && self.units[u].chosen == mech).collect();
+                if cands.len() >= 2 {
+                    groups.extend(self.mergeable_groups(&cands).into_iter().filter(|g| g.units.len() >= 2));
                 }
             }
-            let Some((a, b)) = found else { break };
-            let gone = self.units.remove(b);
-            let keep_name = self.units[a].name.clone();
-            report.merged.push((keep_name.clone(), gone.name.clone()));
-            self.units[a].lessons.extend(gone.lessons);
-            let parts: Vec<&str> = keep_name.split('/').collect();
-            self.units[a].name = if parts.len() >= 3 { format!("{}/{}+", parts[0], parts[1]) } else { format!("{keep_name}/{}", gone.name) };
+            if groups.is_empty() {
+                break;
+            }
+            let mut slots: Vec<Option<SchoolUnit>> = std::mem::take(&mut self.units).into_iter().map(Some).collect();
+            let mut kept: Vec<(String, (usize, f64))> = Vec::new();
+            for g in &groups {
+                let mut keep = slots[g.units[0]].take().unwrap();
+                for &b in &g.units[1..] {
+                    let gone = slots[b].take().unwrap();
+                    report.merged.push((keep.name.clone(), gone.name.clone()));
+                    keep.lessons.extend(gone.lessons);
+                    let parts: Vec<&str> = keep.name.split('/').collect();
+                    keep.name = if parts.len() >= 3 { format!("{}/{}+", parts[0], parts[1]) } else { format!("{}/{}", keep.name, gone.name) };
+                }
+                kept.push((keep.name.clone(), g.fit.expect("a merged group was tested as a whole")));
+                slots[g.units[0]] = Some(keep);
+            }
+            self.units = slots.into_iter().flatten().collect();
             self.renumber();
             self.rebuild_tables();
-            self.relearn_unit(a);
+            // Settle each merged unit from the evidence that justified the merge. (Working it out again from scratch, cross-validating
+            // every mechanism on the whole family, cost 6.9 s for 564 lessons to rediscover what the merge test had just shown.)
+            for (name, (mech, accuracy)) in kept {
+                if let Some(u) = self.units.iter().position(|x| x.name == name) {
+                    let items = self.units[u].lessons.clone();
+                    let state = fit(Mech::ALL[mech], &items, &self.weights, self.seed);
+                    let unit = &mut self.units[u];
+                    unit.chosen = Mech::ALL[mech];
+                    unit.evidence = [0.0; 5];
+                    unit.evidence[mech] = accuracy;
+                    unit.remember = Remembered::from_items(&items);
+                    unit.state = state;
+                }
+            }
         }
         self.renumber();
         self.rebuild_tables();
@@ -619,6 +722,39 @@ impl School {
             self.recalibrate_floor();
         }
         report
+    }
+
+    /// Split a set of units into groups that each follow one rule together (a group of one stays alone). Tries the whole set first; if one
+    /// rule does not fit them all, halves it, sorts out each half, then tries to fold the second half's groups into the first's.
+    fn mergeable_groups(&self, set: &[usize]) -> Vec<Group> {
+        if set.len() < 2 {
+            return vec![Group { units: set.to_vec(), fit: None }];
+        }
+        if let Some(fit) = self.fit_as_one(set) {
+            return vec![Group { units: set.to_vec(), fit: Some(fit) }];
+        }
+        let (left, right) = set.split_at(set.len() / 2);
+        let mut groups = self.mergeable_groups(left);
+        for g in self.mergeable_groups(right) {
+            let joined = groups.iter().enumerate().find_map(|(i, h)| {
+                let both: Vec<usize> = h.units.iter().chain(&g.units).copied().collect();
+                self.fit_as_one(&both).map(|fit| (i, fit))
+            });
+            match joined {
+                Some((i, fit)) => {
+                    groups[i].units.extend(g.units);
+                    groups[i].fit = Some(fit);
+                }
+                None => groups.push(g),
+            }
+        }
+        groups
+    }
+
+    /// Does one rule (or selection) fit every one of these units on facts held back? If so: which mechanism, and how accurate.
+    fn fit_as_one(&self, units: &[usize]) -> Option<(usize, f64)> {
+        let parts: Vec<&[Item]> = units.iter().map(|&u| self.units[u].lessons.as_slice()).collect();
+        crate::discover::can_merge_many(&parts, &self.weights, self.seed)
     }
 
     /// Set the recognition floor from the table as it is now: low enough that every lesson it holds is recognised, with room below
@@ -1153,6 +1289,52 @@ mod tests {
         assert!(times.lessons.len() >= times_before + 6, "they went to the unit that builds the same expression");
         assert_eq!(s.ask("what is two times four").answer.as_deref(), Some("eight"));
         assert_eq!(s.ask("seven plus two").answer.as_deref(), Some("nine"));
+    }
+
+    /// A unit of five lessons is judged on a fair share of the folds, so whether it can join a rule family does not depend on the seed.
+    /// (Before the folds were stratified by part it joined on only 17 of 24 seeds: a random split left it two lessons to learn from.)
+    #[test]
+    fn whether_a_small_unit_can_join_a_rule_family_does_not_depend_on_the_seed() {
+        let mut s = trained();
+        for (a, b) in [("zero", "three"), ("one", "two"), ("two", "four"), ("three", "one"), ("one", "five")] {
+            let n = |w: &str| crate::data::NUM.iter().position(|x| *x == w).unwrap();
+            s.learn(&format!("what is {a} added to {b}"), crate::data::NUM[n(a) + n(b)], Some("added")).unwrap();
+        }
+        let lessons = |name: &str| s.units.iter().find(|u| u.name == name).unwrap().lessons.clone();
+        let family: Vec<Item> = ["sum", "after", "double", "half", "minus"].iter().flat_map(|n| lessons(n)).collect();
+        let added = lessons("added");
+        for seed in 1..=24u64 {
+            assert!(crate::discover::can_merge(&family, &added, &s.weights, seed), "seed {seed}");
+        }
+        // and the other way round: multiplication does not follow the family's rule, whatever the seed
+        let times = lessons("times");
+        for seed in 1..=24u64 {
+            assert!(!crate::discover::can_merge(&family, &times, &s.weights, seed), "seed {seed}: times must never join the sum family");
+        }
+    }
+
+    #[test]
+    fn learning_one_lesson_at_a_time_keeps_the_tables_exactly_what_a_rebuild_would_give() {
+        let mut s = trained();
+        assert!(s.tables_equal_a_rebuild(), "fresh school");
+        // new facts, a new phrasing, a correction, the same lesson again, a surprising lesson in a rule unit
+        s.learn("capital of atlantis", "poseidonis", Some("capital")).unwrap();
+        s.learn("what is the capital of atlantis", "poseidonis", Some("capital")).unwrap();
+        assert!(s.tables_equal_a_rebuild(), "after new facts");
+        s.learn("what is two added to three", "five", Some("sum")).unwrap();
+        s.learn("what is one added to one", "two", Some("sum")).unwrap();
+        assert!(s.tables_equal_a_rebuild(), "after a new phrasing");
+        s.learn("capital of atlantis", "atlantica", Some("capital")).unwrap();
+        s.learn("capital of atlantis", "atlantica", Some("capital")).unwrap();
+        assert!(s.tables_equal_a_rebuild(), "after a correction and a repeat");
+        // a new kind of lesson: no unit named, so it waits in the pen, then opens a unit of its own
+        for n in 0..=6usize {
+            let _ = s.learn_anywhere(&format!("what is {} less than ten", crate::data::NUM[n]), crate::data::NUM[10 - n]);
+        }
+        assert!(s.units.iter().any(|u| u.name.contains("less")), "a unit opened");
+        assert!(s.tables_equal_a_rebuild(), "after a new unit opened");
+        s.learn("what is three less than ten", "seven", None).unwrap();
+        assert!(s.tables_equal_a_rebuild(), "after a lesson placed by routing");
     }
 
     #[test]
