@@ -274,6 +274,37 @@ impl Remembered {
         tokens.iter().filter(|t| !self.glue.contains(*t)).map(|t| t.as_str()).collect()
     }
 
+    /// What was taught for exactly this question (the same words in the same order), by vote; None if it was never taught as written
+    /// or the lessons for it tie. Not a similarity match: a neighbouring lesson is no witness.
+    pub fn exact(&self, q: &str) -> Option<String> {
+        let tokens = tokenize(q);
+        let mut candidates: Vec<usize> = tokens
+            .iter()
+            .filter(|t| !self.glue.contains(*t))
+            .flat_map(|t| self.index.get(t).into_iter().flatten().copied())
+            .collect();
+        if candidates.is_empty() {
+            candidates = (0..self.order.len()).collect();
+        }
+        candidates.sort_unstable();
+        candidates.dedup();
+        let mut votes: Vec<(&str, usize)> = Vec::new();
+        for i in candidates {
+            if self.order[i] == tokens {
+                match votes.iter_mut().find(|(a, _)| *a == self.memory[i].1) {
+                    Some(v) => v.1 += 1,
+                    None => votes.push((&self.memory[i].1, 1)),
+                }
+            }
+        }
+        votes.sort_by(|a, b| b.1.cmp(&a.1));
+        match votes.as_slice() {
+            [] => None,
+            [(a, _)] => Some(a.to_string()),
+            [(a, x), (_, y), ..] => (x > y).then(|| a.to_string()),
+        }
+    }
+
     pub fn recall(&self, q: &str, w: &Weights) -> Option<String> {
         self.recall_counted(q, w, &mut Ledger::default(), false)
     }
@@ -354,11 +385,7 @@ pub fn fit(mech: Mech, items: &[Item], weights: &Weights, seed: u64) -> Fitted {
         Mech::Remember => Fitted::Remember(Remembered::from_items(items)),
         Mech::Rule => {
             // Solved exactly (see `Quantity::fit_ridge`): no passes, no learning rate. Filler words are pulled hard towards zero.
-            let (rule, _ops) = Quantity::fit_ridge(
-                &as_examples(items),
-                NumberLine::from_counting(&counting_lessons()),
-                &|w| if weights.is_filler(w) { 5.0 } else { 0.0 },
-            );
+            let (rule, _ops) = Quantity::fit_ridge_robust(&as_examples(items), &|w| if weights.is_filler(w) { 5.0 } else { 0.0 });
             Fitted::Rule(rule)
         }
         Mech::Select => Fitted::Select(SelectRule::fit(items)),

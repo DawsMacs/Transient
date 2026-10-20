@@ -43,6 +43,46 @@ cargo test --offline                 # 61 tests, including numerical checks of t
 ./target/release/baby energy         # what one question and one learning step cost, counted
 ```
 
+## Noise, finished: robust fitting and cross-checks (2026-10-20)
+
+The previous noise round left honesty solved and coverage open: with 2 % wrong lessons a few rule units fell below the bar and became memorise-only, so unseen questions were refused (55-62 % right). Closing that took six changes, three of which were
+wrong first.
+
+| 60 / 200 units, never-taught right (WRONG was 0.00 % in every cell) | before | after |
+|---|---|---|
+| words, 2 % noise | 62 % / 56 % | **100 % / 97.7 %** |
+| digits, 2 % noise | 51 % | **100 %** (and 100 % at 200 units) |
+| words, 5 % noise | not measured | 96.9 % / 97.4 % |
+| after `reorganise`, 200 units, 2 % noise | 85.5 % | **98.0 %** |
+| invention battery, 2 % noise: hidden kinds / stage-2 kinds worked out | 46 of 96 / 12 of 54 (6 seeds) | **127 of 128 / 56 of 72** (8 seeds) |
+| invention battery, 5 % noise | | 118 of 128 / 51 of 72, 0 false inventions, 0 wrong |
+| clean worlds (every row of the sweep, 20 to 600 units) | 100 % | 100 % (unchanged), reorganise at 600 units 3.5 s (was 1.35 s) |
+
+**1. Robust rule fit (`Quantity::fit_ridge_robust`).** Fit, find the lessons the rule misses by more than half a step, set the worst aside, refit; at most a tenth of the lessons, at most 12 rounds, a few per round. *First version wrong:* it protected a second rule hiding in the unit
+(six "times" lessons among sums, which must stay visible so the unit is split) by requiring each suspect's words to be "explained by other lessons", but the outliers skew the fit so that *no* lesson is well explained and nothing was ever set aside (it explained 11 of 36, same as the plain fit). The
+test is now relative to peers: a lesson is an outlier only if it misses by at least three times the *median* miss of the lessons sharing each of its words. Scattered mistakes qualify; every "times" lesson misses alike, so their median is as bad as they are and they stay. A test pins both.
+A greedy one-at-a-time version made `reorganise` 9x slower at 600 units (a merged family of thousands of lessons re-solved hundreds of times); it now caps the rounds.
+
+**2. Majority per input before building programs.** One corrupted phrasing of a fact gives the *same numbers with two answers*, which no program can fit, so a single wrong lesson made a kind unexplainable. The plurality of a fact's lessons decides; a tie drops the point.
+(Alone, this took hidden kinds from 46 to 93 of 96 under 2 % noise.)
+
+**3. Two witnesses.** If a rule unit's answer disagrees with what was taught *for that exact question* (voted across the phrasings of that fact), it declines ("my rule says X, but I was taught Y for this very question"). Two versions failed first: consulting memory's *similarity* match
+treated a neighbouring lesson as a witness and cut the clean school's never-taught score from 95.1 % to 75.6 % (the scorecard caught it); consulting only the exact lesson made a wrongly taught lesson its own single witness and refused 46 % of them. The check applies only to questions that were taught as written and uses the vote across their phrasings. Clean lessons never disagree, so it costs nothing there.
+
+**4. A split must make things better.** Noise pushed some units just under the 0.95 evidence that triggers `split`, discovery re-clustered them badly, and one group, named after the filler word "is", became a memorise-only unit that took good lessons out of working rules. A split now needs the extracted group *and* what stays behind to be under a real mechanism, checked before anything moves.
+
+**5. Merges use the reliability bar.** A part had to be 95 % right on held-back facts to merge, and a 15-lesson unit with one wrong lesson cannot clear that. Merge candidates and parts now use the same 90 % bar as everything else.
+
+**6. Routing smoothing scales with the vocabulary.** The routing score penalised a unit by ln(lessons + 1) for each word it lacks, so a tiny unit that had never seen a rare word was penalised far less than the big merged family that had seen it rarely, and won the question. Additive smoothing with a vocabulary term fixes it, but the constant matters:
+V/2 (textbook) broke the small clean world (reworded 100 -> 93.9 %), V/20 broke 600 clean units (96.9 % routed right), V/100 keeps both exact. **This exposed an old hidden weakness:** after `reorganise`, 600 *clean* units were only 89.7 % right on rewordings (merged families diluted their own words), and the earlier sweeps never printed coverage after reorganising.
+V/100 makes it 100 %.
+
+**Mistakes in the harness:** the "two attributes at once" trap sometimes picked the *same* unit's attribute, a legitimate question with a stray word, and counted as an answered trap. Fixed.
+
+**What is left.** (a) At 5 % noise some facts have *two of three* phrasings corrupted (about 0.4 % of facts); the majority is wrong and nothing can know. 7 such answers remain in the digit world (0.04-0.2 % of taught and reworded questions); unseen questions stay at 0 wrong. (b) A gap in the taught numbers that
+only one explanation in the vocabulary can see is still believed: under noise the library lost the explanation that would have objected, and `first mod 9` explained a digit sum taught on 0-15 with 8 and 9 missing (9 wrong answers once, in one seed of six; it did not recur on the final code, but nothing structural prevents it). (c) Only label noise was tested (2 % and 5 %),
+not ambiguous entities, misspellings that land on other words, or noise correlated across phrasings. (d) `reorganise` is 3.5 s at 600 units (1.35 s before the robust fit).
+
 ## Can the baby invent its own way to learn something? (2026-10-20)
 
 Daws was told it would be interesting if the baby could invent mechanisms or learning processes, and left the direction to me. "Invent" needs a definition that can be tested, or it is a word: **a kind of lesson nobody wrote a
@@ -926,7 +966,7 @@ The road there before `program`, because the dead ends are the useful part:
 
 ## Next (candidates; the freedom to reorder is mine)
 
-1. ~~Does learning stay light when the world gets bigger?~~ Answered for clean lessons up to 600 units (see the scale section; learning one lesson is flat at ~0.5 ms). **Open: label noise coverage** (robust rule fitting; honesty under 2 % noise is solved, coverage is not), a Zipf-shaped vocabulary, discovery at scale, and the pen with thousands of waiting lessons.
+1. ~~Does learning stay light when the world gets bigger?~~ Answered for clean lessons up to 600 units (see the scale section; learning one lesson is flat at ~0.5 ms). Label noise is solved at 2 % and 5 % (robust fitting, cross-checks); open: other noise kinds, a Zipf-shaped vocabulary, discovery at scale, and the pen with thousands of waiting lessons.
 2. **Compress what it keeps without forgetting anything**: a compact binary format, and the phrasings of a fact stored as templates plus facts.
 3. **Incremental and exact updates**, sparse updates, small integers, and the real energy meter to replace time and memory as the measure.
 4. **Let it propose its own mechanisms** when nothing generalises (the units that stay "memorise only").

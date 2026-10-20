@@ -34,6 +34,16 @@ pub struct SchoolUnit {
 }
 
 impl SchoolUnit {
+    /// (for diagnosis) what a rule or selection unit has learned about a word
+    pub fn describe_word(&self, w: &str) -> String {
+        let n = self.lessons.iter().filter(|l| l.query.contains(w)).count();
+        match &self.state {
+            Fitted::Rule(q) => format!("rule: {:?}; {n} lessons mention it of {}", q.operator(w), self.lessons.len()),
+            Fitted::Select(_) => format!("select; {n} lessons mention it of {}", self.lessons.len()),
+            _ => format!("{}; {n} lessons mention it of {}", self.chosen.name(), self.lessons.len()),
+        }
+    }
+
     pub fn best_evidence(&self) -> f64 {
         self.evidence.iter().cloned().fold(0.0, f64::max)
     }
@@ -66,12 +76,13 @@ impl SchoolUnit {
 /// Kept as counts, sparsely: for each word only the units it occurs in, so the table grows with what was taught, not with
 /// vocabulary x units, and one more lesson touches only its own words (`add_lesson`). Scores drop two terms that are the same for every
 /// unit (they cancel in the margin between the best unit and the runner-up, which is all that is ever used):
-///   score(u) = sum over known words t of ln(1 + 2 * count(t, u))  -  (number of known words) * ln(1 + lessons(u)).
+///   score(u) = sum over known words t of ln(1 + 2 * count(t, u))  -  (number of known words) * ln(lessons(u) + 1 + V / 100),
+/// with V the number of distinct words: additive smoothing, (count + 1/2) / (lessons + 1 + V / 100). With a small constant instead of V / 2 a tiny
+/// unit that never saw a rare word was penalised far less for that than a big unit that had seen it rarely, so a 15-lesson unit won
+/// questions about words that only the big merged unit knew. (V / 2 is the textbook choice and V / 20 both hurt: the first a small clean world, the second 600 units, where they blur the units apart; V / 100 keeps both exact, before and after merging.)
 #[derive(PartialEq, Debug)]
 struct Routing {
     rows: HashMap<String, Vec<Cell>>,
-    /// ln(1 + lessons in the unit), kept so a question costs a lookup, not a logarithm per unit.
-    ln_lessons: Vec<f32>,
     lessons: Vec<u32>,
     cells: usize,
 }
@@ -87,7 +98,7 @@ struct Cell {
 
 impl Routing {
     fn build(units: &[SchoolUnit], line: &NumberLine) -> Routing {
-        let mut r = Routing { rows: HashMap::new(), ln_lessons: Vec::new(), lessons: Vec::new(), cells: 0 };
+        let mut r = Routing { rows: HashMap::new(), lessons: Vec::new(), cells: 0 };
         for (u, unit) in units.iter().enumerate() {
             r.ensure_units(u + 1);
             for l in &unit.lessons {
@@ -100,7 +111,6 @@ impl Routing {
     fn ensure_units(&mut self, n: usize) {
         while self.lessons.len() < n {
             self.lessons.push(0);
-            self.ln_lessons.push(0.0);
         }
     }
 
@@ -108,7 +118,6 @@ impl Routing {
     fn add_lesson(&mut self, u: usize, shape: &[String]) {
         self.ensure_units(u + 1);
         self.lessons[u] += 1;
-        self.ln_lessons[u] = (self.lessons[u] as f32 + 1.0).ln();
         for t in shape {
             let row = self.rows.entry(t.clone()).or_default();
             match row.binary_search_by_key(&(u as u32), |c| c.unit) {
@@ -137,8 +146,9 @@ impl Routing {
                 }
             }
         }
-        for (x, l) in s.iter_mut().zip(&self.ln_lessons) {
-            *x -= known as f32 * l;
+        let half_vocabulary = 1.0 + self.rows.len() as f32 / 100.0;
+        for (x, &n) in s.iter_mut().zip(&self.lessons) {
+            *x -= known as f32 * (n as f32 + half_vocabulary).ln();
         }
         ledger.words_read += (shape.len() + touched + units) as u64;
         ledger.macs += (touched + units) as u64;
@@ -430,7 +440,23 @@ impl School {
                             _ => {}
                         }
                         ledger.words_read += n + 11;
-                        predict(other, q, &self.weights)
+                        let worked_out = predict(other, q, &self.weights);
+                        // Two witnesses: if this exact question was taught, and what was taught for that fact (the vote of its phrasings) disagrees with the rule, one of
+                        // them is wrong and nothing says which (a skewed fit, or a wrong lesson). Decline rather than pick. Clean lessons
+                        // never disagree, so this costs nothing there.
+                        match (&worked_out, naive.is_none()) {
+                            (Some(a), true) => match unit.remember.exact(q).and_then(|_| unit.remember.recall_counted(q, &self.weights, &mut Ledger::default(), true)) {
+                                Some(m) if &m != a => {
+                                    return Reply {
+                                        answer: None,
+                                        unit: Some(u),
+                                        how: said(&format!("my rule says {a}, but I was taught {m} for this very question: they disagree, so I won't guess")),
+                                    };
+                                }
+                                _ => worked_out,
+                            },
+                            _ => worked_out,
+                        }
                     }
                 };
                 match answer {
@@ -617,7 +643,7 @@ impl School {
     }
 
     fn word_keyed(&self, u: usize) -> bool {
-        matches!(self.units[u].chosen, Mech::Rule | Mech::Select) && self.units[u].best_evidence() >= 0.95
+        matches!(self.units[u].chosen, Mech::Rule | Mech::Select) && self.units[u].best_evidence() >= mechanisms::RELIABLE
     }
 
     /// Look again at how the lessons are grouped. A unit that is no longer fully explained (its newer lessons stopped following one
@@ -659,6 +685,19 @@ impl School {
                 }
                 let best = mechanisms::cv_accuracy(&items, &self.weights, self.seed, &[1, 2, 3]).into_iter().fold(0.0, f64::max);
                 if best < 0.9 {
+                    continue;
+                }
+                // The group must end up under a real mechanism, not memory (a group named after a filler word, "is", once left a unit of
+                // plain memory and took good lessons out of a working rule), and what stays behind must be reliable too: a split has to
+                // make things better.
+                let group_ev = mechanisms::evidence_thrifty(&items, &self.weights, self.seed);
+                if choose_mechanism(&group_ev, facts) == Mech::Remember {
+                    continue;
+                }
+                let moved_here: std::collections::HashSet<usize> = group.iter().map(|(_, o)| *o).collect();
+                let remainder: Vec<Item> = self.units[u].lessons.iter().enumerate().filter(|(i, _)| !moved.contains(i) && !moved_here.contains(i)).map(|(_, l)| l.clone()).collect();
+                let rest_ev = mechanisms::evidence_thrifty(&remainder, &self.weights, self.seed);
+                if choose_mechanism(&rest_ev, remainder.iter().map(|l| l.fact).collect::<std::collections::HashSet<_>>().len()) == Mech::Remember {
                     continue;
                 }
                 // Where do they go? To a unit that builds exactly this expression, if there is one; else a unit of their own.
@@ -1433,6 +1472,28 @@ mod tests {
         assert_eq!(s.ask("what is five added to three").answer.as_deref(), Some("eight"));
         assert_eq!(s.ask("nine minus four").answer.as_deref(), Some("five"));
         assert!(s.ask("three minus five").answer.is_none(), "merging must not make it answer a negative result");
+    }
+
+    #[test]
+    fn one_wrong_lesson_told_after_school_does_not_change_the_answer_and_a_skewed_rule_does_not_override_what_was_taught() {
+        let mut s = trained();
+        assert_eq!(s.ask("what is double three").answer.as_deref(), Some("six"));
+        // a teacher's slip: one phrasing of a known fact, taught wrongly
+        let _ = s.learn("what is double three", "seven", Some("double"));
+        for q in ["what is double three", "double three", "three doubled", "what is three doubled"] {
+            let a = s.ask(q).answer;
+            assert!(a.as_deref() == Some("six") || a.is_none(), "{q:?} -> {a:?}: a single wrong lesson must not win");
+        }
+        assert_eq!(s.ask("what is double four").answer.as_deref(), Some("eight"), "other facts are untouched");
+        // memory and the rule disagree about a question that WAS taught: it declines rather than pick
+        let u = s.units.iter().position(|x| x.name == "sum").unwrap();
+        for l in s.units[u].lessons.iter_mut().filter(|l| l.query.contains("one plus two")) {
+            l.answer = "five".into();
+        }
+        s.units[u].remember = Remembered::from_items(&s.units[u].lessons);
+        let r = s.ask("what is one plus two");
+        assert!(r.answer.is_none(), "rule says three, the lessons say five: {:?} ({})", r.answer, r.how);
+        assert!(r.how.contains("disagree"));
     }
 
     #[test]

@@ -289,7 +289,8 @@ pub fn generate(c: &Config) -> ScaleWorld {
         // a subject nobody has ever heard of
         must_refuse.push((fill("what is the {A} of {0}", attr, &[word(c.entities + 1 + k, 3)]), "unmet word"));
         // nonsense made of familiar words
-        let (_, other_attr, other_ents) = &fact_units[rng.below(fact_units.len())];
+        // a DIFFERENT unit's attribute (the same unit's would be a legitimate question with a stray word)
+        let (_, other_attr, other_ents) = &fact_units[(k + 1 + rng.below(fact_units.len().max(2) - 1)) % fact_units.len()];
         must_refuse.push((fill("what is the {A} of {0}", other_attr, &[word(other_ents[0], 3)]) + " " + attr, "two attributes at once"));
     }
     for (_, attr, sem) in &numeric_units {
@@ -352,11 +353,20 @@ fn grade(school: &School, items: &[Item], cap: usize) -> (Tally, f64) {
     let mut t = Tally::default();
     let mut routed = 0usize;
     let mut shown = 0;
+    let mut shown_ref = 0;
     for it in sample(items, cap) {
         let r = school.ask(&it.query);
         if r.answer.is_some() && r.answer.as_deref() != Some(it.answer.as_str()) && shown < 3 && std::env::var("SCALE_WRONG").is_ok() {
             shown += 1;
             println!("      WRONG: {:?} should be {:?}, got {:?}: {}", it.query, it.answer, r.answer, r.how);
+        }
+        if r.answer.is_none() && shown_ref < 4 && std::env::var("SCALE_REFUSED").is_ok() {
+            shown_ref += 1;
+            println!("      REFUSED: {:?} (expected {:?}): {}", it.query, it.answer, r.how);
+            if let Some(u) = r.unit {
+                let w = it.query.split_whitespace().find(|w| w.len() > 6 && !crate::quantity::is_number(w)).unwrap_or("");
+                println!("         {}: {}", school.units[u].name, school.units[u].describe_word(w));
+            }
         }
         t.add(&it.answer, &r.answer);
         routed += (r.unit == Some(it.unit)) as usize;

@@ -312,6 +312,68 @@ impl Quantity {
         self.line.say(self.predict(&nums, &rest), uses_digits(q))
     }
 
+    /// As `fit_ridge`, but a few wrong lessons do not bend the rule. Fit, find the lessons the rule misses by more than half a step, and refit
+    /// without them, up to three times and never more than a tenth of the lessons. A lesson is only set aside if every other word in it is
+    /// explained by other lessons: scattered mistakes qualify, but a second rule hiding in the unit (every "times" lesson in a unit of sums)
+    /// does not, because nothing explains its operator word, so it stays and shows up as the unit no longer following one rule.
+    pub fn fit_ridge_robust(train: &[Example], ridge: &dyn Fn(&str) -> f64) -> (Quantity, u64) {
+        let mut keep: Vec<Example> = train.to_vec();
+        let mut ops_total = 0u64;
+        let allowed = train.len() / 10;
+        let mut dropped = 0usize;
+        let mut rounds = 0usize;
+        loop {
+            let (q, ops) = Quantity::fit_ridge(&keep, NumberLine::from_counting(&counting_lessons()), ridge);
+            ops_total += ops;
+            if dropped >= allowed || rounds >= 12 {
+                return (q, ops_total);
+            }
+            rounds += 1;
+            // how far off is each lesson, and what words does it say? (None: not a lesson the rule reads)
+            let read: Vec<Option<(f32, Vec<String>)>> = keep
+                .iter()
+                .map(|e| match (q.parse(&e.query), q.line.value(&e.answer)) {
+                    (Some((nums, _, rest)), Some(y)) => Some(((q.predict(&nums, &rest) - y).abs(), rest)),
+                    _ => None,
+                })
+                .collect();
+            // the median miss among the lessons that share each word
+            let mut by_word: std::collections::HashMap<&str, Vec<f32>> = std::collections::HashMap::new();
+            for r in read.iter().flatten() {
+                for w in &r.1 {
+                    by_word.entry(w.as_str()).or_default().push(r.0);
+                }
+            }
+            let median = |w: &str| -> f32 {
+                let v = by_word.get(w).cloned().unwrap_or_default();
+                let mut v = v;
+                v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                v.get(v.len() / 2).copied().unwrap_or(0.0)
+            };
+            // The worst lesson that is far off, and far off compared with its peers on every word it has (three times the median miss of
+            // the lessons sharing the word, and at least half a step). Scattered mistakes are; every "times" lesson in a unit of sums is not,
+            // because they all miss alike and so their median is as bad as they are.
+            let mut bad: Vec<(usize, f32)> = read
+                .iter()
+                .enumerate()
+                .filter_map(|(i, r)| r.as_ref().map(|r| (i, r)))
+                .filter(|(_, (miss, words))| *miss > 0.5 && words.iter().all(|w| by_word[w.as_str()].len() >= 6 && *miss >= 3.0 * median(w)))
+                .map(|(i, (miss, _))| (i, *miss))
+                .collect();
+            bad.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            bad.truncate(3.max(allowed / 12).min(allowed - dropped));
+            if bad.is_empty() {
+                return (q, ops_total);
+            }
+            let mut gone: Vec<usize> = bad.iter().map(|b| b.0).collect();
+            gone.sort_unstable_by(|a, b| b.cmp(a));
+            for i in gone {
+                keep.remove(i);
+                dropped += 1;
+            }
+        }
+    }
+
     /// What the fitted rule says in the units of the answer, for every word that does anything: (per first number, per second number,
     /// constant). (The fit works on numbers divided by `SCALE`, so the constant is multiplied back.)
     pub fn terms(&self) -> Vec<[f32; 3]> {
@@ -327,6 +389,40 @@ impl Quantity {
 mod tests {
     use super::*;
     use crate::data::{self, Family};
+
+    fn sum_lessons(n: usize) -> Vec<Example> {
+        let mut v = Vec::new();
+        for a in 0..=5usize {
+            for b in 0..=5usize {
+                if v.len() < n {
+                    v.push(Example { family: crate::data::Family::Color, template: 0, query: format!("what is {} plus {}", NUM[a], NUM[b]), answer: NUM[(a + b).min(10)].to_string() });
+                }
+            }
+        }
+        v
+    }
+
+    #[test]
+    fn a_few_wrong_lessons_do_not_bend_the_rule_but_a_second_rule_hiding_in_the_unit_is_not_set_aside() {
+        let ridge = |w: &str| if ["what", "is"].contains(&w) { 5.0 } else { 0.0 };
+        let mut noisy = sum_lessons(36);
+        // three lessons that are far out (a high leverage: wrong by seven or more)
+        noisy[1].answer = "ten".into();
+        noisy[2].answer = "ten".into();
+        noisy[30].answer = "zero".into();
+        let (plain, _) = Quantity::fit_ridge(&noisy, NumberLine::from_counting(&counting_lessons()), &ridge);
+        let (robust, _) = Quantity::fit_ridge_robust(&noisy, &ridge);
+        let clean = |q: &Quantity| sum_lessons(36).iter().filter(|e| q.answer(&e.query).map(|a| a.0) == Some(e.answer.clone())).count();
+        assert!(clean(&robust) >= 35, "robust rule explains the clean lessons: {}", clean(&robust));
+        assert!(clean(&robust) > clean(&plain), "and better than the plain fit ({} vs {})", clean(&robust), clean(&plain));
+        // six multiplication lessons under "plus" words: their operator word is explained by nothing, so they stay (and the unit stays visibly polluted)
+        let mut mixed = sum_lessons(36);
+        for (a, b) in [(2, 3), (1, 5), (2, 5), (3, 3), (0, 4), (4, 2)] {
+            mixed.push(Example { family: crate::data::Family::Color, template: 0, query: format!("what is {} times {}", NUM[a], NUM[b]), answer: NUM[(a * b).min(10)].to_string() });
+        }
+        let (robust, _) = Quantity::fit_ridge_robust(&mixed, &ridge);
+        assert!(robust.operator("times").is_some_and(|o| o.iter().any(|x| x.abs() > 0.03)), "the times rule was kept, not discarded as noise");
+    }
 
     #[test]
     fn solving_it_exactly_gives_the_same_rule_as_nudging_it_800_times_for_far_less_work() {

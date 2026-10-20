@@ -328,6 +328,8 @@ description than one with a single fixed learner.
 
 - **2026-10-20** Inventing mechanisms (Daws was told it would be interesting; direction left to the assistant): `baby invent` teaches kinds nobody wrote a mechanism for. The baby worked out all 16 hidden numeric kinds and, using constants and programs it had learned from earlier kinds as new vocabulary, 7 of 9 harder ones, every time over 20 seeds, with 0 wrong and 0 of 120 unexplainable kinds (random codes, primes) explained. Taught in the wrong order it fails (8 of 72), so the gain is learning, not luck. Along the way the harder kinds exposed two honesty bugs (a coincidence "explaining" a tens digit, 60 wrong answers; primality "explained" by chance, a multiple-comparisons problem) fixed with a uniqueness rule and an information-vs-search-effort check. Honest limits: the operations and thresholds are the assistant's; it invents expressions, not new kinds of learner.
 
+- **2026-10-20** Noise, finished: with 2 % of taught answers wrong the baby is now nearly as good as on clean data (97-100 % of unseen questions right, 0 % wrong) in both the words and the digit worlds, and 0 % wrong at 5 %; under noise it still works out 127 of 128 hidden kinds. Six changes (robust rule fitting that protects a genuine second rule, majority-per-input before building programs, a rule-versus-memory cross-check, splits that must improve things, merges at the reliability bar, routing smoothing scaled to the vocabulary), three of which were wrong first. It also exposed an old hidden weakness (clean 600-unit worlds were only 89.7 % right *after* reorganising) that is now fixed.
+
 ---
 
 ## More to come

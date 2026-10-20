@@ -55,6 +55,9 @@ fn nonneg(v: i64) -> Option<i64> {
 }
 
 /// Teach the stage-2 kinds before the kinds that teach what they need (a control: the library should then not help).
+/// Fraction of taught answers made wrong (set by `--noise`; thousandths).
+pub static NOISE_PERMILLE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 pub static STAGE2_FIRST: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 pub fn kinds(seed: u64) -> Vec<Kind> {
@@ -168,7 +171,11 @@ pub fn battery(seed: u64) -> Battery {
         for (i, (args, y)) in near.iter().enumerate() {
             let slots: Vec<String> = args.iter().map(|x| x.to_string()).collect();
             for (t, tpl) in templates.iter().enumerate() {
-                let item = Item { unit: u, fact: fact_id, template: t, query: fill(tpl, "", &slots), answer: y.to_string() };
+                let mut item = Item { unit: u, fact: fact_id, template: t, query: fill(tpl, "", &slots), answer: y.to_string() };
+                let noise = NOISE_PERMILLE.load(std::sync::atomic::Ordering::Relaxed);
+                if noise > 0 && i >= held && t < 3 && rng.below(1000) < noise {
+                    item.answer = (y + 1 + rng.below(9) as i64).to_string();
+                }
                 if i < held {
                     w.new_items.push(item);
                 } else if t < 3 {

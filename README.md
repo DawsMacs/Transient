@@ -55,7 +55,7 @@ All on the synthetic curriculum in `baby/src/kinds.rs` (13 units, 792 lessons), 
 | a lesson it already understands / a new phrasing / a new kind | 0.19 ms (not stored) / 0.4 ms / 1 ms (a unit opens at the 6th) |
 | **scale** (clean synthetic world, 20 -> 600 units, 828 -> 25,776 lessons, up to 10,000-word vocabulary) | teaching 26k lessons 2.65 s and 56 MB; learning one new fact **0.4-0.6 ms at every size**; answering ~10 us; reorganising 1.35 s; 100 % right, **0 % wrong**, all traps refused |
 | **inventing mechanisms** (16 hidden + 9 stage-2 numeric kinds in digits, 20 seeds) | all 16 hidden kinds worked out every time; 7 of 9 stage-2 kinds every time using constants and programs it learned earlier (taught in the wrong order: 8 of 72); 0 of 120 unexplainable kinds explained; 0 wrong; digit sum declined as ambiguous |
-| **label noise** (2 % of taught answers wrong, 60-200 units) | **0 % wrong**, wrongly taught lessons answered with the truth by voting memory; coverage drops (never-taught 55-62 % right, rest refused) |
+| **label noise** (2 % and 5 % of taught answers wrong, 60-200 units, words and digits) | **0 % wrong** on unseen questions; at 2 % essentially as good as clean data (97-100 % of unseen questions right); wrongly taught lessons answered with the truth by voting memory, robust rule fitting and cross-checks |
 | storage | school file 29 KB, of which 1.3 KB is what was learned; `--compact` keeps 49 % of the file, still answers all 792 taught lessons, 0 % wrong |
 | unit discovery from 792 unlabelled, shuffled lessons | 9 units found (13 named by the teacher), scorecard identical |
 
@@ -114,14 +114,14 @@ All under `baby/src/`.
   plus hand-written must-refuse batteries, not a proof.
 - The five mechanisms, the expression language, the number line (taught by counting lessons) and the thresholds are the author's
   design choices. The system selects and fits among them; it does not invent a sixth.
-- **Noise costs coverage.** With 2 % wrong taught answers the baby stays at 0 % wrong, but refuses far more unseen questions (rules become unreliable under an exact fit).
-  Only 2 % label noise at 60-200 units was tested; other noise kinds (ambiguous entities, real misspellings) were not.
+- **Only label noise was tested** (2 % and 5 % of taught answers wrong, up to 200 units). Where most of one fact's own phrasings are wrong nothing can know, and at 5 % a few such answers remain;
+  other noise kinds (ambiguous entities, real misspellings, noise correlated across phrasings) were not tested.
 - Nothing here yet shows behaviour on real text, at millions of lessons, or at "frontier" quality. Those are the open questions the
   roadmap exists to answer.
 
 ## Roadmap
 
-1. **Scale test, continued:** clean worlds are done to 600 units (learning one lesson is flat). Next: robust rule fitting for noisy lessons, a Zipf-shaped vocabulary, discovery at scale (its pair loops are still quadratic).
+1. **Scale test, continued:** clean worlds are done to 600 units (learning one lesson is flat). Next: discovery at scale and the baby adapting its own learning knobs, a Zipf-shaped vocabulary, discovery at scale (its pair loops are still quadratic).
 2. **Compact lossless storage format**, then incremental and exact updates, then the real energy meter.
 3. **Beyond expressions:** mechanisms of a different kind (not a formula), and the baby adapting its own learning knobs; a number
    line it discovers rather than is taught. (Building programs from a learned library, and digits as numbers, are done.)

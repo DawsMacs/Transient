@@ -1420,6 +1420,7 @@ fn main() {
         Some("scale") => cmd_scale(&args),
         Some("invent") => {
             invent::STAGE2_FIRST.store(args.flag("stage2-first"), std::sync::atomic::Ordering::Relaxed);
+            invent::NOISE_PERMILLE.store((args.get("noise", 0.0f32) * 1000.0).round() as usize, std::sync::atomic::Ordering::Relaxed);
             let seeds: u64 = args.get("seeds", 1);
             if seeds <= 1 {
                 invent::run(args.get("seed", 1), false);

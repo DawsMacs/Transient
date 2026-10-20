@@ -393,6 +393,28 @@ impl ProgramRule {
             }
             vocab.extend(rest);
         }
+        // The same numbers with two different answers (one phrasing of a fact was taught wrongly): the plurality of the lessons decides,
+        // and a tie drops the point. No program can fit both, so without this one wrong lesson makes everything unexplainable.
+        let mut by_input: Vec<((f32, f32), Vec<(f32, usize)>)> = Vec::new();
+        for it in items {
+            let (nums, _) = ProgramRule::read(&line, &it.query);
+            let y = line.value(&it.answer).unwrap_or(0.0);
+            let key = (nums[0], *nums.get(1).unwrap_or(&0.0));
+            match by_input.iter_mut().find(|(k, _)| *k == key) {
+                Some((_, ys)) => match ys.iter_mut().find(|(v, _)| *v == y) {
+                    Some(c) => c.1 += 1,
+                    None => ys.push((y, 1)),
+                },
+                None => by_input.push((key, vec![(y, 1)])),
+            }
+        }
+        points = by_input
+            .into_iter()
+            .filter_map(|(k, mut ys)| {
+                ys.sort_by(|a, b| b.1.cmp(&a.1));
+                (ys.len() == 1 || ys[0].1 > ys[1].1).then(|| (k.0, k.1, ys[0].0))
+            })
+            .collect();
         if points.is_empty() {
             return (None, 0);
         }

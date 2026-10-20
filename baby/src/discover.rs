@@ -149,7 +149,7 @@ pub fn can_merge_many(parts: &[&[Item]], all: &Weights, seed: u64) -> Option<(us
     correct.iter().enumerate().find_map(|(m, c)| {
         let every_part_fits = (0..parts.len()).all(|k| {
             let mine: Vec<usize> = (0..items.len()).filter(|&i| owner[i] == k).collect();
-            mine.iter().filter(|&&i| c[i]).count() as f64 / mine.len().max(1) as f64 >= 0.95
+            mine.iter().filter(|&&i| c[i]).count() as f64 / mine.len().max(1) as f64 >= crate::mechanisms::RELIABLE
         });
         every_part_fits.then(|| (mechs[m], c.iter().filter(|x| **x).count() as f64 / items.len().max(1) as f64))
     })
