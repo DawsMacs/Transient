@@ -43,6 +43,63 @@ cargo test --offline                 # 61 tests, including numerical checks of t
 ./target/release/baby energy         # what one question and one learning step cost, counted
 ```
 
+## Can the baby invent its own way to learn something? (2026-10-20)
+
+Daws was told it would be interesting if the baby could invent mechanisms or learning processes, and left the direction to me. "Invent" needs a definition that can be tested, or it is a word: **a kind of lesson nobody wrote a
+mechanism for, taught on small numbers, that the baby works out and gets right on numbers it was never shown, while kinds that have no explanation stay unexplained.** `baby invent` (`invent.rs`) is that experiment. Everything
+below is on a synthetic numeric world in digits (see "Digits" at the end), 20 seeds unless said otherwise (each seed: new random codes, new splits).
+
+**Setup.** Nine ordinary kinds are taught first (sum, minus, after, double, half, times, apart, bigger, smaller). Then 16 *hidden* kinds ("five times", "plus ten", "remainder by three", "take away but not below zero", "sum plus ten", ...),
+9 *stage-2* kinds that need something the baby could only have learned from earlier kinds (a ten; a whole earlier program as a piece), and 7 kinds that **must stay unexplained**: four random codes (a random answer for each number),
+primality, digit-xor, and (in the first version) digit sum. Each is taught on small numbers only (up to 15, or up to 12 of two), a fifth of the small facts are never taught, and questions on bigger numbers test it. Scored right / refused / WRONG.
+
+**My premise was wrong, and the baseline said so.** I expected "five times", "plus ten" and the like to need new machinery. With the current mechanisms **12 of 16 hidden kinds were already solved**: the `rule` mechanism (a free coefficient per
+number plus a bias) covers every linear one. What failed was exactly the four needing integer division or remainder (`modthree`, `halfdown`, `avgdown`, `remainder`), which no mechanism can express. The false-invention side was clean (0 of 7).
+
+**Step 1: two more operations (floor-divide, remainder).** 16 of 16 hidden kinds, and the baby *composed* the constants itself: `first mod (1 + 2)`, `(first + second) div 2`. 30 seeds: 480 of 480 solved, 0 of 210 unexplainable kinds explained.
+(The operations are mine; what it builds from them is not.)
+
+**Step 2: the harder kinds found two honesty bugs that the easy ones could not.**
+- **`tensdigit` (the tens digit of a number taught up to 15) was "explained" by `half(half(first - 1)) div 2` with 92 % held-back evidence, and was wrong on half the unseen numbers: 60 WRONG answers over 20 seeds.** The taught numbers have only two answers (0 and 1)
+  so many expressions fit, and held-back accuracy cannot tell them apart. The project already had the principle ("when the data cannot say which one is meant, nothing should be built on the guess") for splitting but not for building. A built program
+  is now trusted only if its smallest fit is unique *in behaviour over 0 to 30*, not just on the taught range (60 -> 42 WRONG).
+- I tried to catch what remained (a gap in the taught numbers at exactly 8 and 9, where `floor(a/8)` and the real `a div 10` part ways) with **version-space agreement**: keep near-minimal alternatives and answer only where they agree, first by enumerating
+  one more size, then by small edits of the found program. Both were wrong turns. The first made every run 7x slower, the second 3 minutes 45 seconds per run and *worse* (8 of 16 hidden kinds, because legitimate programs abstained), and thinking it through the alternatives
+  would not have fixed the case anyway (small edits of `floor(a/8)` mostly still say 1 at 9). Reverted. The real cause was that the true explanation needed a constant the vocabulary could not build cheaply, so a larger-constant coincidence won by Occam.
+  That is what the library (next) fixes: with `10` a one-piece constant, `a div 10` (3 pieces) beats `floor(a/8)` (5).
+- **Primality was "explained" in 1 seed of 20** by `(((first + half(first mod 10)) div 2) mod 2)` over thirteen 0/1 answers, with 22 WRONG answers. This is the multiple-comparisons problem: a search that tries tens of thousands of candidates will fit any pattern
+  that has fewer than about log2(candidates) bits in it. The guard is information-theoretic: **the lessons must carry more bits (facts x log2 of the distinct answers) than the search spent (log2 of the candidates tried before the first fit), plus a bit.**
+  A short program found early passes (`first div 10`, found among about a thousand); a long one found late over thin data does not. After it: 0 of 120 unexplainable kinds explained, 0 WRONG over 20 seeds.
+
+**Step 3: a library, learned from experience.** Two kinds of thing the baby keeps after it has learned something, both small and bounded:
+- **Constants.** An integer of at least 3 among the coefficients of a rule it learned becomes a one-piece terminal for later searches. "Plus ten" and "ten times" taught it a `10` that the base language could only make in nine pieces.
+- **Functions.** A program it built for a reliable unit (not a plain operation on the two numbers) becomes callable as one piece, however large it was, and is inlined into whatever program uses it, so saved programs stay plain expressions. At most 6 constants and 8 functions
+  (oldest dropped), behaviourally deduplicated, grown only from units that clear the 90 % bar, saved in the school file.
+
+| 20 seeds | no library | with the library | library, taught in the wrong order |
+|---|---|---|---|
+| hidden kinds (16) worked out | 320 of 320 | 320 of 320 | 128 of 128 (8 seeds) |
+| stage-2 kinds | 20 of 160 (and 60 WRONG) | **140 of 180**, every kind that is solvable at all 20 of 20 | **8 of 72** |
+| unexplainable kinds explained | 0 of 120 | 0 of 120 | 0 of 48 |
+| WRONG answers | 60 -> 42 -> 0 after the guards | **0** | 0 |
+
+What it built that nobody wrote: `first div 10` and `first mod 10` (from a ten it learned in an earlier unit), `1 + (sum of squares)` and `(sum of squares) div 2` *using its own earlier program as one piece*, `(first x first) + ((first - second) x (first - second))`,
+and for `avgsq` an odd but correct `1 apart (1 + avg x avg)`. **The wrong-order column is the control:** taught before the kinds that give it the ten and the sum of squares, the same kinds are not learned (only `tenplus`, a plain rule, is). So the gain is what it learned earlier, not luck or a bigger language.
+
+**Declined on purpose: digit sum.** 0 of 20, both versions. Taught on numbers up to 15 the explanations `tens + units` and `(first + first div 10) mod 10` agree on every taught number (they part ways at 19), so the data cannot say which is meant and the baby declines.
+Taught up to 25 it still declines whenever the random hold-out dropped the one number that separates them. More data, not more cleverness, is the answer, and the unit test pins both cases.
+
+**Making it affordable** (the first library run took 112 s a battery, from 3.4 s): a work budget of one million candidates per search (checked *inside* the loops, an earlier version checked between levels and did nothing), and program building is only tried when memory, a rule and a selection did not already
+explain the unit. Now 22 s for 36 units; a search that finds nothing fails cheaply. Nothing else moved: the school scorecard, discovery, the clean and noisy scale worlds (0 WRONG in words and digits at 2 % noise) are unchanged.
+
+**What this is not.** The operations, the list of terminals, the size limit, the thresholds (90 %, one bit, one million) and what counts as "reliable" are mine; the baby builds expressions inside that language and keeps what proved useful. It does not invent a new *kind* of mechanism
+(a different learner, not an expression), and it does not yet change *how* it learns (how many folds, how much to try) from its own experience: that is Entry 5's third level, and this is only its program-building part. The kinds are synthetic and tidy, numbers are whole numbers up to 30
+(answers under 1,000), and 16 + 9 kinds is a small sample. It is also **order dependent by design**, like a curriculum: what it can learn tomorrow depends on what it learned today.
+
+**Digits (the enabling change).** Numbers could only be the eleven words zero to ten, which made "times five" three facts. A digit string (up to four digits) is now a number; a question that uses digits is answered in digits; negative or oversized results are refused. A first adversarial test found a bluff immediately:
+"what is -3 plus 5" answered 8, because reading words drops the sign. A number with an attached sign, decimal point, fraction slash, thousands comma or percent is now refused ("I only read plain whole numbers"), in `ask`, in the CLI (whose spelling step rebuilt the question from bare words *before* `ask` ever saw it), and when teaching.
+Number words are never "glue" (see the noise section). `baby scale --digits` adds the digit world to the scale test: 60 units, 100 % right, 0 wrong, all traps refused.
+
 ## Does learning stay light when the world gets big? (2026-10-20)
 
 Everything before this was measured on 13 units and 792 lessons. `baby scale` (`scale.rs`) generates a much larger synthetic world and measures it: 20 to 600 units (60% fact units, then rules,
@@ -873,4 +930,4 @@ The road there before `program`, because the dead ends are the useful part:
 2. **Compress what it keeps without forgetting anything**: a compact binary format, and the phrasings of a fact stored as templates plus facts.
 3. **Incremental and exact updates**, sparse updates, small integers, and the real energy meter to replace time and memory as the measure.
 4. **Let it propose its own mechanisms** when nothing generalises (the units that stay "memorise only").
-5. **Digits and number-like words**; a richer space to build rules in; discover the number line without counting lessons.
+5. ~~Digits~~ done; ~~a richer space to build rules in~~ done (floor-divide, remainder, a learned library). Still open: discover the number line without counting lessons; mechanisms of a different *kind* (not an expression); the baby adapting its own learning knobs.

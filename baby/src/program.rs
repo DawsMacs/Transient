@@ -22,6 +22,10 @@ pub enum Op {
     Max,
     Min,
     AbsDiff,
+    /// Whole-number division, rounded down (not defined for a divisor of zero or less).
+    Div,
+    /// What is left over after dividing (not defined for a divisor of zero or less).
+    Mod,
 }
 
 #[derive(Clone, Debug)]
@@ -67,9 +71,24 @@ impl Expr {
                     Op::Max => "max",
                     Op::Min => "min",
                     Op::AbsDiff => "apart",
+                    Op::Div => "div",
+                    Op::Mod => "mod",
                 };
                 format!("({} {} {})", l.show(), sym, r.show())
             }
+        }
+    }
+}
+
+impl Expr {
+    /// This expression with `first` replaced by `a` and `second` by `b` (a library function applied to something).
+    pub fn subst(&self, a: &Expr, b: &Expr) -> Expr {
+        match self {
+            Expr::A => a.clone(),
+            Expr::B => b.clone(),
+            Expr::K(k) => Expr::K(*k),
+            Expr::Half(e) => Expr::Half(Box::new(e.subst(a, b))),
+            Expr::Bin(op, l, r) => Expr::Bin(*op, Box::new(l.subst(a, b)), Box::new(r.subst(a, b))),
         }
     }
 }
@@ -90,6 +109,8 @@ impl Expr {
                     Op::Max => "max",
                     Op::Min => "min",
                     Op::AbsDiff => "apart",
+                    Op::Div => "div",
+                    Op::Mod => "mod",
                 };
                 format!("({name} {} {})", l.to_text(), r.to_text())
             }
@@ -121,6 +142,8 @@ impl Expr {
                     "max" => Op::Max,
                     "min" => Op::Min,
                     "apart" => Op::AbsDiff,
+                    "div" => Op::Div,
+                    "mod" => Op::Mod,
                     _ => return None,
                 };
                 let (l, n1) = Expr::parse(t, at + 2)?;
@@ -140,6 +163,8 @@ fn apply(op: Op, x: f32, y: f32) -> f32 {
         Op::Max => x.max(y),
         Op::Min => x.min(y),
         Op::AbsDiff => (x - y).abs(),
+        Op::Div => if y > 0.0 { (x / y).floor() } else { f32::NAN },
+        Op::Mod => if y > 0.0 { x - y * (x / y).floor() } else { f32::NAN },
     }
 }
 
@@ -147,10 +172,12 @@ fn apply(op: Op, x: f32, y: f32) -> f32 {
 fn behaviours(exprs: &[Expr]) -> usize {
     let mut seen: HashSet<Vec<i32>> = HashSet::new();
     for e in exprs {
-        let mut sig = Vec::with_capacity(121);
-        for a in 0..=10 {
-            for b in 0..=10 {
-                sig.push((e.eval(a as f32, b as f32) * 100.0).round() as i32);
+        // As wide as the numbers it will meet (taught small, asked large): two expressions that agree on 0-10 but part ways at 20 are two.
+        let mut sig = Vec::with_capacity(31 * 31);
+        for a in 0..=30 {
+            for b in 0..=30 {
+                let v = e.eval(a as f32, b as f32);
+                sig.push(if v.is_finite() { (v * 100.0).round() as i32 } else { i32::MIN });
             }
         }
         seen.insert(sig);
@@ -158,9 +185,118 @@ fn behaviours(exprs: &[Expr]) -> usize {
     seen.len()
 }
 
-const OPS: [Op; 6] = [Op::Add, Op::Sub, Op::Mul, Op::Max, Op::Min, Op::AbsDiff];
+/// What the baby has learned to build with, beyond the operations it was given. Two kinds, both bounded:
+///
+/// * **constants** that proved useful: an integer coefficient or bias of at least 3 in a rule it learned ("plus ten" has a ten in it)
+///   becomes a one-piece terminal for later searches (the base language can only make 3 from 1 + 2, and 10 not at all within its limit);
+/// * **functions**: a program it built for a reliable unit becomes callable as one piece, however big it was. A search for a later unit
+///   that needs "the sum of squares, plus one" then finds it at 4 pieces instead of 9.
+///
+/// A function is inlined into whatever program uses it, so a saved program is always a plain expression. The library is small on
+/// purpose (6 constants, 8 functions, oldest dropped first) and only reliable units add to it.
+#[derive(Clone, Default, Debug)]
+pub struct Library {
+    pub consts: Vec<i32>,
+    pub funcs: Vec<Func>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Func {
+    pub expr: Expr,
+    pub arity: usize,
+}
+
+impl PartialEq for Library {
+    fn eq(&self, other: &Library) -> bool {
+        self.to_lines() == other.to_lines()
+    }
+}
+
+const MAX_CONSTS: usize = 6;
+const MAX_FUNCS: usize = 8;
+
+impl Library {
+    pub fn is_empty(&self) -> bool {
+        self.consts.is_empty() && self.funcs.is_empty()
+    }
+
+    /// A number that proved useful. Returns whether it was new.
+    pub fn learn_constant(&mut self, c: i32) -> bool {
+        if !(3..=1000).contains(&c) || self.consts.contains(&c) {
+            return false;
+        }
+        if self.consts.len() >= MAX_CONSTS {
+            self.consts.remove(0);
+        }
+        self.consts.push(c);
+        true
+    }
+
+    /// Learn the constants in a fitted rule: every integer, at least 3, among the coefficients it found. `terms` are
+    /// (first, second, bias) in the units of the answer.
+    pub fn learn_from_terms(&mut self, terms: &[[f32; 3]]) {
+        for t in terms {
+            for v in t {
+                let r = v.round();
+                if (v - r).abs() < 0.05 {
+                    self.learn_constant(r.abs() as i32);
+                }
+            }
+        }
+    }
+
+    /// A program it built, as something to build with. Only if it is a bigger step than a single operation on the numbers themselves
+    /// (`first x second` is already one piece; `first div 10` is not, it carries a ten), and only if it does something no function it
+    /// already has does.
+    pub fn learn_program(&mut self, expr: &Expr, arity: usize) -> bool {
+        let variable = |e: &Expr| matches!(e, Expr::A | Expr::B);
+        if expr.size() < 3 || matches!(expr, Expr::Bin(_, l, r) if variable(l) && variable(r)) {
+            return false;
+        }
+        let sig = ProgramRule::grid_signature(expr, arity);
+        if self.funcs.iter().any(|f| ProgramRule::grid_signature(&f.expr, f.arity) == sig) {
+            return false;
+        }
+        if self.funcs.len() >= MAX_FUNCS {
+            self.funcs.remove(0);
+        }
+        self.funcs.push(Func { expr: expr.clone(), arity });
+        true
+    }
+
+    /// Saved as lines: `library <constants...>`, then `func <arity> <expression>` per function.
+    pub fn to_lines(&self) -> String {
+        let mut out = format!("library {}\n", self.consts.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(" "));
+        for f in &self.funcs {
+            out.push_str(&format!("func {} {}\n", f.arity, f.expr.to_text()));
+        }
+        out
+    }
+
+    /// Read what `to_lines` wrote: the `library` line, then however many `func` lines follow.
+    pub fn from_lines<'a>(lines: &mut std::iter::Peekable<impl Iterator<Item = &'a str>>) -> Option<Library> {
+        let head = lines.peek()?.strip_prefix("library")?;
+        let consts = head.split_whitespace().filter_map(|c| c.parse().ok()).collect();
+        lines.next();
+        let mut lib = Library { consts, funcs: Vec::new() };
+        while let Some(l) = lines.peek() {
+            let Some(rest) = l.strip_prefix("func ") else { break };
+            let (arity, text) = rest.split_once(' ')?;
+            lib.funcs.push(Func { expr: Expr::from_text(text)?, arity: arity.parse().ok()? });
+            lines.next();
+        }
+        Some(lib)
+    }
+}
+
+const OPS: [Op; 8] = [Op::Add, Op::Sub, Op::Mul, Op::Max, Op::Min, Op::AbsDiff, Op::Div, Op::Mod];
 const MAX_SIZE: usize = 7;
 const CAP_PER_LEVEL: usize = 40_000;
+/// How many candidate expressions one search may evaluate before it gives up. A search that finds nothing would otherwise try every
+/// combination of everything smaller; with a library of constants and functions that is minutes. Bounded effort is part of being light.
+/// Bits of information the lessons must carry beyond the bits of searching spent finding the program.
+const INFO_MARGIN_BITS: f32 = 1.0;
+const WORK_BUDGET: usize = 1_000_000;
 
 struct Cand {
     expr: Expr,
@@ -173,6 +309,9 @@ fn signature(vals: &[f32]) -> Vec<i32> {
 
 pub struct ProgramRule {
     pub expr: Expr,
+    /// How many candidate expressions had been tried when this one fit (the effort of the search, for judging whether the lessons carry
+    /// enough information to believe it).
+    pub work: usize,
     arity: usize,
     line: NumberLine,
     vocab: HashSet<String>,
@@ -191,7 +330,7 @@ impl ProgramRule {
 
     /// Rebuild a program that was saved as text.
     pub fn rebuild(expr: Expr, arity: usize, vocab: Vec<String>) -> ProgramRule {
-        ProgramRule { expr, arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.into_iter().collect() }
+        ProgramRule { expr, work: 0, arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.into_iter().collect() }
     }
 
     fn read(line: &NumberLine, q: &str) -> (Vec<f32>, Vec<String>) {
@@ -211,21 +350,29 @@ impl ProgramRule {
         ProgramRule::fit_with(items, &OPS)
     }
 
+    /// As `fit_unique`, building with what has been learned (`lib`) as well as the given operations.
+    pub fn fit_unique_with(items: &[Item], lib: &Library) -> Option<ProgramRule> {
+        let (found, hits) = ProgramRule::search(items, &OPS, true, lib);
+        if hits != 1 {
+            return None;
+        }
+        found.filter(|p| p.is_believable(items))
+    }
+
     /// The same search with a chosen set of operations (to see what it can compose when a convenient one is taken away).
     pub fn fit_with(items: &[Item], ops: &[Op]) -> Option<ProgramRule> {
-        ProgramRule::search(items, ops, false).0
+        ProgramRule::search(items, ops, false, &Library::default()).0
     }
 
     /// Only if exactly ONE smallest expression fits. When two different expressions of the same size reproduce every lesson (for
     /// instance `first apart second` and `second - first`, which agree whenever the second number is the larger), the data cannot
     /// say which one is meant, and nothing should be built on the guess.
     pub fn fit_unique(items: &[Item]) -> Option<ProgramRule> {
-        let (found, hits) = ProgramRule::search(items, &OPS, true);
-        if hits == 1 { found } else { None }
+        ProgramRule::fit_unique_with(items, &Library::default())
     }
 
     /// The search. With `count_all`, it finishes the size at which the first expression fits and reports how many fit there.
-    fn search(items: &[Item], ops: &[Op], count_all: bool) -> (Option<ProgramRule>, usize) {
+    fn search(items: &[Item], ops: &[Op], count_all: bool, lib: &Library) -> (Option<ProgramRule>, usize) {
         let line = NumberLine::from_counting(&counting_lessons());
         let mut points: Vec<(f32, f32, f32)> = Vec::new();
         let mut vocab = HashSet::new();
@@ -251,6 +398,7 @@ impl ProgramRule {
         }
         let mut first: Option<ProgramRule> = None;
         let mut hits_n = 0usize;
+        let mut work = 0usize;
         let mut hit_exprs: Vec<Expr> = Vec::new();
         let ys: Vec<f32> = points.iter().map(|p| p.2).collect();
         let hits = |vals: &[f32]| vals.iter().zip(&ys).all(|(v, y)| (v - y).abs() < 0.01);
@@ -265,12 +413,15 @@ impl ProgramRule {
         if arity == 2 {
             terminals.push(Cand { expr: Expr::B, vals: points.iter().map(|p| p.1).collect() });
         }
+        for &k in &lib.consts {
+            terminals.push(Cand { expr: Expr::K(k), vals: vec![k as f32; points.len()] });
+        }
         for c in terminals {
             if hits(&c.vals) {
                 hits_n += 1;
                 hit_exprs.push(c.expr.clone());
                 if first.is_none() {
-                    first = Some(ProgramRule { expr: c.expr.clone(), arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone() });
+                    first = Some(ProgramRule { expr: c.expr.clone(), arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work });
                 }
                 if !count_all {
                     return (first, behaviours(&hit_exprs));
@@ -292,7 +443,7 @@ impl ProgramRule {
                     hits_n += 1;
                     hit_exprs.push(Expr::Half(Box::new(c.expr.clone())));
                     if first.is_none() {
-                        first = Some(ProgramRule { expr: Expr::Half(Box::new(c.expr.clone())), arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone() });
+                        first = Some(ProgramRule { expr: Expr::Half(Box::new(c.expr.clone())), arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work });
                     }
                     if !count_all {
                         return (first, behaviours(&hit_exprs));
@@ -311,6 +462,10 @@ impl ProgramRule {
                 for l in &levels[left_size] {
                     for r in &levels[right_size] {
                         for &op in ops {
+                            work += 1;
+                            if work > WORK_BUDGET {
+                                return (first, behaviours(&hit_exprs));
+                            }
                             let vals: Vec<f32> = l.vals.iter().zip(&r.vals).map(|(x, y)| apply(op, *x, *y)).collect();
                             if vals.iter().any(|v| !v.is_finite()) {
                                 continue;
@@ -320,7 +475,7 @@ impl ProgramRule {
                                 hit_exprs.push(Expr::Bin(op, Box::new(l.expr.clone()), Box::new(r.expr.clone())));
                                 if first.is_none() {
                                     let expr = Expr::Bin(op, Box::new(l.expr.clone()), Box::new(r.expr.clone()));
-                                    first = Some(ProgramRule { expr, arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone() });
+                                    first = Some(ProgramRule { expr, arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work });
                                 }
                                 if !count_all {
                                     return (first, behaviours(&hit_exprs));
@@ -333,12 +488,85 @@ impl ProgramRule {
                     }
                 }
             }
+            // A learned function applied to smaller expressions costs one piece, however big the program it came from.
+            for f in &lib.funcs {
+                let splits: Vec<(usize, usize)> = if f.arity == 1 { vec![(size - 1, 0)] } else { (1..size - 1).map(|l| (l, size - 1 - l)).filter(|(_, r)| *r >= 1).collect() };
+                for (ls, rs) in splits {
+                    for (li, l) in levels[ls].iter().enumerate() {
+                        let rights: &[Cand] = if f.arity == 1 { &levels[ls][li..li + 1] } else { &levels[rs] };
+                        for r in rights {
+                            work += 1;
+                            if work > WORK_BUDGET {
+                                return (first, behaviours(&hit_exprs));
+                            }
+                            let vals: Vec<f32> = if f.arity == 1 {
+                                l.vals.iter().map(|x| f.expr.eval(*x, 0.0)).collect()
+                            } else {
+                                l.vals.iter().zip(&r.vals).map(|(x, y)| f.expr.eval(*x, *y)).collect()
+                            };
+                            if vals.iter().any(|v| !v.is_finite()) {
+                                continue;
+                            }
+                            let expr = f.expr.subst(&l.expr, &r.expr);
+                            if hits(&vals) {
+                                hits_n += 1;
+                                hit_exprs.push(expr.clone());
+                                if first.is_none() {
+                                    first = Some(ProgramRule { expr: expr.clone(), arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work });
+                                }
+                                if !count_all {
+                                    return (first, behaviours(&hit_exprs));
+                                }
+                            }
+                            if made.len() < CAP_PER_LEVEL && seen.insert(signature(&vals)) {
+                                made.push(Cand { expr, vals });
+                            }
+                        }
+                    }
+                }
+            }
             levels[size] = made;
             if first.is_some() {
                 return (first, behaviours(&hit_exprs));
             }
+            if work > WORK_BUDGET {
+                break;
+            }
         }
         (None, 0)
+    }
+
+    /// Do the lessons carry enough information to believe this program? A search that tries N candidates will, by luck alone, find one that
+    /// fits any pattern with fewer than about log2(N) bits in it; a unit whose answers are only 0 and 1 gives one bit a fact. So the bits in
+    /// the lessons (facts x log2 of the distinct answers) must exceed the bits of searching (log2 of the candidates tried) by a margin.
+    /// A short program found early passes (`first div 10`, found among about a thousand); a long one found late in a huge search over thin
+    /// data does not. (Found by a primality unit being "explained" by an expression of nine pieces over thirteen 0/1 answers.)
+    pub fn is_believable(&self, items: &[Item]) -> bool {
+        let line = NumberLine::from_counting(&counting_lessons());
+        let mut facts: HashSet<(i32, i32)> = HashSet::new();
+        let mut answers: HashSet<i32> = HashSet::new();
+        for it in items {
+            let (nums, _) = ProgramRule::read(&line, &it.query);
+            if let (Some(y), false) = (line.value(&it.answer), nums.is_empty()) {
+                facts.insert((nums[0] as i32, *nums.get(1).unwrap_or(&0.0) as i32));
+                answers.insert(y as i32);
+            }
+        }
+        let data_bits = facts.len() as f32 * (answers.len().max(2) as f32).log2();
+        let search_bits = (self.work.max(1) as f32).log2();
+        data_bits >= search_bits + INFO_MARGIN_BITS
+    }
+
+    /// How an expression behaves over the numbers 0-30 (for a unary one only the first matters).
+    pub(crate) fn grid_signature(e: &Expr, arity: usize) -> Vec<i32> {
+        let mut sig = Vec::new();
+        for a in 0..=30 {
+            for b in 0..=if arity == 2 { 30 } else { 0 } {
+                let v = e.eval(a as f32, b as f32);
+                sig.push(if v.is_finite() { (v * 100.0).round() as i32 } else { i32::MIN });
+            }
+        }
+        sig
     }
 
     /// Answer a question with the program. Declines unless the question has the numbers it needs, every other word is one it has
@@ -361,6 +589,34 @@ mod tests {
 
     fn unit_items(w: &kinds::World, unit: usize) -> Vec<Item> {
         w.train.iter().filter(|i| i.unit == unit).cloned().collect()
+    }
+
+    #[test]
+    fn a_long_fit_found_late_over_thin_data_is_not_believed_but_a_short_one_found_early_is() {
+        let thin: Vec<Item> = (0..13).map(|a: i64| Item { unit: 0, fact: a as usize, template: 0, query: format!("zork {a}"), answer: ((a % 3 == 0) as i64).to_string() }).collect();
+        let rich: Vec<Item> = (0..12).flat_map(|a: i64| (0..4).map(move |b: i64| (a, b))).map(|(a, b)| Item { unit: 0, fact: (a * 4 + b) as usize, template: 0, query: format!("zork {a} {b}"), answer: (a * a + b * b).to_string() }).collect();
+        let rule = |work| ProgramRule { expr: Expr::A, work, arity: 1, line: NumberLine::from_counting(&counting_lessons()), vocab: HashSet::new(), };
+        assert!(!rule(100_000).is_believable(&thin), "13 bits of 0/1 against 17 bits of searching: luck explains it");
+        assert!(rule(500).is_believable(&thin), "9 bits of searching against 13 bits of data");
+        assert!(rule(3_000_000).is_believable(&rich), "48 facts with many answers carry far more than 22 bits");
+    }
+
+    #[test]
+    fn a_library_function_is_one_piece_so_deeper_things_come_within_reach() {
+        let items: Vec<Item> = (0..=25).filter(|a| *a != 8 && *a != 22).map(|a: i64| Item { unit: 0, fact: a as usize, template: 0, query: format!("what is zork {a}"), answer: (a / 10 + a % 10).to_string() }).collect();
+        // without the pieces, ten cannot be built in seven pieces, so there is no program
+        assert!(ProgramRule::fit_unique(&items).is_none());
+        let mut lib = Library::default();
+        lib.learn_constant(10);
+        let tens = ProgramRule::fit_unique_with(&items.iter().map(|i| Item { answer: (i.fact / 10).to_string(), ..i.clone() }).collect::<Vec<_>>(), &lib).expect("tens");
+        assert_eq!(tens.expr.show(), "(first div 10)");
+        let units = ProgramRule::fit_unique_with(&items.iter().map(|i| Item { answer: (i.fact % 10).to_string(), ..i.clone() }).collect::<Vec<_>>(), &lib).expect("units");
+        assert!(lib.learn_program(&tens.expr, 1) && lib.learn_program(&units.expr, 1));
+        let digit_sum = ProgramRule::fit_unique_with(&items, &lib).expect("digit sum from tens and units");
+        assert_eq!(digit_sum.predict("what is zork 29", &|_| false).as_deref(), Some("11"));
+        // and when the numbers taught leave the answer open it declines: up to 15, "(first + first div 10) mod 10" fits as well
+        let narrow: Vec<Item> = items.iter().filter(|i| i.fact <= 15).cloned().collect();
+        assert!(ProgramRule::fit_unique_with(&narrow, &lib).is_none(), "two explanations fit; the data cannot say which");
     }
 
     #[test]

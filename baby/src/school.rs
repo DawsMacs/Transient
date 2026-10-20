@@ -18,7 +18,7 @@ use crate::ledger::Ledger;
 use crate::mechanisms::{self, choose_mechanism, evidence_thrifty, fit, predict, shape, Fitted, Mech, Remembered, SelectRule, Weights};
 use crate::model::Model;
 use crate::net::Scratch;
-use crate::program::{Expr, ProgramRule};
+use crate::program::{Expr, Library, ProgramRule};
 use crate::quantity::{counting_lessons, NumberLine, Quantity};
 use std::collections::HashMap;
 use std::fmt::Write;
@@ -294,6 +294,7 @@ impl School {
     /// question must be to be recognised; without it the floor comes from the lessons' own margins, more cautiously.
     pub fn from_items(train: &[Item], names: Vec<String>, calibration: Option<&[Item]>, seed: u64, thrifty: bool) -> School {
         let baby = mechanisms::learn_items(train, names.len(), seed, thrifty);
+        let library = baby.weights.lib.clone();
         let mut units = Vec::new();
         for (u, um) in baby.units.into_iter().enumerate() {
             let idx = Mech::ALL.iter().position(|m| *m == um.chosen).unwrap();
@@ -310,7 +311,8 @@ impl School {
             });
         }
         let line = NumberLine::from_counting(&counting_lessons());
-        let weights = Weights::from(&all_items(&units));
+        let mut weights = Weights::from(&all_items(&units));
+        weights.lib = library;
         let routing = Routing::build(&units, &line);
         let mut school = School { units, weights, routing, line, route_floor: f32::NEG_INFINITY, seed, pen: Vec::new() };
         // How decisive must a question be to count as a recognisable kind? Learned from rewordings of lessons it was taught.
@@ -467,9 +469,11 @@ impl School {
     /// taking on one more lesson uses `add_to_tables` instead.
     fn rebuild_tables(&mut self) {
         self.renumber();
+        let library = std::mem::take(&mut self.weights.lib);
         self.weights = Weights::from_lists(
             self.units.iter().enumerate().flat_map(|(u, unit)| unit.lessons.iter().map(move |l| (u, tokenize(&l.query)))).collect(),
         );
+        self.weights.lib = library;
         self.routing = Routing::build(&self.units, &self.line);
     }
 
@@ -491,6 +495,9 @@ impl School {
         unit.chosen = chosen;
         unit.remember = Remembered::from_items(&items);
         unit.state = state;
+        if ev[Mech::ALL.iter().position(|m| *m == chosen).unwrap()] >= mechanisms::RELIABLE {
+            mechanisms::grow_library(&mut self.weights.lib, &self.units[u].state);
+        }
     }
 
     /// The cheap way to take on a lesson when nothing structural has changed: refit the unit's current mechanism on all its lessons and
@@ -602,9 +609,10 @@ impl School {
     /// (For tests) are the incrementally kept weights and routing table exactly what a rebuild from every lesson gives?
     #[cfg(test)]
     fn tables_equal_a_rebuild(&self) -> bool {
-        let weights = Weights::from_lists(
+        let mut weights = Weights::from_lists(
             self.units.iter().enumerate().flat_map(|(u, unit)| unit.lessons.iter().map(move |l| (u, tokenize(&l.query)))).collect(),
         );
+        weights.lib = self.weights.lib.clone();
         weights == self.weights && Routing::build(&self.units, &self.line) == self.routing
     }
 
@@ -1101,6 +1109,7 @@ impl School {
         writeln!(out, "SCHOOL2").unwrap();
         writeln!(out, "seed {}", self.seed).unwrap();
         writeln!(out, "route_floor {}", self.route_floor).unwrap();
+        out.push_str(&self.weights.lib.to_lines());
         writeln!(out, "pen {}", self.pen.len()).unwrap();
         for (q, a) in &self.pen {
             writeln!(out, "p {a}\t{q}").unwrap();
@@ -1121,7 +1130,7 @@ impl School {
 
     pub fn load(path: &str) -> Result<School, String> {
         let text = std::fs::read_to_string(path).map_err(|e| format!("cannot read {path}: {e}"))?;
-        let mut it = text.lines();
+        let mut it = text.lines().peekable();
         if it.next() != Some("SCHOOL2") {
             return Err(format!("{path}: not a SCHOOL2 file (teach it again with: baby school)"));
         }
@@ -1130,6 +1139,8 @@ impl School {
         };
         let seed: u64 = field(it.next(), "seed")?.parse().map_err(|e| format!("{e}"))?;
         let route_floor: f32 = field(it.next(), "route_floor")?.parse().map_err(|e| format!("{e}"))?;
+        // what it had learned to build with (a file written before there was a library has none)
+        let library = Library::from_lines(&mut it).unwrap_or_default();
         let pen_n: usize = field(it.next(), "pen")?.parse().map_err(|e| format!("{e}"))?;
         let mut pen = Vec::new();
         for _ in 0..pen_n {
@@ -1199,7 +1210,8 @@ impl School {
             units.push(SchoolUnit { name: head[2].to_string(), chosen, evidence, lessons, remember, state });
         }
         let line = NumberLine::from_counting(&counting_lessons());
-        let weights = Weights::from(&all_items(&units));
+        let mut weights = Weights::from(&all_items(&units));
+        weights.lib = library;
         let routing = Routing::build(&units, &line);
         Ok(School { units, weights, routing, line, route_floor, seed, pen })
     }
@@ -1421,6 +1433,28 @@ mod tests {
         assert_eq!(s.ask("what is five added to three").answer.as_deref(), Some("eight"));
         assert_eq!(s.ask("nine minus four").answer.as_deref(), Some("five"));
         assert!(s.ask("three minus five").answer.is_none(), "merging must not make it answer a negative result");
+    }
+
+    #[test]
+    fn what_it_learned_to_build_with_survives_saving_and_loading() {
+        let mut s = trained();
+        s.weights.lib.learn_constant(10);
+        s.weights.lib.learn_constant(7);
+        let tens = crate::program::Expr::from_text("(div A K10)").unwrap();
+        assert!(s.weights.lib.learn_program(&tens, 1));
+        let sumsq = crate::program::Expr::from_text("(add (mul A A) (mul B B))").unwrap();
+        assert!(s.weights.lib.learn_program(&sumsq, 2));
+        let path = "runs/test-library.school";
+        s.save(path).unwrap();
+        let t = School::load(path).unwrap();
+        let _ = std::fs::remove_file(path);
+        assert_eq!(t.weights.lib, s.weights.lib);
+        assert_eq!(t.weights.lib.consts, vec![10, 7]);
+        assert_eq!(t.weights.lib.funcs.len(), 2);
+        // a rebuild of the tables (a merge, say) must not lose it either
+        let mut u = t;
+        u.rebuild_tables();
+        assert_eq!(u.weights.lib, s.weights.lib);
     }
 
     #[test]

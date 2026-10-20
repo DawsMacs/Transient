@@ -20,7 +20,7 @@ use crate::ledger::Ledger;
 use crate::know;
 use crate::model::Model;
 use crate::net::{Reader, Scratch};
-use crate::program::ProgramRule;
+use crate::program::{Library, ProgramRule};
 use crate::quantity::{counting_lessons, NumberLine, Quantity};
 use crate::rng::Rng;
 use std::collections::HashMap;
@@ -59,6 +59,8 @@ pub struct Weights {
     n: u32,
     /// In which units of lessons each word has turned up (sorted). How many different ones is the word's *spread*.
     units: HashMap<String, Vec<usize>>,
+    /// What it has learned to build with (see `program::Library`): shared by every unit's search, grown as units settle.
+    pub lib: Library,
 }
 
 impl Weights {
@@ -68,7 +70,7 @@ impl Weights {
 
     /// From (unit, words) lists, one per taught question.
     pub fn from_lists(lists: Vec<(usize, Vec<String>)>) -> Weights {
-        let mut w = Weights { df: HashMap::new(), n: 0, units: HashMap::new() };
+        let mut w = Weights { df: HashMap::new(), n: 0, units: HashMap::new(), lib: Library::default() };
         for (unit, words) in &lists {
             w.add(*unit, words);
         }
@@ -360,7 +362,9 @@ pub fn fit(mech: Mech, items: &[Item], weights: &Weights, seed: u64) -> Fitted {
             Fitted::Rule(rule)
         }
         Mech::Select => Fitted::Select(SelectRule::fit(items)),
-        Mech::Program => Fitted::Program(ProgramRule::fit(items)),
+        // Trusted only if the data say exactly one thing: when several smallest expressions agree on every lesson but differ elsewhere,
+        // the data cannot say which was meant, and building on a guess is how a coincidence gets believed.
+        Mech::Program => Fitted::Program(ProgramRule::fit_unique_with(items, &weights.lib)),
         Mech::Network => Fitted::Network(Box::new(know::fit_examples(&as_examples(items), Reader::Bag, seed))),
     }
 }
@@ -514,10 +518,14 @@ pub fn evidence(unit_items: &[Item], weights: &Weights, seed: u64) -> [f64; 5] {
 /// reliable (25% up to the bar). Where they already generalise it is waste, and where they show nothing at all (an arbitrary table of
 /// facts) a network cannot do better on facts it was not shown, but cross-validating one costs about 100 ms a unit.
 pub fn evidence_thrifty(unit_items: &[Item], weights: &Weights, seed: u64) -> [f64; 5] {
-    let cheap = cv_accuracy(unit_items, weights, seed, &[0, 1, 2, 3]);
-    let best = cheap.iter().cloned().fold(0.0, f64::max);
+    // Cheapest first. Building a program is the dearest of the cheap ones (a search, now over a library too), so it is only tried when
+    // memory, a rule and a selection did not already explain the unit: where one does, the cheaper one wins any tie anyway.
+    let first = cv_accuracy(unit_items, weights, seed, &[0, 1, 2]);
+    let simple_best = first.iter().cloned().fold(0.0, f64::max);
+    let program = if simple_best >= RELIABLE { 0.0 } else { cv_accuracy(unit_items, weights, seed, &[3])[0] };
+    let best = simple_best.max(program);
     let network = if !(0.25..RELIABLE).contains(&best) { 0.0 } else { cv_accuracy(unit_items, weights, seed, &[4])[0] };
-    [cheap[0], cheap[1], cheap[2], cheap[3], network]
+    [first[0], first[1], first[2], program, network]
 }
 
 /// How often a mechanism other than plain memory must be right on facts held back before it may answer for a unit. A unit that is
@@ -541,6 +549,17 @@ pub fn choose_mechanism(ev: &[f64; 5], facts: usize) -> Mech {
     }
 }
 
+/// Add what a settled unit learned to the library: the constants in a rule, the program of a built unit.
+pub fn grow_library(lib: &mut Library, state: &Fitted) {
+    match state {
+        Fitted::Rule(q) => lib.learn_from_terms(&q.terms()),
+        Fitted::Program(Some(p)) => {
+            lib.learn_program(&p.expr, p.arity());
+        }
+        _ => {}
+    }
+}
+
 pub fn learn(world: &World, seed: u64) -> Baby {
     learn_with(world, seed, false)
 }
@@ -553,13 +572,17 @@ pub fn learn_with(world: &World, seed: u64, thrifty: bool) -> Baby {
 
 /// As `learn_with`, for any lessons already grouped into `n_units` units (`Item::unit` says which).
 pub fn learn_items(train: &[Item], n_units: usize, seed: u64, thrifty: bool) -> Baby {
-    let weights = Weights::from(train);
+    let mut weights = Weights::from(train);
     let line = NumberLine::from_counting(&counting_lessons());
     let mut units = Vec::new();
     let mut taught = Vec::new();
     for u in 0..n_units {
         let items: Vec<Item> = train.iter().filter(|i| i.unit == u).cloned().collect();
+        let t_unit = std::time::Instant::now();
         let ev = if thrifty { evidence_thrifty(&items, &weights, seed) } else { evidence(&items, &weights, seed) };
+        if std::env::var("BABY_PROF").is_ok() {
+            eprintln!("PROF unit {u} ({} lessons): evidence in {:.2}s -> {:?}", items.len(), t_unit.elapsed().as_secs_f64(), ev.map(|e| (e * 100.0).round()));
+        }
         let n_facts = items.iter().map(|i| i.fact).collect::<std::collections::BTreeSet<_>>().len();
         let chosen = choose_mechanism(&ev, n_facts);
         let fitted: Vec<Fitted> = Mech::ALL
@@ -567,6 +590,10 @@ pub fn learn_items(train: &[Item], n_units: usize, seed: u64, thrifty: bool) -> 
             .map(|m| if !thrifty || *m == chosen || *m == Mech::Remember { fit(*m, &items, &weights, seed) } else { Fitted::Program(None) })
             .collect();
         let program = fitted.iter().find_map(|f| if let Fitted::Program(Some(p)) = f { Some(p.expr.show()) } else { None });
+        // What a reliable unit worked out becomes something later units can build with.
+        if ev[Mech::ALL.iter().position(|m| *m == chosen).unwrap()] >= RELIABLE {
+            grow_library(&mut weights.lib, &fitted[Mech::ALL.iter().position(|m| *m == chosen).unwrap()]);
+        }
         units.push(UnitModel { chosen, evidence: ev, program, fitted });
         taught.push(items.iter().map(|i| shape(&i.query, &line)).collect::<Vec<_>>());
     }

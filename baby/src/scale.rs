@@ -23,7 +23,7 @@ use crate::kinds::{Item, World};
 use crate::ledger::{EnergyModel, Ledger};
 use crate::rng::Rng;
 use crate::school::School;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::time::Instant;
 
 #[derive(Clone, Debug)]
@@ -56,7 +56,7 @@ const VOW: &[u8] = b"aeiou";
 
 /// A pronounceable made-up word of `syllables` consonant-vowel pairs. Three syllables (6 letters) for entities and answers, four
 /// for operator and attribute words, so none can collide with a number word ("zero", "nine") or a filler word.
-fn word(mut i: usize, syllables: usize) -> String {
+pub(crate) fn word(mut i: usize, syllables: usize) -> String {
     let mut s = String::new();
     for _ in 0..syllables {
         let k = i % (CONS.len() * VOW.len());
@@ -76,8 +76,8 @@ const FACT_STYLES: [[&str; 4]; 6] = [
     ["how is {0} {A}", "{0} is {A} how", "{A} {0}", "is {0} {A} how"],
     ["give {A} for {0}", "{A} for {0}", "for {0} give {A}", "give {0} {A}"],
 ];
-const BINARY: [&str; 4] = ["what is {0} {A} {1}", "{0} {A} {1}", "{0} {A} {1} equals", "what is {0} {A} {1} equals"];
-const UNARY: [&str; 4] = ["what is {A} {0}", "{A} {0}", "{0} {A}", "what is {0} {A}"];
+pub(crate) const BINARY: [&str; 4] = ["what is {0} {A} {1}", "{0} {A} {1}", "{0} {A} {1} equals", "what is {0} {A} {1} equals"];
+pub(crate) const UNARY: [&str; 4] = ["what is {A} {0}", "{A} {0}", "{0} {A}", "what is {0} {A}"];
 const SELECT: [&str; 4] = ["which is {A} {0} or {1}", "{A} {0} or {1}", "{0} or {1} which is {A}", "which {A} {0} or {1}"];
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -100,7 +100,7 @@ struct Fact {
     templates: [String; 4],
 }
 
-fn fill(template: &str, attr: &str, slots: &[String]) -> String {
+pub(crate) fn fill(template: &str, attr: &str, slots: &[String]) -> String {
     let mut s = template.replace("{A}", attr);
     for (i, slot) in slots.iter().enumerate() {
         s = s.replace(&format!("{{{i}}}"), slot);
@@ -108,7 +108,7 @@ fn fill(template: &str, attr: &str, slots: &[String]) -> String {
     s
 }
 
-fn templ(t: [&str; 4], attr: &str) -> [String; 4] {
+pub(crate) fn templ(t: [&str; 4], attr: &str) -> [String; 4] {
     [t[0].replace("{A}", attr), t[1].replace("{A}", attr), t[2].replace("{A}", attr), t[3].replace("{A}", attr)]
 }
 
@@ -564,6 +564,7 @@ pub fn run(c: &Config, reorg: bool, grade_cap: usize) -> Vec<(&'static str, f64)
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
 
     fn cfg(units: usize) -> Config {
         Config { units, entities: 400, facts_per_unit: 10, noise: 0.0, typos: 0.1, digits: false, seed: 1 }

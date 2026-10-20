@@ -7,6 +7,7 @@
 //!   baby discover [--seed N] [--out PATH]   hand it a heap of UNLABELLED lessons: it finds the units itself, then is scored like the others
 //!   baby cost                               what LEARNING costs: time and memory to teach it, a new lesson, a new kind, and to tidy up
 //!   baby scale  [--units N --entities N --facts N --noise F --typos F --seed N --grade N --no-reorg | --sweep 20,60,200]   does learning stay light as the world grows?
+//!   baby invent [--seed N]                  hidden kinds nobody wrote a mechanism for, and kinds that must stay unexplained: what does it work out?
 //!   baby sleep  [--compact]                 re-sort the pen, merge/split units that follow one rule, optionally forget what is explained
 //!   baby effort                             what answering costs (operations, words moved, estimated joules): the slow way vs the baby's way
 //!   baby ask    "what is two times four"    ask it; it answers, says how it knew, or says why it won't (uses the school)
@@ -30,6 +31,7 @@
 mod curious;
 mod data;
 mod discover;
+mod invent;
 mod kinds;
 mod know;
 mod ledger;
@@ -64,7 +66,7 @@ struct Args {
 
 impl Args {
     fn parse(raw: &[String]) -> Args {
-        const FLAGS: [&str; 11] = ["curriculum", "quiet", "tsv", "verbose", "guess", "piece-keys", "full", "compact", "no-reorg", "row", "digits"];
+        const FLAGS: [&str; 12] = ["curriculum", "quiet", "tsv", "verbose", "guess", "piece-keys", "full", "compact", "no-reorg", "row", "digits", "stage2-first"];
         let mut positional = Vec::new();
         let mut opts = HashMap::new();
         let mut i = 0;
@@ -1416,6 +1418,37 @@ fn main() {
         Some("learn") => cmd_learn(&args),
         Some("cost") => cmd_cost(&args),
         Some("scale") => cmd_scale(&args),
+        Some("invent") => {
+            invent::STAGE2_FIRST.store(args.flag("stage2-first"), std::sync::atomic::Ordering::Relaxed);
+            let seeds: u64 = args.get("seeds", 1);
+            if seeds <= 1 {
+                invent::run(args.get("seed", 1), false);
+            } else {
+                // many seeds: new random codes and a new split every time; how often does it fall short, or explain what has no explanation?
+                let (mut solved, mut total, mut invented, mut unexpl, mut wrong, mut s2, mut s2t) = (0, 0, 0, 0, 0, 0, 0);
+                let mut by_kind: std::collections::BTreeMap<&'static str, (invent::Role, usize)> = std::collections::BTreeMap::new();
+                for seed in 1..=seeds {
+                    let o = invent::run(seed, true);
+                    solved += o.hidden_solved;
+                    total += o.hidden_total;
+                    for (name, role, ok) in &o.per_kind {
+                        let e = by_kind.entry(name).or_insert((role.clone(), 0));
+                        e.1 += *ok as usize;
+                    }
+                    s2 += o.stage2_solved;
+                    s2t += o.stage2_total;
+                    invented += o.invented_for_unexplainable;
+                    unexpl += o.unexplainable_total;
+                    wrong += o.wrong_total;
+                }
+                for (name, (role, n)) in &by_kind {
+                    if *role != invent::Role::Base {
+                        println!("  {name:<14} {:<13} {n:>3} of {seeds}", format!("{role:?}").to_lowercase());
+                    }
+                }
+                println!("{seeds} seeds: hidden kinds worked out {solved} of {total}; stage-2 kinds {s2} of {s2t}; unexplainable kinds that got a mechanism {invented} of {unexpl}; WRONG answers {wrong}");
+            }
+        }
         Some("grade") => cmd_grade(&args),
         Some("storage") => cmd_storage(&args),
         Some("sleep") => cmd_sleep(&args),
@@ -1428,7 +1461,7 @@ fn main() {
         Some("life") => cmd_life(&args),
         Some("energy") => cmd_energy(&args),
         _ => {
-            eprintln!("usage: baby <school|ask|learn|sleep|storage|cost|scale|grade|discover|teach|effort|data|train|know|curious|rules|kinds|eval|life|energy> ...  (see the top of src/main.rs)");
+            eprintln!("usage: baby <school|ask|learn|sleep|storage|cost|scale|invent|grade|discover|teach|effort|data|train|know|curious|rules|kinds|eval|life|energy> ...  (see the top of src/main.rs)");
             std::process::exit(2);
         }
     }

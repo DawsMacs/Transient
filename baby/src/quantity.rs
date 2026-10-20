@@ -312,6 +312,12 @@ impl Quantity {
         self.line.say(self.predict(&nums, &rest), uses_digits(q))
     }
 
+    /// What the fitted rule says in the units of the answer, for every word that does anything: (per first number, per second number,
+    /// constant). (The fit works on numbers divided by `SCALE`, so the constant is multiplied back.)
+    pub fn terms(&self) -> Vec<[f32; 3]> {
+        self.op.values().filter(|o| o.iter().any(|x| x.abs() > 0.03)).map(|o| [o[0], o[1], o[2] * SCALE]).collect()
+    }
+
     pub fn operator(&self, word: &str) -> Option<[f32; 3]> {
         self.op.get(word).copied()
     }

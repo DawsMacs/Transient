@@ -22,7 +22,7 @@ re-deriving anything. Order of reading: this file, then `TransientVision.md` (Da
 
 ## 2. Where the work stands (2026-10-20)
 
-All code is in `~/Transient/baby/` (pure Rust, **zero dependencies**, builds offline, **70 tests pass**). It is a Cargo workspace; `runs/` and `target/` are gitignored.
+All code is in `~/Transient/baby/` (pure Rust, **zero dependencies**, builds offline, **73 tests pass**). It is a Cargo workspace; `runs/` and `target/` are gitignored.
 **Git (since 2026-10-20):** `~/Transient` is a git repo, `origin` = `git@github.com:DawsMacs/TransientAI.git` (public, Daws's global account `DawsMacs`, SSH). Daws authorised commits and pushes to that repo for this work. Licence: `AGPL-3.0-or-later` (SPDX headers in `baby/src/*.rs`, `REUSE.toml`, `LICENSE`, `LICENSES/`). Contributions use a DCO, not a CLA (`CONTRIBUTING.md`). The repo is public, so never commit anything from `.local/`, and keep the sibling project's details out.
 
 The headline artefact is **"the baby"** (`baby school` / `baby ask`), a unified system:
@@ -51,7 +51,7 @@ The headline artefact is **"the baby"** (`baby school` / `baby ask`), a unified 
 
 ```
 cd ~/Transient
-cargo test --release --offline          # 70 passed (about 15 s)
+cargo test --release --offline          # 73 passed (about 15 s)
 cargo build --release --offline
 ./target/release/baby school            # teaches 13 units (~4 s); prints how it learned each + the honest scorecard (wrong must be 0.0%)
 ./target/release/baby ask "how far apart are two and nine"      # seven, with how it knew
@@ -95,8 +95,8 @@ plus a progress log kept by the assistant.
 2. **Compact storage format** that loses nothing (binary, word table + ids, phrasings stored as templates plus facts); forgetting (`--compact`) then becomes a separate saving for what is truly redundant.
 3. **Incremental and exact updates** (add one lesson to a fitted rule without refitting; sparse updates; small integers instead of floats) and the **real energy meter** (needs Daws's one-time
    `sudo chmod a+r /sys/class/powercap/intel-rapl:0/energy_uj`, never run it yourself; `perf` counters are blocked, `perf_event_paranoid=4`).
-4. **Let it propose its own mechanisms** when nothing generalises (the units that stay "memorise only"); a richer space for built expressions (conditions, three numbers, division, composing earlier rules).
-5. **Digits and number-like words** as numbers; **discover the number line without counting lessons** (it is currently taught: the counting lessons put zero to ten on the line).
+4. **Mechanism invention: DONE for expressions** (see `baby/README.md`, "Can the baby invent its own way to learn something?", `baby invent --seeds 20`): floor-divide/remainder, a learned library of constants and functions, digits as numbers. All 16 hidden kinds and 7 of 9 stage-2 kinds worked out every time, 0 false inventions, 0 WRONG; the wrong-order control confirms it is learned vocabulary. Guards that matter and must stay: built programs must be behaviourally unique over 0-30, the lessons must carry more bits than the search spent (`is_believable`), a mechanism needs 90 % held back to answer, searches have a work budget (1M, checked inside the loops). **OPEN:** mechanisms of a different *kind* (not an expression), the baby adapting its own learning knobs (folds, effort, thresholds) from experience (Entry 5 level 3), a number line it discovers, robust rule fitting under label noise (coverage), digit sum is correctly declined (data ambiguous) not solved.
+5. **Digits** DONE (a digit string is a number; unreadable numbers with signs/decimals/fractions/percents are refused everywhere, including the CLI entry and teaching). Number words are never "glue" in memory.
 
 **Still owed from Daws's earlier requests (do not lose these):**
 
