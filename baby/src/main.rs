@@ -341,6 +341,12 @@ fn ask_school(a: &Args, school_path: &str, query: &str) {
     let memory = Memory::open(&memory_path(a, school_path), a.get("match", 0.6));
     let weight = |w: &str| school.word_weight(w);
     let mut ledger = Ledger::default();
+    // 0. Numbers are plain whole numbers. Check the question as written: the steps below rebuild it from bare words, which drops a sign.
+    if let Some(bad) = school::unreadable_number(query) {
+        println!("?");
+        eprintln!("  I only read plain whole numbers, not '{bad}' (signs, decimals, fractions, percentages).");
+        return;
+    }
     // 1. What it has been told comes first.
     if let Some((answer, sim)) = memory.lookup(query, &weight, &mut ledger) {
         println!("{answer}");

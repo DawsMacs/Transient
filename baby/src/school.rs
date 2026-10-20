@@ -209,7 +209,7 @@ pub struct Reorg {
 
 /// A digit string with a sign, decimal point, slash, comma or percent attached ("-3", "3.5", "1/2", "1,000", "50%"): not a plain whole
 /// number. Returns the offending text.
-fn unreadable_number(q: &str) -> Option<String> {
+pub fn unreadable_number(q: &str) -> Option<String> {
     let chars: Vec<char> = q.chars().collect();
     let digit = |i: usize| chars.get(i).map_or(false, |c| c.is_ascii_digit());
     let mut i = 0;
@@ -528,6 +528,9 @@ impl School {
         if tokens.is_empty() {
             return Err("nothing to learn: the question is empty".into());
         }
+        if let Some(bad) = unreadable_number(query) {
+            return Err(format!("I only read plain whole numbers, not '{bad}': a lesson with a sign, decimal, fraction or percent would be stored wrongly"));
+        }
         let (u, opened) = match unit {
             Some(name) => match self.units.iter().position(|x| x.name == name) {
                 Some(u) => (u, false),
@@ -819,6 +822,9 @@ impl School {
         let tokens = tokenize(query);
         if tokens.is_empty() {
             return Err("nothing to learn: the question is empty".into());
+        }
+        if let Some(bad) = unreadable_number(query) {
+            return Err(format!("I only read plain whole numbers, not '{bad}': a lesson with a sign, decimal, fraction or percent would be stored wrongly"));
         }
         let unmet = tokens.iter().any(|w| !self.knows(w));
         let recognised = !unmet && self.route(query, &mut Ledger::default()).1 >= self.route_floor;
@@ -1237,6 +1243,9 @@ mod tests {
         assert_eq!(said("what comes after 99").as_deref(), Some("100"));
         assert_eq!(said("what is 3 plus 4?").as_deref(), Some("7"), "ordinary punctuation is fine");
         assert_eq!(said("what is 3 plus 4.").as_deref(), Some("7"));
+        let mut t = trained();
+        assert!(t.learn("what is -3 plus 5", "2", Some("sum")).is_err(), "a lesson with a sign is refused, not stored without it");
+        assert!(t.learn_anywhere("what is 1.5 plus 1", "2").is_err());
         // the same refusals as in words
         for q in [
             "three minus 5", "what is 2 minus 5", "half of 9", "what is 3 times 4 times 5", "what is 99999 plus 1", "what is 3 plus", "what is plus 4",
