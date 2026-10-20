@@ -1,0 +1,6 @@
+target/
+runs/
+# local-only notes: never published
+.local/
+.claude/
+*.private.md
