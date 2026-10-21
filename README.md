@@ -1,15 +1,15 @@
 <p align="center">
-  <img src="assets/banner.svg#gh-dark-mode-only" alt="TransientAI" width="81%">
-  <img src="assets/banner-light.svg#gh-light-mode-only" alt="TransientAI" width="81%">
+  <img src="assets/banner.svg#gh-dark-mode-only" alt="Transient" width="69%">
+  <img src="assets/banner-light.svg#gh-light-mode-only" alt="Transient" width="69%">
 </p>
 
 <p align="center">
   <a href="LICENSE"><img alt="License: AGPL-3.0-or-later" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-blue"></a>
-  <a href="https://github.com/DawsMacs/TransientAI/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/DawsMacs/TransientAI/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/DawsMacs/Transient/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/DawsMacs/Transient/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Rust, zero dependencies" src="https://img.shields.io/badge/rust-zero%20dependencies-orange">
 </p>
 
-**TransientAI is an experimental learning system written in Rust, built to run on ordinary consumer hardware.** It explores
+**Transient is an experimental learning system written in Rust, built to run on ordinary consumer hardware.** It explores
 *adaptive learning*: a system that keeps learning while it is used, decides for itself *how* to learn each kind of thing, and is
 measured by what it costs (operations, memory, estimated joules) rather than by parameter count alone.
 

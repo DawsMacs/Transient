@@ -404,3 +404,7 @@ He trusts the GNU foundation: Stallman went through a lot to invent copyleft. On
 
 - Daws's ladder (hypothesis, theory, law) is implemented as: a labelled **guess** (a trusted rule used outside the range taught or checked), a **checked** range (a confirmed answer extends where it may speak as fact), and **taught** facts. See the 2026-10-21 section of `baby/README.md`.
 - The honesty rule became "never *silently* wrong": WRONG (a fact stated and false) must stay at 0, a labelled guess may be wrong, and what is measured is whether guesses are calibrated and whether one correction fixes the next mistake.
+
+### Context added by the assistant (labelled): the rename (2026-10-21)
+
+Daws renamed the GitHub repository from `DawsMacs/TransientAI` to `DawsMacs/Transient`. **TransientAI is now the name of the creator of the Transient project** (Daws is its owner and founder); the project, the repo, the README and the banners are called **Transient**. The copyright and licence holder is unchanged: DawsMacs, AGPL-3.0-or-later. Earlier entries above that say `DawsMacs/TransientAI` record the name at the time and are left as written; GitHub redirects the old URL.

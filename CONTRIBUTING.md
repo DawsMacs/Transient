@@ -1,6 +1,6 @@
 # Contributing
 
-TransientAI is open research and is licensed `AGPL-3.0-or-later`. Contributions are welcome under the same licence.
+Transient is open research and is licensed `AGPL-3.0-or-later`. Contributions are welcome under the same licence.
 
 ## Licence and sign-off (DCO, no CLA)
 

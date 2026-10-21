@@ -1,10 +1,10 @@
-# REUSE (https://reuse.software) licensing declaration for TransientAI.
+# REUSE (https://reuse.software) licensing declaration for Transient.
 #
 # Source files carry their own SPDX headers. This file covers everything that cannot: documentation,
 # manifests, the lock file, images, CI configuration. The license texts live in LICENSES/ and LICENSE.
 version = 1
-SPDX-PackageName = "TransientAI"
-SPDX-PackageDownloadLocation = "https://github.com/DawsMacs/TransientAI"
+SPDX-PackageName = "Transient"
+SPDX-PackageDownloadLocation = "https://github.com/DawsMacs/Transient"
 
 [[annotations]]
 path = [
