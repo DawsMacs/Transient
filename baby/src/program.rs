@@ -198,6 +198,10 @@ fn behaviours(exprs: &[Expr]) -> usize {
 pub struct Library {
     pub consts: Vec<i32>,
     pub funcs: Vec<Func>,
+    /// (unit, behaviour) pairs already contributed, kept even after the function is evicted: a unit that refits to an equivalent program (or to a
+    /// rewrite of it through another unit's function) adds nothing. Without this a library with fewer slots than program units thrashes: each
+    /// refit re-adds its unit and evicts another, whose unit refits and evicts the next, and the entries grow into nested equivalents.
+    contributed: Vec<(usize, Vec<i32>)>,
 }
 
 #[derive(Clone, Debug)]
@@ -222,7 +226,7 @@ const MAX_FUNCS: usize = 8;
 impl Library {
     /// The library as a unit may use it: without what that unit itself contributed.
     pub fn without(&self, origin: usize) -> Library {
-        Library { consts: self.consts.clone(), funcs: self.funcs.iter().filter(|f| f.origin != origin).cloned().collect() }
+        Library { consts: self.consts.clone(), funcs: self.funcs.iter().filter(|f| f.origin != origin).cloned().collect(), contributed: Vec::new() }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -266,6 +270,12 @@ impl Library {
         if self.funcs.iter().any(|f| ProgramRule::grid_signature(&f.expr, f.arity) == sig) {
             return false;
         }
+        if origin != NO_ORIGIN {
+            if self.contributed.iter().any(|(o, g)| *o == origin && *g == sig) {
+                return false;
+            }
+            self.contributed.push((origin, sig.clone()));
+        }
         if self.funcs.len() >= MAX_FUNCS {
             self.funcs.remove(0);
         }
@@ -287,7 +297,7 @@ impl Library {
         let head = lines.peek()?.strip_prefix("library")?;
         let consts = head.split_whitespace().filter_map(|c| c.parse().ok()).collect();
         lines.next();
-        let mut lib = Library { consts, funcs: Vec::new() };
+        let mut lib = Library { consts, funcs: Vec::new(), contributed: Vec::new() };
         while let Some(l) = lines.peek() {
             let Some(rest) = l.strip_prefix("func ") else { break };
             let mut parts = rest.splitn(3, ' ');
@@ -367,6 +377,11 @@ impl ProgramRule {
     }
 
     /// As `fit_unique`, building with what has been learned (`lib`) as well as the given operations.
+    #[cfg(test)]
+    pub fn search_pub(items: &[Item], lib: &Library) -> (Option<ProgramRule>, usize, Vec<Expr>) {
+        ProgramRule::search(items, &OPS, true, lib)
+    }
+
     /// The program for these lessons, with the other smallest explanations that also fit kept as `alts` (answers are given only where
     /// they all agree). More than a handful of different explanations means the lessons say next to nothing: no program then.
     pub fn fit_trusted_with(items: &[Item], lib: &Library) -> Option<ProgramRule> {
@@ -701,6 +716,43 @@ mod tests {
         assert!(!rule(100_000).is_believable(&thin), "13 bits of 0/1 against 17 bits of searching: luck explains it");
         assert!(rule(500).is_believable(&thin), "9 bits of searching against 13 bits of data");
         assert!(rule(3_000_000).is_believable(&rich), "48 facts with many answers carry far more than 22 bits");
+    }
+
+    #[test]
+    fn a_unit_contributes_a_behaviour_to_the_library_once_even_after_it_is_evicted() {
+        let mut lib = Library::default();
+        let sumsq = Expr::from_text("(add (mul A A) (mul B B))").unwrap();
+        let bloated = Expr::from_text("(add (mul A A) (mul (sub A (add A B)) (sub A (add A B))))").unwrap();
+        assert!(lib.learn_program(&sumsq, 2, 7));
+        assert!(!lib.learn_program(&bloated, 2, 7), "an equivalent rewrite adds nothing");
+        // fill the library until the first function is evicted
+        for k in 0..MAX_FUNCS {
+            assert!(lib.learn_program(&Expr::from_text(&format!("(add (mul A K{}) B)", 3 + k)).unwrap(), 2, 100 + k));
+        }
+        assert!(!lib.funcs.iter().any(|f| f.origin == 7), "evicted");
+        assert!(!lib.learn_program(&sumsq, 2, 7), "and its unit refitting does not put it back and push another out");
+        assert!(!lib.learn_program(&bloated, 2, 7));
+        assert_eq!(lib.funcs.len(), MAX_FUNCS);
+    }
+
+    #[test]
+    fn far_probes_do_not_make_a_program_unfittable() {
+        let mut lib = Library::default();
+        lib.learn_constant(10);
+        lib.learn_program(&Expr::from_text("(add (mul A A) (mul B B))").unwrap(), 2, 5);
+        let mk = |a: i64, b: i64| Item { unit: 0, fact: (a * 1000 + b) as usize, template: 0, query: format!("what is {a} zork {b}"), answer: ((a * a + b * b) / 2).to_string() };
+        let mut items: Vec<Item> = (0..=12).flat_map(|a| (0..=12).map(move |b| mk(a, b))).collect();
+        assert!(ProgramRule::fit_trusted_with(&items, &lib).is_some(), "taught range");
+        for (a, b) in [(24, 12), (12, 24), (24, 24), (48, 24), (24, 48), (48, 48)] {
+            items.push(mk(a, b));
+        }
+        let before = ProgramRule::fit_trusted_with(&items, &lib);
+        assert!(before.is_some(), "after round 2 probes");
+        items.push(mk(96, 48));
+        let (found, behaviours, hits) = ProgramRule::search_pub(&items, &lib);
+        println!("DEBUG found {:?} behaviours {behaviours} hits {}", found.as_ref().map(|f| f.expr.show()), hits.len());
+        let after = ProgramRule::fit_trusted_with(&items, &lib);
+        assert!(after.is_some(), "after the (96, 48) probe: found {:?}", found.map(|f| (f.expr.show(), f.work)));
     }
 
     #[test]

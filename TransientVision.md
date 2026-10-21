@@ -336,6 +336,8 @@ description than one with a single fixed learner.
 
 - **2026-10-21** Tuning its own bar: the baby now measures the share of wrong lessons in its own data (it estimates 9.6 % where the world has 9.7 %) and sets how reliable a mechanism must be before answering from that, between a floor found by experiment (a mechanism right 72 % of the time does answer wrongly) and the old 0.9 for clean worlds. At 10 % label noise it answers 98 % of unseen questions instead of 42 %, with 0 false inventions and 0 wrong in the adversarial battery at 0, 5 and 10 % noise. A negative result is recorded too: the search budget cannot be cut by watching partial progress (doomed and deep searches look alike). Honest limit: one constant of several; the floor rests on thin evidence.
 
+- **2026-10-21** A hole found and a choice for Daws: a rule that fits everything taught and changes regime outside it (a sum that saturates or wraps) is answered confidently and wrongly (53 wrong answers per seed in the new deceptive kinds); no data in hand can reveal it. A `--careful` mode answers only inside the range it was taught or has had checked, and the baby's self-checks (now covering rules and selections) win the coverage back: after two rounds 0 wrong and 99.2 % of the extrapolation kept. **Default is still permissive; whether careful should be the default is Daws's call** (extrapolation is the showcase, and the hazard). Tracing a third-round regression also found and fixed a library bug (a unit re-adding rewritten copies of itself, evicting others).
+
 ---
 
 ## More to come

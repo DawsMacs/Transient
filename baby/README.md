@@ -43,6 +43,41 @@ cargo test --offline                 # 61 tests, including numerical checks of t
 ./target/release/baby energy         # what one question and one learning step cost, counted
 ```
 
+## Rules that change regime: a hole, a careful mode, and a library bug it exposed (2026-10-21)
+
+**The hole.** Plan item: extend asking from numeric programs to rules and selections. Before building, I asked whether rules and selections can be *confidently wrong at all*. They can, in a way no earlier battery tested: a rule that fits everything taught perfectly and
+changes regime outside the taught numbers. `baby invent` now has four such kinds (a sum capped at 30, a sum that wraps at 40, a double capped at 30, a triple that wraps at 50) and a control (`firstalways`, whose truth really is the first operand, which it learns as a rule and gets right). **Permissively, as before: 53 wrong answers per seed
+on those four kinds** (169 over 3 seeds, 187 of 240 unseen questions right). Each unit has 100 % held-back evidence and no competing explanation in its language, so every guard passes it, and the change lies outside everything taught, so no amount of data in hand can reveal it. The project's "0 % wrong" fails on this class.
+
+**A policy, not a patch.** Whether a rule may extrapolate is a values trade-off (its extrapolation is the project's showcase, and the thing that is wrong here), so it is a switch: `School::set_careful`, `baby ask --careful`, `baby school --careful`; **the default stays permissive**.
+Careful: a rule, selection or program answers only for operands inside the range it was taught *or has had checked* for the operation named (per-operand ranges from the memory index), and otherwise says why ("for this kind I was only taught (or have checked) numbers from 0 to 12, and this asks about 20: I won't extrapolate unchecked").
+
+**Checks extend the reach.** `check_myself` now covers rules and selections as well as programs and asks: at most two gap questions (programs), the floor (0, if nothing near it was taught), the two numbers swapped when the order never varied, each operand pushed to about twice its largest taught value, and **the corner** (both large at once: a wrapping sum shows itself only there).
+Never an answer it could not read back (over four digits). Every answer it asked for is kept even if it already predicted it, since a confirmed check is what extends the reach; a refuted one makes the unit refit.
+
+**Result (`baby invent --careful --seeds 3 --rounds 3 --limit 4`, simulated always-right teacher; unseen = never taught + beyond the taught numbers):**
+
+| policy | deceptive kinds right / refused / **WRONG** | genuine kinds right / refused / **WRONG** |
+|---|---|---|
+| permissive (as before) | 551 / 0 / **169** | 4,701 / 9 / 0 |
+| careful, nothing asked | 340 / 380 / **0** | 2,224 / 2,486 / 0 |
+| careful, after 1 round of checks | 471 / 153 / **96** | 3,889 / 821 / 0 |
+| careful, after 2 rounds | 521 / 199 / **0** | **4,674 / 36 / 0** |
+| careful, after 3 rounds | 521 / 199 / 0 | 4,306 / 404 / 0 |
+
+Careful mode with no questions removes every wrong answer and costs more than half the genuine extrapolation; **two rounds of checks (about 230 questions over 3 seeds, a few per unit) win nearly all of it back (99.2 %) and still leave 0 wrong.** The row after one round shows the limit of a probe: a wrap that only shows at the corner of the reach box survives until the corner is probed.
+
+**Mistakes and what they uncovered.**
+- My first probes tested one operand at a time, so a wrapping sum survived the first round (96 wrong); the corner probe and a cap of two gap questions per unit (hundreds of untaught pairs had crowded the edge probes out) fixed that.
+- `tenfold` taught from 1 refused a question about 0: below the smallest taught number is as unchecked as above the largest. Added a floor probe.
+- **A third round made things worse, and tracing it found a library bug that has nothing to do with careful mode.** The library holds at most 8 functions but a battery has ~14 program units. Every refit of a unit re-added its program and evicted the oldest function, whose unit then refit and evicted the next, in a rotation; and because a unit is fitted with its own function excluded, it rediscovered
+  itself as a *rewrite through another unit's function*, so entries grew into nested equivalents (`a^2 + b^2` became `a^2 + (a - (a + b))^2`, then deeper). Dependents then lost their function and fell back to memory. Fix: **a unit contributes a given behaviour to the library once**, even after it is evicted (a test pins it); the clean battery is identical (8 seeds: 128/128 hidden, 66/72 stage-2),
+  and round 3 now produces 0 wrong. It still gives back some coverage (4,306 of 4,710), because 8 slots remain fewer than the units that depend on them: open.
+- I first guessed the round-3 problem was answers too long to read back. That was a real but different bug (fixed, and worth having); the evidence for the real cause came from logging each library addition and eviction.
+
+**What this is not.** The default is permissive: out of the box the baby still answers wrongly on a rule that changes regime. A simulated, always-right teacher answers the checks. A regime change between probes (a wrap at 40 with probes at 36 and 60 ... ) can still slip through until the probe lands on it; the reach is a per-operand box.
+A merged family of rule units is checked through one operator word only. Only whole numbers up to four digits.
+
 ## Tuning its own bar from what it measures (2026-10-21; Entry 5)
 
 Plan item: let the baby set some of my constants from measurement. Two attempts, one negative.

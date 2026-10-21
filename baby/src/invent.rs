@@ -32,6 +32,10 @@ pub enum Role {
     /// Needs more than the base language can build in its size limit, but only things the baby has already learned (a constant it met
     /// in an earlier kind, a program it already built): should be worked out once it has that vocabulary, and not before.
     Stage2,
+    /// Looks exactly like a rule or a selection on the taught numbers and changes regime outside them (a sum that saturates or wraps, a
+    /// "first operand" that was only ever shown when it was the bigger): there is no competing explanation inside the baby's language to
+    /// notice. It must never answer wrongly; whether it answers outside the taught region at all is the question.
+    Deceptive,
     /// Must stay unexplained.
     Unexplainable,
 }
@@ -44,10 +48,12 @@ pub struct Kind {
     pub role: Role,
     /// Largest number taught for a unary kind (the rest are "beyond").
     pub near: i64,
+    /// Taught only with the first operand bigger than the second (the rest are "beyond").
+    pub ordered: bool,
 }
 
 fn k(name: &'static str, arity: usize, f: fn(i64, i64) -> Option<i64>, role: Role) -> Kind {
-    Kind { name, arity, gen: Gen::Fun(f), role, near: 15 }
+    Kind { name, arity, gen: Gen::Fun(f), role, near: 15, ordered: false }
 }
 
 fn nonneg(v: i64) -> Option<i64> {
@@ -109,6 +115,12 @@ fn kinds_in_order(seed: u64) -> Vec<Kind> {
         k("sumsqhalf", 2, |a, b| Some((a * a + b * b) / 2), Stage2),
         k("avgsq", 2, |a, b| Some(((a + b) / 2) * ((a + b) / 2)), Stage2),
         k("sqdiffsq", 2, |a, b| Some((a - b) * (a - b) + a * a), Stage2),
+        // deceptive: a rule or a selection on the taught numbers, something else beyond them
+        k("capsum", 2, |a, b| Some((a + b).min(30)), Deceptive),
+        k("wrapsum", 2, |a, b| Some((a + b) % 40), Deceptive),
+        k("capdouble", 1, |a, _| Some((2 * a).min(30)), Deceptive),
+        k("wraptriple", 1, |a, _| Some((3 * a) % 50), Deceptive),
+        Kind { ordered: true, ..k("firstalways", 2, |a, _| Some(a), Deceptive) },
         // must stay unexplained
         k("prime", 1, |a, _| Some((a >= 2 && (2..a).all(|d| a % d != 0)) as i64), Unexplainable),
         k("xorfive", 1, |a, _| Some(a ^ 5), Unexplainable),
@@ -117,7 +129,7 @@ fn kinds_in_order(seed: u64) -> Vec<Kind> {
     for (i, name) in ["code_a", "code_b", "code_c", "code_d"].into_iter().enumerate() {
         let table: Vec<i64> = (0..=30).map(|_| rng.below(100) as i64).collect();
         let _ = i;
-        v.push(Kind { name, arity: 1, gen: Gen::Table(table), role: Unexplainable, near: 15 });
+        v.push(Kind { name, arity: 1, gen: Gen::Table(table), role: Unexplainable, near: 15, ordered: false });
     }
     v
 }
@@ -158,7 +170,7 @@ pub fn battery(seed: u64) -> Battery {
             for a in 0..=30i64 {
                 for b in 0..=30i64 {
                     if let Some(y) = eval(kind, a, b).filter(|y| *y <= 999) {
-                        if a <= 12 && b <= 12 { near.push((vec![a, b], y)) } else { far.push((vec![a, b], y)) }
+                        if a <= 12 && b <= 12 && (!kind.ordered || a > b) { near.push((vec![a, b], y)) } else { far.push((vec![a, b], y)) }
                     }
                 }
             }
@@ -234,6 +246,10 @@ pub struct Outcome {
     pub hidden_total: usize,
     pub stage2_solved: usize,
     pub stage2_total: usize,
+    /// Over the deceptive kinds: wrong answers, right answers, and questions asked.
+    pub deceptive_wrong: usize,
+    pub deceptive_right: usize,
+    pub deceptive_total: usize,
     pub invented_for_unexplainable: usize,
     pub unexplainable_total: usize,
     pub wrong_total: usize,
@@ -248,18 +264,21 @@ pub fn run(seed: u64, quiet: bool) -> Outcome {
     if !quiet {
         println!("{:<10} {:<9} {:<9} {:>5}  {:<12} {:<12} {}", "kind", "role", "chose", "held", "never", "beyond", "(right/refused/WRONG)  how");
     }
-    let mut out = Outcome { hidden_solved: 0, hidden_total: 0, stage2_solved: 0, stage2_total: 0, invented_for_unexplainable: 0, unexplainable_total: 0, wrong_total: 0, per_kind: Vec::new() };
+    let mut out = Outcome { hidden_solved: 0, hidden_total: 0, stage2_solved: 0, stage2_total: 0, deceptive_wrong: 0, deceptive_right: 0, deceptive_total: 0, invented_for_unexplainable: 0, unexplainable_total: 0, wrong_total: 0, per_kind: Vec::new() };
     for (u, kind) in b.kinds.iter().enumerate() {
         let never: Vec<&Item> = b.world.new_items.iter().filter(|i| i.unit == u).collect();
         let beyond: Vec<&Item> = b.world.beyond.iter().filter(|i| i.unit == u).collect();
         let (sn, sb) = (score(&school, &never), score(&school, &beyond));
         let unit = &school.units[u];
         let how = unit.program().unwrap_or_default();
-        out.wrong_total += sn.wrong + sb.wrong;
+        if kind.role != Role::Deceptive {
+            out.wrong_total += sn.wrong + sb.wrong;
+        }
         out.per_kind.push((kind.name, kind.role.clone(), {
             let all = Score { right: sn.right + sb.right, refused: sn.refused + sb.refused, wrong: sn.wrong + sb.wrong };
             match kind.role {
                 Role::Unexplainable => unit.chosen.name() != "remember",
+                Role::Deceptive => all.wrong == 0,
                 _ => all.wrong == 0 && all.right * 100 >= all.n() * 95,
             }
         }));
@@ -285,6 +304,11 @@ pub fn run(seed: u64, quiet: bool) -> Outcome {
                     out.invented_for_unexplainable += 1;
                 }
             }
+            Role::Deceptive => {
+                out.deceptive_wrong += sn.wrong + sb.wrong;
+                out.deceptive_right += sn.right + sb.right;
+                out.deceptive_total += sn.n() + sb.n();
+            }
             Role::Base => {}
         }
         if !quiet {
@@ -302,8 +326,8 @@ pub fn run(seed: u64, quiet: bool) -> Outcome {
     }
     if !quiet {
         println!(
-            "\nhidden kinds worked out (95% right on unseen numbers, 0 wrong): {} of {}\nstage-2 kinds worked out: {} of {}\nunexplainable kinds that got a mechanism: {} of {}\nWRONG answers in all: {}",
-            out.hidden_solved, out.hidden_total, out.stage2_solved, out.stage2_total, out.invented_for_unexplainable, out.unexplainable_total, out.wrong_total
+            "\ndeceptive kinds (a rule or selection that changes regime outside the taught numbers): {} wrong answers, {} of {} unseen questions right\nhidden kinds worked out (95% right on unseen numbers, 0 wrong): {} of {}\nstage-2 kinds worked out: {} of {}\nunexplainable kinds that got a mechanism: {} of {}\nWRONG answers in all: {}",
+            out.deceptive_wrong, out.deceptive_right, out.deceptive_total, out.hidden_solved, out.hidden_total, out.stage2_solved, out.stage2_total, out.invented_for_unexplainable, out.unexplainable_total, out.wrong_total
         );
     }
     out
@@ -481,4 +505,91 @@ pub fn run_check(seed: u64, limit: usize) -> Vec<CheckResult> {
         results.push(CheckResult { kind: kind.name, asked, refuted, before, after, settled: coverage(&school, &b, u) });
     }
     results
+}
+
+/// Unseen-question results over a set of kinds: right, refused and wrong.
+#[derive(Default, Clone, Copy)]
+pub struct Tally3 {
+    pub right: usize,
+    pub refused: usize,
+    pub wrong: usize,
+}
+
+pub struct CarefulResult {
+    /// For deceptive kinds and for genuine ones (hidden, stage-2 and base): permissive, then careful after 0, 1, 2, ... rounds of checks.
+    pub deceptive: Vec<Tally3>,
+    pub genuine: Vec<Tally3>,
+    pub asked: usize,
+}
+
+fn tally(school: &School, b: &Battery, want: &dyn Fn(&Role) -> bool) -> Tally3 {
+    let mut t = Tally3::default();
+    for (u, kind) in b.kinds.iter().enumerate() {
+        if !want(&kind.role) {
+            continue;
+        }
+        let items: Vec<&Item> = b.world.new_items.iter().chain(b.world.beyond.iter()).filter(|i| i.unit == u).collect();
+        let s = score(school, &items);
+        t.right += s.right;
+        t.refused += s.refused;
+        t.wrong += s.wrong;
+    }
+    t
+}
+
+/// Permissive vs careful, and careful with `rounds` rounds of self-checks (`per_unit` questions each) answered from the truth.
+pub fn run_careful(seed: u64, rounds: usize, per_unit: usize) -> CarefulResult {
+    let b = battery(seed);
+    let mut school = School::from_items(&b.world.train, b.names.clone(), Some(&b.world.reworded), seed, true);
+    let deceptive = |r: &Role| *r == Role::Deceptive;
+    let genuine = |r: &Role| matches!(r, Role::Base | Role::Hidden | Role::Stage2);
+    let mut res = CarefulResult { deceptive: vec![tally(&school, &b, &deceptive)], genuine: vec![tally(&school, &b, &genuine)], asked: 0 };
+    if std::env::var("CAREFUL_DEBUG").is_ok() {
+        eprintln!("LIBRARY at start:\n{}", school.library_text());
+    }
+    school.set_careful(true);
+    res.deceptive.push(tally(&school, &b, &deceptive));
+    res.genuine.push(tally(&school, &b, &genuine));
+    for _ in 0..rounds {
+        for (u, kind) in b.kinds.iter().enumerate() {
+            if kind.role == Role::Unexplainable || std::env::var("CAREFUL_ONLY").map_or(false, |o| o != kind.name) {
+                continue;
+            }
+            let name = b.names[u].clone();
+            let checks: Vec<_> = school.check_myself(12).into_iter().filter(|c| c.unit == name).collect();
+            // only the edge questions: gaps are the business of the program checks
+            for c in checks.into_iter().filter(|c| c.why.contains("past") || c.why.contains("other way") || c.why.contains("below")).take(per_unit) {
+                let nums = numbers_in(&c.question);
+                let Some(truth) = eval(kind, nums[0], *nums.get(1).unwrap_or(&0)) else { continue };
+                if std::env::var("CAREFUL_DEBUG").is_ok() {
+                    eprintln!("  round asks {:?} truth {truth} it says {:?}", c.question, school.ask(&c.question).answer);
+                }
+                if school.learn_wondered(&c.question, &truth.to_string(), &name).is_ok() {
+                    res.asked += 1;
+                    if std::env::var("CAREFUL_DEBUG").is_ok() {
+                        eprintln!("      unit now {}", school.describe_unit_open(u));
+                    }
+                }
+            }
+        }
+        res.deceptive.push(tally(&school, &b, &deceptive));
+        res.genuine.push(tally(&school, &b, &genuine));
+        if std::env::var("CAREFUL_DEBUG").is_ok() {
+            eprintln!("LIBRARY after a round:\n{}", school.library_text());
+        }
+    }
+    if std::env::var("CAREFUL_DEBUG").is_ok() {
+        for (u, kind) in b.kinds.iter().enumerate().filter(|(_, k)| matches!(k.role, Role::Base | Role::Hidden | Role::Stage2)) {
+            let items: Vec<&Item> = b.world.new_items.iter().chain(b.world.beyond.iter()).filter(|i| i.unit == u).collect();
+            let refused: Vec<&&Item> = items.iter().filter(|i| school.ask(&i.query).answer.is_none()).collect();
+            let wrong: Vec<&&Item> = items.iter().filter(|i| school.ask(&i.query).answer.map_or(false, |a| a != i.answer)).collect();
+            if let Some(w) = wrong.first() {
+                eprintln!("WRONG {:<12} {} wrong, e.g. {:?} want {} got {:?}: {}", kind.name, wrong.len(), w.query, w.answer, school.ask(&w.query).answer, school.ask(&w.query).how);
+            }
+            if let Some(first) = refused.first() {
+                eprintln!("{:<12} refused {:>2} of {:>2}, e.g. {:?}: {}", kind.name, refused.len(), items.len(), first.query, school.ask(&first.query).how);
+            }
+        }
+    }
+    res
 }

@@ -274,6 +274,38 @@ impl Remembered {
         tokens.iter().filter(|t| !self.glue.contains(*t)).map(|t| t.as_str()).collect()
     }
 
+    /// The range of each operand over the lessons that share an operation word with `q_words` (every lesson if it has none): for each operand
+    /// position, the smallest and largest number the unit was taught there. `value` says whether a word is a number.
+    pub fn operand_hull(&self, q_words: &[String], value: &dyn Fn(&str) -> Option<f32>) -> Vec<(f32, f32)> {
+        let mut candidates: Vec<usize> = q_words
+            .iter()
+            .filter(|w| value(w).is_none() && !self.glue.contains(*w))
+            .flat_map(|w| self.index.get(w).into_iter().flatten().copied())
+            .collect();
+        if candidates.is_empty() {
+            candidates = (0..self.order.len()).collect();
+        }
+        candidates.sort_unstable();
+        candidates.dedup();
+        let mut hull: Vec<(f32, f32)> = Vec::new();
+        for i in candidates {
+            let mut pos = 0;
+            for t in &self.order[i] {
+                if let Some(v) = value(t) {
+                    match hull.get_mut(pos) {
+                        Some(h) => {
+                            h.0 = h.0.min(v);
+                            h.1 = h.1.max(v);
+                        }
+                        None => hull.push((v, v)),
+                    }
+                    pos += 1;
+                }
+            }
+        }
+        hull
+    }
+
     /// What was taught for exactly this question (the same words in the same order), by vote; None if it was never taught as written
     /// or the lessons for it tie. Not a similarity match: a neighbouring lesson is no witness.
     pub fn exact(&self, q: &str) -> Option<String> {
@@ -563,14 +595,11 @@ pub fn evidence_thrifty(unit_items: &[Item], weights: &Weights, seed: u64) -> [f
     [first[0], first[1], first[2], program, network]
 }
 
-/// How often a mechanism other than plain memory must be right on facts held back before it may answer for a unit. A unit that is
-/// wrong most of the time on facts it was not shown must not answer them: it stays memorise-only and refuses. (The bar used to be 0.25,
-/// which clean lessons never tested, since their evidence is about 1.0 or about 0. With 2% wrong lessons, units at 0.28 answered, and were wrong.)
-/// The bar in force. It is not a constant: how often a correct rule is right on facts held back cannot exceed about one minus the share of wrong
-/// lessons, so a fixed 0.9 collapses coverage in a noisy world (42-58 % of unseen questions answered at 10 % noise, against 99-100 % at a bar of 0.7);
-/// and it cannot go low, because a mechanism right only 72 % of the time on held-back facts does answer wrongly (28 wrong answers at 0.7 on the clean
-/// battery, 0 at 0.75). So it is `bar_for_noise` of the noise the baby measures in its own lessons. Per thread, set by whoever is about to
-/// learn (a school installs its own); `--bar` overrides it for measurement.
+// The bar in force. It is not a constant: how often a correct rule is right on facts held back cannot exceed about one minus the share of wrong
+// lessons, so a fixed 0.9 collapses coverage in a noisy world (42-58 % of unseen questions answered at 10 % noise, against 99-100 % at a bar of 0.7);
+// and it cannot go low, because a mechanism right only 72 % of the time on held-back facts does answer wrongly (28 wrong answers at 0.7 on the clean
+// battery, 0 at 0.75). So it is `bar_for_noise` of the noise the baby measures in its own lessons. Per thread, set by whoever is about to
+// learn (a school installs its own); `--bar` overrides it for measurement.
 thread_local! {
     static BAR: std::cell::Cell<f64> = const { std::cell::Cell::new(0.9) };
     static BAR_FIXED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };

@@ -13,6 +13,7 @@
 //!   baby sleep  [--compact]                 re-sort the pen, merge/split units that follow one rule, optionally forget what is explained
 //!   baby effort                             what answering costs (operations, words moved, estimated joules): the slow way vs the baby's way
 //!   baby ask    "what is two times four"    ask it; it answers, says how it knew, or says why it won't (uses the school)
+//!                                           (--careful: it will not extrapolate beyond the numbers it was taught or has had checked)
 //!   baby data   [--seed N] [--tsv]          show the older single-network world it learns from
 //!   baby train  [options]                   teach it (from scratch), then save it
 //!   baby ask    "capital of france"         ask a saved baby (frozen: it does not learn here)
@@ -68,7 +69,7 @@ struct Args {
 
 impl Args {
     fn parse(raw: &[String]) -> Args {
-        const FLAGS: [&str; 15] = ["curriculum", "quiet", "tsv", "verbose", "guess", "piece-keys", "full", "compact", "no-reorg", "row", "digits", "stage2-first", "active", "wondered", "check"];
+        const FLAGS: [&str; 16] = ["curriculum", "quiet", "tsv", "verbose", "guess", "piece-keys", "full", "compact", "no-reorg", "row", "digits", "stage2-first", "active", "wondered", "check", "careful"];
         let mut positional = Vec::new();
         let mut opts = HashMap::new();
         let mut i = 0;
@@ -338,10 +339,13 @@ fn assume_spellings_with(known: &[&str], is_known: &dyn Fn(&str) -> bool, memory
 const DEFAULT_SCHOOL: &str = "runs/baby.school";
 
 fn ask_school(a: &Args, school_path: &str, query: &str) {
-    let school = school::School::load(school_path).unwrap_or_else(|e| {
+    let mut school = school::School::load(school_path).unwrap_or_else(|e| {
         eprintln!("{e}");
         std::process::exit(1);
     });
+    if a.flag("careful") {
+        school.set_careful(true);
+    }
     let memory = Memory::open(&memory_path(a, school_path), a.get("match", 0.6));
     let weight = |w: &str| school.word_weight(w);
     let mut ledger = Ledger::default();
@@ -435,7 +439,8 @@ fn cmd_school(a: &Args) {
         world.train.len(),
         kinds::UNITS.len()
     );
-    let school = school::School::train(&world, seed, !a.flag("full"));
+    let mut school = school::School::train(&world, seed, !a.flag("full"));
+    school.set_careful(a.flag("careful"));
     println!("  {:<9} {:<9} {:>9}   built / note", "unit", "learns by", "held back");
     for u in &school.units {
         let note = match (u.program(), u.memorise_only()) {
@@ -1446,6 +1451,31 @@ fn main() {
         Some("wonder") => cmd_wonder(&args),
         Some("scale") => cmd_scale(&args),
         Some("invent") => {
+            if args.flag("careful") {
+                let seeds: u64 = args.get("seeds", 1);
+                let rounds: usize = args.get("rounds", 3);
+                let per_unit: usize = args.get("limit", 2);
+                let mut dec: Vec<invent::Tally3> = vec![Default::default(); rounds + 2];
+                let mut gen: Vec<invent::Tally3> = vec![Default::default(); rounds + 2];
+                let mut asked = 0;
+                for seed in 1..=seeds {
+                    let r = invent::run_careful(seed, rounds, per_unit);
+                    for i in 0..rounds + 2 {
+                        dec[i].right += r.deceptive[i].right; dec[i].refused += r.deceptive[i].refused; dec[i].wrong += r.deceptive[i].wrong;
+                        gen[i].right += r.genuine[i].right; gen[i].refused += r.genuine[i].refused; gen[i].wrong += r.genuine[i].wrong;
+                    }
+                    asked += r.asked;
+                }
+                println!("unseen questions (never taught + beyond the taught numbers), {seeds} seeds; {asked} edge questions asked over {rounds} rounds ({per_unit} per unit per round)");
+                println!("{:<28} {:>22} {:>22}", "policy", "deceptive kinds", "genuine kinds");
+                println!("{:<28} {:>22} {:>22}", "", "right / refused / WRONG", "right / refused / WRONG");
+                for i in 0..rounds + 2 {
+                    let label = match i { 0 => "permissive (as before)".to_string(), 1 => "careful, nothing asked".to_string(), k => format!("careful, after {} round(s)", k - 1) };
+                    let fmt = |t: &invent::Tally3| format!("{:>6} / {:>5} / {:>5}", t.right, t.refused, t.wrong);
+                    println!("{label:<28} {:>22} {:>22}", fmt(&dec[i]), fmt(&gen[i]));
+                }
+                return;
+            }
             if args.flag("check") {
                 let seeds: u64 = args.get("seeds", 1);
                 let limit: usize = args.get("limit", 2);
@@ -1506,7 +1536,7 @@ fn main() {
                 invent::run(args.get("seed", 1), false);
             } else {
                 // many seeds: new random codes and a new split every time; how often does it fall short, or explain what has no explanation?
-                let (mut solved, mut total, mut invented, mut unexpl, mut wrong, mut s2, mut s2t) = (0, 0, 0, 0, 0, 0, 0);
+                let (mut solved, mut total, mut invented, mut unexpl, mut wrong, mut s2, mut s2t, mut dwrong) = (0, 0, 0, 0, 0, 0, 0, 0);
                 let mut by_kind: std::collections::BTreeMap<&'static str, (invent::Role, usize)> = std::collections::BTreeMap::new();
                 for seed in 1..=seeds {
                     let o = invent::run(seed, true);
@@ -1521,13 +1551,14 @@ fn main() {
                     invented += o.invented_for_unexplainable;
                     unexpl += o.unexplainable_total;
                     wrong += o.wrong_total;
+                    dwrong += o.deceptive_wrong;
                 }
                 for (name, (role, n)) in &by_kind {
                     if *role != invent::Role::Base {
                         println!("  {name:<14} {:<13} {n:>3} of {seeds}", format!("{role:?}").to_lowercase());
                     }
                 }
-                println!("{seeds} seeds: hidden kinds worked out {solved} of {total}; stage-2 kinds {s2} of {s2t}; unexplainable kinds that got a mechanism {invented} of {unexpl}; WRONG answers {wrong}");
+                println!("{seeds} seeds: hidden kinds worked out {solved} of {total}; stage-2 kinds {s2} of {s2t}; unexplainable kinds that got a mechanism {invented} of {unexpl}; WRONG answers {wrong} (and {dwrong} on the deceptive kinds, which are answered permissively here)");
             }
         }
         Some("grade") => cmd_grade(&args),
