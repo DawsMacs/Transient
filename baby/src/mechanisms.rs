@@ -703,13 +703,35 @@ pub fn choose_mechanism(ev: &[f64; 5], facts: usize) -> Mech {
     }
 }
 
+/// Below the fact bar a unit is memory; but a program that fits most of the unit's lessons (a partial program) answers only as a labelled
+/// guess that states how sure it is, so it is worth having at a lower bar: if it is the best way to learn the unit and was right on at least
+/// this share of the facts held back.
+pub const GUESS_BAR: f64 = 0.6;
+
+/// `choose_mechanism`, plus the one case it cannot see: the best mechanism is a program that fits only most of the lessons (checked by fitting it).
+pub fn choose_for_unit(ev: &[f64; 5], facts: usize, items: &[Item], weights: &Weights, seed: u64) -> Mech {
+    let m = choose_mechanism(ev, facts);
+    if m == Mech::Remember && facts >= 5 {
+        let pi = Mech::ALL.iter().position(|x| *x == Mech::Program).unwrap();
+        let best = ev.iter().cloned().fold(0.0, f64::max);
+        if ev[pi] >= GUESS_BAR && ev[pi] >= best - 0.02 {
+            if let Fitted::Program(Some(p)) = fit(Mech::Program, items, weights, seed) {
+                if p.partial.is_some() {
+                    return Mech::Program;
+                }
+            }
+        }
+    }
+    m
+}
+
 /// Add what a settled unit learned to the library: the constants in a rule, the program of a built unit.
 pub fn grow_library(lib: &mut Library, state: &Fitted, origin: usize) {
     match state {
         Fitted::Rule(q) => lib.learn_from_terms(&q.terms()),
         // only a settled program is vocabulary: one that still has a competing explanation is a guess, and building on a guess is how a
         // coincidence spreads (the ambiguous digit sum once entered the library and then hid its own ambiguity)
-        Fitted::Program(Some(p)) if p.alts.is_empty() => {
+        Fitted::Program(Some(p)) if p.alts.is_empty() && p.partial.is_none() => {
             lib.learn_program(&p.expr, p.arity(), origin);
         }
         _ => {}
@@ -743,7 +765,7 @@ pub fn learn_items(train: &[Item], n_units: usize, seed: u64, thrifty: bool) -> 
             eprintln!("PROF unit {u} ({} lessons): evidence in {:.2}s -> {:?}", items.len(), t_unit.elapsed().as_secs_f64(), ev.map(|e| (e * 100.0).round()));
         }
         let n_facts = items.iter().map(|i| i.fact).collect::<std::collections::BTreeSet<_>>().len();
-        let chosen = choose_mechanism(&ev, n_facts);
+        let chosen = choose_for_unit(&ev, n_facts, &items, &weights, seed);
         let fitted: Vec<Fitted> = Mech::ALL
             .iter()
             .map(|m| if !thrifty || *m == chosen || *m == Mech::Remember { fit(*m, &items, &weights, seed) } else { Fitted::Program(None) })

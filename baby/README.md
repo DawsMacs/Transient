@@ -43,6 +43,41 @@ cargo test --offline                 # 61 tests, including numerical checks of t
 ./target/release/baby energy         # what one question and one learning step cost, counted
 ```
 
+## First contact with real text: SVAMP word problems (2026-10-21)
+
+Everything before this was tidy synthetic lessons. `baby bridge` (`bridge.rs`) takes question/answer pairs somebody else wrote, says what the baby cannot read at all, teaches a share, grades the rest, and reports right / refused / **WRONG** / labelled-guess right and wrong by kind, why it refused, and every wrong fact by name. Corpus: **SVAMP** (arkilpatel/SVAMP, MIT licence, `SVAMP.json`, 339,970 bytes, 1,000 one-step arithmetic word problems built so that small wording changes flip the operation); downloaded with Daws's approval to scratch space, **not committed**. Kinds come from the file (Addition, Subtraction, Multiplication, Common-Division) and are used only as the units a teacher would give.
+
+**What it can read.** 971 of 1,000 problems (29 set aside: numbers or answers of more than four digits; decimals/negatives were rare). Only 351 have exactly two numbers; 491 have three and 155 four (distractors).
+
+**First run: it learned nothing, and said nothing wrong.** Every unit "remember, 0 % on held-back facts"; all 296 test questions refused (261 "memorise-only unit", 35 "a word it has never met"); **0 wrong**. With units found by `discover` it shattered 971 lessons into 159 units named after story words ("jerry", "storks", "salt"): discovery assumes operation words anchor a unit, and a story has dozens of words that look just as consistent.
+
+**Why, measured before building anything.** (1) On the two-number problems the baby's own language *can* express the relations: `first apart second` explains 152 of 174 subtraction problems, "larger divided by smaller" 90 of 91 division problems; but the program search wanted a program that fits **every** lesson, and real data is a majority plus exceptions (e.g. "458 more girls than boys, 692 girls, how many pupils" typed Subtraction). (2) A program declined any question with a word not seen in that unit, and the same check zeroed the unit's own held-back score. (3) The search gave up if any lesson held more than two numbers.
+
+**What was built: partial programs.** When no exact program exists (and only then, so every earlier result is unchanged by construction), `ProgramRule::fit_partial_with` accepts the smallest expression that explains at least 80 % of at least 24 lessons, if it still passes an MDL test: the bits in the explained lessons minus the cost of naming each exception (log2 of the lessons plus the answer's bits) must exceed the bits of searching. A constant that fits the four-in-five of a primality table that is "no" fails it (a test). A partial program's answers are **always labelled guesses, never facts**, whose stated rate is its held-back score times the unit's **routing precision** (measured by 5-fold routing of its own lessons, only when a partial unit exists). Unmet words no longer block such a guess; a unit whose best way to learn is a partial program is taken at a guess bar of 0.6 instead of the fact bar. It is not library vocabulary, is not edge-checked like an exact rule, and is revisited whenever the library grows.
+
+**Results (two-number problems, 3 seeds, random split; blocks split in brackets).**
+
+| | |
+|---|---|
+| held-back score of the program per kind | subtraction 88 %, addition 94 %, division 92 %, multiplication 70 % (24 lessons) |
+| **told each question's kind (oracle)** | guess right **67-90 %**, guess wrong 5-9 %, nothing 4-24 % |
+| **routed from the words alone** | only **49-62 %** of questions reach the unit of their own kind (the biggest kind alone is 51 %) |
+| labelled guesses made | 61-97 per ~100 questions; right 58-64 % of them; **wrong as a labelled guess 20-35 % of all questions** |
+| stated hit rate vs realised | 55.5 vs 61.9, 55.7 vs 62.2, 64.5 vs 63.9 (blocks: 74.0 vs 64.6, 54.6 vs 58.1) |
+| **answers stated as fact** | **0 right, 0 wrong** (every answer is a guess) |
+| the whole file (three and four numbers included) | still nothing learned: more than 20 % of the lessons hold more than two numbers, so the tolerant search refuses; 0 wrong |
+
+**Reading it honestly.** The way of learning is sound (oracle 67-90 %, and 50 of 51 right in the first trial). The loss is routing: a prototype of three bag-of-words classifiers (naive Bayes with and without class prior, counts of one to five) tops out at 57-65 % on the same split, so this is not a bug in the baby's routing: bag-of-words cannot see the compositional cue that SVAMP is built around. The stated rates are honest in aggregate (within 1-7 points on four of five splits) and over-confident by 9 points on one blocks split. Nothing is stated as a fact, so the WRONG column the project cares about stays at 0, but **20-35 % of all questions get a wrong labelled guess**: that is what it costs to guess at all when you cannot tell which kind a question is.
+
+**Mistakes and surprises (recorded as they happened).**
+- My first idea was that number words in the stories ("one", "two") broke the operand count. Measured: 1 of 351 two-number problems. Not it.
+- `--tsv` was already a boolean flag of another command and swallowed the file name; the option is `--pairs`.
+- A newline inside a JSON string survived into the query; the loader now normalises whitespace.
+- **A regression the long battery caught and the short ones did not:** `baby invent --careful --seeds 3 --rounds 2` read deceptive **309 / 411 / 0** where it had read **521 / 199 / 0**. A bisect (`NO_PARTIAL`, `NO_GUESSBAR` switches, since removed) showed the partial program itself. Cause: `capsum` (a sum capped at 30) used to be a plain-memory "open" unit until the library grew a piece that let `reconsider_open` find the exact program; a partial program counts as a settled program, so it was never revisited and stayed a guess. Fix: a partial program is an open unit. Now 520 / 200 / 0 (one answer differs: `wrapsum` guesses where it used to remember).
+- The 2 % label-noise row of `baby scale` reads never-taught 95.9 % (was 98.0 %): I built the previous commit separately and got the same 95.9 %, so it comes from the staircase reach of the previous step, not from partial programs. I had documented the staircase's cost at 60 and 200 units but had not measured it at 2 % noise.
+
+**Honest limits.** Four kinds from one adversarially built corpus; the kinds are the file's labels; a second look at 3-4-number problems (which numbers matter) has not started; the stated rate uses a single routing precision per unit, not one per question; discovery on real text is unsolved (159 units); nothing was tuned on SVAMP beyond the two thresholds above (0.8 allowance, 0.6 guess bar), which are mine.
+
 ## Careful by default, labelled guesses, and what one correction does (2026-10-21; Daws's call, Vision Entry 7)
 
 **The decision.** Daws chose `careful` as the default, and asked that it not make the baby timid: a scientist guesses, then hypothesis, theory, law; a guess that is wrong and corrected is learning, a *silent* wrong answer is the failure. So the honesty rule became: **WRONG (a fact stated and false) stays at 0; a labelled guess may be wrong; what is measured is whether guesses are calibrated and whether one correction fixes the next mistake.**

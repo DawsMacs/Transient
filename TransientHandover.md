@@ -19,7 +19,7 @@ Order of reading: this file, then `TransientVision.md` (Daws's own words: never 
 
 ## 2. Where the work stands (2026-10-21)
 
-Everything is in `~/Transient/baby/` (pure Rust, **zero dependencies**, builds offline, **92 tests pass**, ~11k lines). Git repo, `origin` = `git@github.com:DawsMacs/Transient.git` (**public**, Daws's global account `DawsMacs`, SSH),
+Everything is in `~/Transient/baby/` (pure Rust, **zero dependencies**, builds offline, **98 tests pass**, ~11k lines). Git repo, `origin` = `git@github.com:DawsMacs/Transient.git` (**public**, Daws's global account `DawsMacs`, SSH),
 branch `main`, **CI green** (`.github/workflows/ci.yml`: build, tests, and the scorecard's WRONG column must be 0.0 %). Licence `AGPL-3.0-or-later` (SPDX headers, `REUSE.toml`, `LICENSE`, `LICENSES/`), DCO not CLA (`CONTRIBUTING.md`).
 All work from this session is committed and pushed (last code commit: "It keeps and states a record of its own guessing; reach is a staircase, not a box").
 
@@ -57,13 +57,13 @@ Daws's framing (Vision Entry 7, his words): a scientist guesses, forms hypothese
 5. **Reach is a staircase, not a box** (`Remembered::uncovered_by`): found because the calibration run stated 4 wrong facts of 9,309 (two confirmed edges vouched for the unchecked corner between them). Cost: scale never-taught 96.94 % to 94.90 % at 60 units (90.99 % at 200), scorecard never-taught 92.7 % to 90.2 %, careful recovery after 2 rounds genuine 4,674 to 4,668; WRONG 0.00 everywhere (clean, 2 %, 5 % noise).
 
 New experiment commands: `baby invent --guesses | --corrections | --calibrate [--seeds K]`.
-6. **The bridge to real text is built, and waits for a corpus** (`baby/src/bridge.rs`, `baby bridge (--svamp SVAMP.json | --pairs FILE.tsv) [--units kind|discover] [--split random|blocks] [--test F] [--seed N]`): loads a corpus (SVAMP's JSON, or `question TAB answer [TAB kind]`), sets aside what the baby cannot read and says why (decimals, signs, numbers over four digits, non-whole answers), teaches a share, grades the rest, and reports right / refused / WRONG / guess right / guess wrong by kind, the reasons it refused, and lists every WRONG answer. Tested only on hand-written fixtures. **Not yet run on real data: the candidate is SVAMP (arkilpatel/SVAMP, MIT, `SVAMP.json`, 339,970 bytes, 1,000 one-step arithmetic word problems with deliberately tricky variations); downloading needs Daws's explicit yes (file, source, size).** Expect it to refuse most of it first (a sentence with a word it never met is refused by design); the interesting results are the reasons. Full story, numbers and mistakes: the first section of `baby/README.md`.
+6. **First contact with real text (SVAMP, 1,000 word problems; `baby bridge --svamp FILE`; the file is in scratch space, not in the repo; re-download from `arkilpatel/SVAMP`, MIT, 339,970 bytes, only with Daws's approval).** First run: learned nothing, 0 wrong. Built **partial programs** (a relation fitting >= 80 % of >= 24 lessons, MDL-checked; answers are always labelled guesses; stated rate = held-back score x measured routing precision). Two-number problems: told the kind, guesses 67-90 % right; routed from words alone only 49-62 % reach the right unit (bag of words tops out at 57-65 % on this corpus, measured offline); 0 right and **0 wrong as facts**, 20-35 % of questions get a wrong *labelled* guess; the whole file (3-4 numbers per problem) still learns nothing. Full numbers, mistakes and limits: the first section of `baby/README.md`. `CAREFUL_TALLY=1 baby invent --careful ...` prints each deceptive kind's final state and tally.
 
 ## 3. How to verify the state in two minutes
 
 ```
 cd ~/Transient
-cargo test --release --offline          # 92 passed (about 13 s)
+cargo test --release --offline          # 98 passed (about 14 s)
 cargo build --release --offline
 ./target/release/baby school            # teaches 13 units (~0.4 s); the honest scorecard (WRONG must be 0.0 % on every row; beyond the taught range now reads 0 % right as fact, 100 % refused, 100 % of them a correct guess)
 ./target/release/baby school --permissive   # (optional) the old showcase; the default is careful
@@ -127,7 +127,8 @@ Daws approved the plan: careful default, guess gear, update after a miss, adapti
 
 1. **Bridge to real data (the biggest open scientific question).** Everything above is synthetic and tidy (made-up words, numbers <= 30, a handful of phrasings). Take a small real factoid corpus and simple word problems and see which of units, mechanisms, discovery, refusal, the noise estimate, guesses and their stated rates survive. Be ready for the first version to fail and learn from how. Decide with Daws which corpus (public, small, licence-clean) before downloading anything.
 2. **The controlled comparison (Vision Entry 2, still owed; GPU to be rented by Daws):** a matched mini transformer vs the baby at three or more sizes on quality at equal joules (measured: RAPL is readable now), retention after new learning, adaptation speed (guess, one correction, repeat mistakes: the new `--corrections` experiment is the baby's side of it), joules per answer, and how quality moves with a small scale-up.
-3. **Make "update after a miss" learn the new regime, not only stop** (one correction currently turns the whole unit's guessing off; coverage returns only with more checks): let a refuting lesson count as must-explain in the program search so `min(a+b, 30)` can be found from a few points; unit- or kind-specific guess records.
+3. **Real text, next barriers in order** (all measured in the first section of `baby/README.md`): (a) which numbers matter when a problem has three or four (the tolerant search currently refuses a unit where more than 20 % of the lessons hold more than two numbers); (b) routing a question to the right kind from compositional cues, not word counts (bag of words caps at ~60 % here); (c) discovery on real text (159 units named after story words); (d) a second corpus, a factoid one (`question TAB answer` loader is ready), so the finding is not about SVAMP alone.
+4. **Make "update after a miss" learn the new regime, not only stop** (one correction currently turns the whole unit's guessing off; coverage returns only with more checks): let a refuting lesson count as must-explain in the program search so `min(a+b, 30)` can be found from a few points; unit- or kind-specific guess records.
 
 **Smaller, concrete OPEN items (each is in the READMEs with its evidence):**
 - Coverage cost of the staircase reach at scale (200 units: never-taught 91 %); the reach check is not counted in the operation ledger; compacted schools (`sleep --compact`) read their reach from the lessons that remain (untested under careful; likely too narrow).

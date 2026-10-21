@@ -586,6 +586,14 @@ pub fn run_careful(seed: u64, rounds: usize, per_unit: usize) -> CarefulResult {
             eprintln!("LIBRARY after a round:\n{}", school.library_text());
         }
     }
+    if std::env::var("CAREFUL_TALLY").is_ok() {
+        for (u, kind) in b.kinds.iter().enumerate().filter(|(_, k)| k.role == Role::Deceptive) {
+            let items: Vec<&Item> = b.world.new_items.iter().chain(b.world.beyond.iter()).filter(|i| i.unit == u).collect();
+            let s = score(&school, &items);
+            eprintln!("STATE {:<12} {}", kind.name, school.describe_unit_open(u));
+            eprintln!("TALLY {:<12} chose {:<9} right {:>3} refused {:>3} wrong {:>3} of {:>3}", kind.name, format!("{:?}", school.units[u].chosen), s.right, s.refused, s.wrong, items.len());
+        }
+    }
     if std::env::var("CAREFUL_DEBUG").is_ok() {
         for (u, kind) in b.kinds.iter().enumerate().filter(|(_, k)| matches!(k.role, Role::Base | Role::Hidden | Role::Stage2)) {
             let items: Vec<&Item> = b.world.new_items.iter().chain(b.world.beyond.iter()).filter(|i| i.unit == u).collect();

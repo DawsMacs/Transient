@@ -15,7 +15,7 @@
 use crate::data::tokenize;
 use crate::kinds::{Item, World, UNITS};
 use crate::ledger::Ledger;
-use crate::mechanisms::{self, choose_mechanism, evidence_thrifty, fit, predict, shape, Fitted, Mech, Remembered, SelectRule, Weights};
+use crate::mechanisms::{self, choose_for_unit, choose_mechanism, evidence_thrifty, fit, predict, shape, Fitted, Mech, Remembered, SelectRule, Weights};
 use crate::model::Model;
 use crate::net::Scratch;
 use crate::program::{Expr, Library, ProgramRule};
@@ -124,6 +124,22 @@ impl Routing {
         r
     }
 
+    /// As `build`, leaving out every fifth lesson from position `fold` (counted across all units): to see how well it routes what it was not shown.
+    fn build_without(units: &[SchoolUnit], line: &NumberLine, fold: usize) -> Routing {
+        let mut r = Routing { rows: HashMap::new(), lessons: Vec::new(), cells: 0 };
+        let mut position = 0usize;
+        for (u, unit) in units.iter().enumerate() {
+            r.ensure_units(u + 1);
+            for l in &unit.lessons {
+                if position % ROUTE_FOLDS != fold {
+                    r.add_lesson(u, &shape(&l.query, line));
+                }
+                position += 1;
+            }
+        }
+        r
+    }
+
     fn ensure_units(&mut self, n: usize) {
         while self.lessons.len() < n {
             self.lessons.push(0);
@@ -173,6 +189,8 @@ impl Routing {
     }
 }
 
+const ROUTE_FOLDS: usize = 5;
+
 /// Units that follow one rule together, and the held-back evidence that says so (mechanism index into `Mech::ALL`, accuracy).
 struct Group {
     units: Vec<usize>,
@@ -198,6 +216,9 @@ pub struct School {
     careful: bool,
     /// Its own record as a guesser: for each distance bucket, (guesses that turned out right, wrong). Learned from the answers it is given.
     guess_record: [(u32, u32); 5],
+    /// For each unit, of the held-back lessons that were routed to it, the share that really belonged there (measured only when some unit is a
+    /// partial program, whose guesses would otherwise state a rate that ignores how often the question is sent to the wrong unit).
+    route_precision: Vec<f32>,
     /// Lessons that fit no unit it knows. They wait here until enough of them gather to form a unit of their own.
     pub pen: Vec<(String, String)>,
 }
@@ -386,7 +407,7 @@ impl School {
         weights.lib = library;
         let routing = Routing::build(&units, &line);
         let library_seen = weights.lib.to_lines();
-        let mut school = School { units, weights, routing, line, route_floor: f32::NEG_INFINITY, seed, library_seen, bar, careful: true, guess_record: [(0, 0); 5], pen: Vec::new() };
+        let mut school = School { units, weights, routing, line, route_floor: f32::NEG_INFINITY, seed, library_seen, bar, careful: true, guess_record: [(0, 0); 5], route_precision: Vec::new(), pen: Vec::new() };
         // How decisive must a question be to count as a recognisable kind? Learned from rewordings of lessons it was taught.
         let own: Vec<&Item> = train.iter().collect();
         let (queries, safety): (Vec<&str>, f32) = match calibration {
@@ -462,10 +483,41 @@ impl School {
         unit.refuted = refuted;
     }
 
+    /// Measure how often a question routed to each unit really belongs there, by routing every lesson with the table built from the others.
+    /// Only when some unit is a partial program; elsewhere routing is exact and precision is taken as 1.
+    fn settle_route_precision(&mut self) {
+        let any_partial = self.units.iter().any(|u| matches!(&u.state, Fitted::Program(Some(p)) if p.partial.is_some()));
+        if !any_partial || self.units.len() < 2 {
+            self.route_precision = Vec::new();
+            return;
+        }
+        let n = self.units.len();
+        let (mut routed, mut hit) = (vec![0u32; n], vec![0u32; n]);
+        for fold in 0..ROUTE_FOLDS {
+            let table = Routing::build_without(&self.units, &self.line, fold);
+            let mut position = 0usize;
+            for (u, unit) in self.units.iter().enumerate() {
+                for l in &unit.lessons {
+                    if position % ROUTE_FOLDS == fold {
+                        let scores = table.scores(&shape(&l.query, &self.line), &mut Ledger::default());
+                        let best = scores.iter().enumerate().fold(0usize, |b, (i, s)| if *s > scores[b] { i } else { b });
+                        routed[best] += 1;
+                        if best == u {
+                            hit[best] += 1;
+                        }
+                    }
+                    position += 1;
+                }
+            }
+        }
+        self.route_precision = (0..n).map(|u| (hit[u] as f32 + 1.0) / (routed[u] as f32 + 2.0)).collect();
+    }
+
     fn settle_all_reach(&mut self) {
         for u in 0..self.units.len() {
             self.settle_reach(u);
         }
+        self.settle_route_precision();
     }
 
     /// (for tests) the cached exceptions and refutations of every unit
@@ -553,6 +605,17 @@ impl School {
     /// Answer, counting the work. With a `NaiveRouter` it does everything the slow way (and skips the "recognisable kind" check,
     /// which belongs to the table), so the two can be compared on cost.
     pub fn ask_with(&self, q: &str, ledger: &mut Ledger, naive: Option<&NaiveRouter>) -> Reply {
+        self.ask_in(q, ledger, naive, None)
+    }
+
+    /// (diagnosis) Answer as if the question had been routed to the unit called `unit`: separates how good a unit's way of learning is from
+    /// how well the baby recognises which unit a question belongs to.
+    pub fn ask_as(&self, q: &str, unit: &str) -> Option<Reply> {
+        let u = self.units.iter().position(|x| x.name == unit)?;
+        Some(self.ask_in(q, &mut Ledger::default(), None, Some(u)))
+    }
+
+    fn ask_in(&self, q: &str, ledger: &mut Ledger, naive: Option<&NaiveRouter>, forced: Option<usize>) -> Reply {
         let tokens = tokenize(q);
         ledger.int_ops += tokens.len() as u64;
         ledger.words_read += tokens.len() as u64;
@@ -562,13 +625,17 @@ impl School {
             return Reply { guess: None, answer: None, unit: None, how: format!("I only read plain whole numbers, not '{bad}' (signs, decimals, fractions, percentages)") };
         }
         // A word it has never met cannot be part of something it knows how to answer.
+        // (Only a partial program, whose answers are guesses anyway, may go on with a word it has never met: it was never required to know every word.)
         let unmet: Vec<String> = tokens.iter().filter(|w| !self.knows(w)).cloned().collect();
-        if !unmet.is_empty() {
-            return Reply { guess: None, answer: None, unit: None, how: format!("I haven't met the word{} {}", if unmet.len() > 1 { "s" } else { "" }, unmet.join(", ")) };
-        }
-        let u = match naive {
-            Some(r) => r.route(&shape(q, &self.line), ledger),
-            None => {
+        let refuse_unmet = || Reply { guess: None, answer: None, unit: None, how: format!("I haven't met the word{} {}", if unmet.len() > 1 { "s" } else { "" }, unmet.join(", ")) };
+        let partial_unit = |u: usize| matches!(&self.units[u].state, Fitted::Program(Some(p)) if p.partial.is_some());
+        let u = match (forced, naive) {
+            (Some(u), _) => u,
+            (None, Some(r)) => r.route(&shape(q, &self.line), ledger),
+            (None, None) => {
+                if !unmet.is_empty() && !self.units.iter().any(|u| matches!(&u.state, Fitted::Program(Some(p)) if p.partial.is_some())) {
+                    return refuse_unmet();
+                }
                 let (u, score) = self.route(q, ledger);
                 if score < self.route_floor {
                     return Reply { guess: None, answer: None, unit: None, how: "no kind of lesson I was taught is like this question".into() };
@@ -576,6 +643,9 @@ impl School {
                 u
             }
         };
+        if !unmet.is_empty() && !partial_unit(u) {
+            return refuse_unmet();
+        }
         let unit = &self.units[u];
         let said = |what: &str| format!("unit '{}', {what}", unit.name);
         let n = tokens.len() as u64;
@@ -630,6 +700,28 @@ impl School {
                         }
                     }
                 };
+                // A program that fits most but not all of what it was taught is never a fact: its answer is a guess, as sure as it was on what it held back.
+                if let (Some(a), Fitted::Program(Some(p))) = (&answer, &unit.state) {
+                    if p.partial.is_some() {
+                        return Reply {
+                            guess: Some(Guess {
+                                answer: a.clone(),
+                                stretch: 0.0,
+                                // right on what it held back, times how often a question sent here really belongs here
+                                rate: unit.best_evidence() as f32 * self.route_precision.get(u).copied().unwrap_or(if self.route_precision.is_empty() { 1.0 } else { 0.5 }),
+                                tried: unit.facts() as u32,
+                            }),
+                            answer: None,
+                            unit: Some(u),
+                            how: said(&format!(
+                                "worked out by an expression that fits most but not all of what I was taught, {} (right on {:.0}% of the facts I held back, and a question sent to this unit really belongs to it {:.0}% of the time): only a guess",
+                                unit.program().unwrap_or_default(),
+                                100.0 * unit.best_evidence(),
+                                100.0 * self.route_precision.get(u).copied().unwrap_or(1.0)
+                            )),
+                        };
+                    }
+                }
                 if self.careful && answer.is_some() && matches!(unit.chosen, Mech::Rule | Mech::Select | Mech::Program) {
                     if let (Some((why, stretch)), Some(a)) = (self.beyond_reach(u, &tokens), answer.as_ref()) {
                         if unit.refuted {
@@ -708,7 +800,7 @@ impl School {
         let items = self.units[u].lessons.clone();
         let ev = evidence_thrifty(&items, &self.weights, self.seed);
         let facts = self.units[u].facts();
-        let chosen = choose_mechanism(&ev, facts);
+        let chosen = choose_for_unit(&ev, facts, &items, &self.weights, self.seed);
         let state = fit(chosen, &items, &self.weights, self.seed);
         let unit = &mut self.units[u];
         unit.evidence = ev;
@@ -811,7 +903,8 @@ impl School {
             let before = self.weights.lib.to_lines();
             for u in 0..self.units.len() {
                 let open = match &self.units[u].state {
-                    Fitted::Program(Some(p)) => programs_too || !p.alts.is_empty(),
+                    // (a partial program is provisional by nature: a piece the library has since gained may let an exact program fit)
+                    Fitted::Program(Some(p)) => programs_too || !p.alts.is_empty() || p.partial.is_some(),
                     _ => self.units[u].chosen == Mech::Remember && self.units[u].facts() >= 5,
                 };
                 // only units of numbers: a unit of facts has no program to find
@@ -819,7 +912,7 @@ impl School {
                     && self.units[u].lessons.iter().all(|l| self.line.value(&l.answer).is_some());
                 // a program that looked settled is only re-fitted if, with today's vocabulary, something else fits the lessons as well
                 // (one search that ends as soon as it has found its fits, far cheaper than fitting the unit again)
-                let settled_program = matches!(&self.units[u].state, Fitted::Program(Some(p)) if p.alts.is_empty());
+                let settled_program = matches!(&self.units[u].state, Fitted::Program(Some(p)) if p.alts.is_empty() && p.partial.is_none());
                 if open && numeric && (!settled_program || ProgramRule::ambiguity(&self.units[u].lessons, &self.weights.lib).is_some()) {
                     self.relearn_unit(u);
                 }
@@ -862,7 +955,7 @@ impl School {
         let mut out = Vec::new();
         for (ui, unit) in self.units.iter().enumerate() {
             let (arity_hint, program_text) = match &unit.state {
-                Fitted::Program(Some(p)) if p.alts.is_empty() => (Some(p.arity()), Some(p.expr.show())),
+                Fitted::Program(Some(p)) if p.alts.is_empty() && p.partial.is_none() => (Some(p.arity()), Some(p.expr.show())),
                 Fitted::Rule(_) | Fitted::Select(_) if unit.best_evidence() >= mechanisms::reliable() => (None, None),
                 _ => continue,
             };
@@ -1591,6 +1684,9 @@ impl School {
                 for e in &p.alts {
                     writeln!(out, "alt {}", e.to_text()).unwrap();
                 }
+                if let Some(share) = p.partial {
+                    writeln!(out, "partial {share}").unwrap();
+                }
             }
             Fitted::Program(None) => writeln!(out, "state none").unwrap(),
             Fitted::Network(m) => {
@@ -1769,6 +1865,10 @@ impl School {
                             rule.alts.push(Expr::from_text(t).ok_or("bad alternative")?);
                         }
                     }
+                    if let Some(share) = it.clone().next().and_then(|l| l.strip_prefix("partial ")).and_then(|x| x.trim().parse::<f32>().ok()) {
+                        it.next();
+                        rule.partial = Some(share);
+                    }
                     Fitted::Program(Some(rule))
                 }
                 ["state", "network", file] => Fitted::Network(Box::new(Model::load(file)?)),
@@ -1781,7 +1881,7 @@ impl School {
         weights.lib = library;
         let routing = Routing::build(&units, &line);
         let library_seen = weights.lib.to_lines();
-        let mut school = School { units, weights, routing, line, route_floor, seed, library_seen, bar, careful, guess_record, pen };
+        let mut school = School { units, weights, routing, line, route_floor, seed, library_seen, bar, careful, guess_record, route_precision: Vec::new(), pen };
         school.settle_all_reach();
         Ok(school)
     }
@@ -2308,6 +2408,57 @@ mod tests {
         }
         let g = t.ask("what is 17 zork 5").guess.expect("still a guess a little further out");
         assert!(g.tried >= 5 && g.rate > 0.8, "tried {} rate {}", g.tried, g.rate);
+    }
+
+    #[test]
+    fn a_relation_that_fits_most_lessons_is_a_partial_program_whose_answers_are_only_ever_guesses() {
+        // 100 lessons: 88 follow "how far apart", 12 follow something else; no exact program exists
+        let mut items = Vec::new();
+        for a in 0..10i64 {
+            for b in 0..10i64 {
+                let exception = (a * 10 + b) % 8 == 3;
+                let ans = if exception { (a + b) * 2 + 1 } else { (a - b).abs() };
+                items.push(Item { unit: 0, fact: items.len(), template: 0, query: format!("what is {a} zork {b}"), answer: ans.to_string() });
+            }
+        }
+        let mut s = School::from_items(&items, vec!["zork".into()], None, 1, true);
+        assert_eq!(s.units[0].chosen, Mech::Program, "a relation that fits most of what it was taught is worth having as a guess");
+        let r = s.ask("what is 3 zork 8");
+        assert!(r.answer.is_none(), "never a fact: {:?}", r.answer);
+        let g = r.guess.expect("a guess");
+        assert_eq!(g.answer, "5");
+        assert!(g.rate > 0.6 && g.rate < 1.0, "it states how sure it is: {}", g.rate);
+        assert!(r.how.contains("only a guess"), "{}", r.how);
+        // a word it never met does not stop a partial program from guessing (it was never required to know every word)
+        assert_eq!(s.ask("what is 3 zork 8 blorp").guess.map(|g| g.answer).as_deref(), Some("5"));
+        // it does not guess with the wrong number of numbers
+        assert!(s.ask("what is 3 zork 8 and 4").guess.is_none());
+        // a partial program is not vocabulary for later units, and is not checked at the edges like an exact one
+        assert!(s.library_text().trim().is_empty() || !s.library_text().contains("apart"), "{}", s.library_text());
+        assert!(s.check_myself(3).is_empty());
+        // it survives saving and loading
+        let dir = std::env::temp_dir().join(format!("partial_program_{}", std::process::id()));
+        let path = dir.join("a.school").to_string_lossy().to_string();
+        s.save(&path).unwrap();
+        let back = School::load(&path).unwrap();
+        let g2 = back.ask("what is 3 zork 8").guess.expect("still a guess after loading");
+        assert_eq!(g2.answer, "5");
+        assert!(back.ask("what is 3 zork 8").answer.is_none());
+        std::fs::remove_dir_all(dir).ok();
+        s.set_careful(false);
+        assert!(s.ask("what is 3 zork 8").answer.is_none(), "permissive does not turn a guess into a fact either");
+    }
+
+    #[test]
+    fn a_table_with_no_relation_is_not_explained_by_a_constant_that_fits_the_common_answer() {
+        // primes below 60: "no" fits four lessons in five, and says nothing
+        let is_prime = |n: u32| n >= 2 && (2..n).all(|d| n % d != 0);
+        let items: Vec<Item> = (0..60u32)
+            .map(|n| Item { unit: 0, fact: n as usize, template: 0, query: format!("what is zork {n}"), answer: if is_prime(n) { "one".into() } else { "zero".into() } })
+            .collect();
+        let s = School::from_items(&items, vec!["zork".into()], None, 1, true);
+        assert_ne!(s.units[0].chosen, Mech::Program, "a constant is not an explanation of primality");
+        assert!(s.ask("what is zork 61").guess.is_none() && s.ask("what is zork 61").answer.is_none());
     }
 
     #[test]

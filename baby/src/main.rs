@@ -5,7 +5,7 @@
 //!   baby school [--seed N] [--out PATH]     TEACH THE BABY (the unified one): units of lessons, each learned the way evidence says
 //!   baby learn  "what is two multiplied by three" six --unit times    keep learning AFTER school: add a lesson, re-work how that unit is learned
 //!   baby discover [--seed N] [--out PATH]   hand it a heap of UNLABELLED lessons: it finds the units itself, then is scored like the others
-//!   baby bridge (--svamp FILE | --pairs FILE) [--units kind|discover] [--split random|blocks] [--test F] [--seed N]   REAL TEXT: what does the baby make of problems somebody else wrote?
+//!   baby bridge (--svamp FILE | --pairs FILE) [--units kind|discover] [--split random|blocks] [--numbers N] [--test F] [--seed N]   REAL TEXT: what does the baby make of problems somebody else wrote?
 //!   baby cost                               what LEARNING costs: time and memory to teach it, a new lesson, a new kind, and to tidy up
 //!   baby scale  [--units N --entities N --facts N --noise F --typos F --seed N --grade N --no-reorg | --sweep 20,60,200]   does learning stay light as the world grows?
 //!   baby invent [--seed N]                  hidden kinds nobody wrote a mechanism for, and kinds that must stay unexplained: what does it work out?
@@ -469,6 +469,9 @@ fn cmd_bridge(a: &Args) {
         std::process::exit(1);
     });
     let total = problems.len();
+    // --numbers N keeps only the problems whose text holds exactly N numbers (0: all): the distractor numbers are a separate difficulty
+    let only: usize = a.get("numbers", 0);
+    let problems: Vec<_> = if only == 0 { problems } else { problems.into_iter().filter(|p| bridge::numbers_in_text(&p.query) == only).collect() };
     let (kept, dropped) = bridge::readable(problems);
     let how = match a.string("split", "random").as_str() {
         "blocks" => bridge::Split::Blocks,

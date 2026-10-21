@@ -204,7 +204,8 @@ pub fn load_svamp(text: &str) -> Result<Vec<Problem>, String> {
             id,
             query: format!("{body} {question}").split_whitespace().collect::<Vec<_>>().join(" "),
             answer: text_of(field(o, "Answer")),
-            kind: text_of(field(o, "Type")).to_lowercase().replace(' ', "-"),
+            // (one problem in SVAMP.json is typed "Common-Divison": a typo in the file, folded into its kind)
+            kind: text_of(field(o, "Type")).to_lowercase().replace(' ', "-").replace("divison", "division"),
         });
     }
     Ok(out)
@@ -249,6 +250,11 @@ pub fn unreadable_reason(p: &Problem) -> Option<&'static str> {
         return Some("an answer of more than four digits");
     }
     None
+}
+
+/// How many numbers a problem's text holds (runs of digits).
+pub fn numbers_in_text(q: &str) -> usize {
+    q.split(|c: char| !c.is_ascii_digit()).filter(|d| !d.is_empty()).count()
 }
 
 /// The problems the baby can be given, and how many were set aside for each reason.
@@ -314,14 +320,29 @@ pub struct Tally {
     pub refused: usize,
     pub guess_right: usize,
     pub guess_wrong: usize,
+    /// the sum of the hit rates it stated for the guesses it made (to compare with how often they were right)
+    pub stated: f64,
+}
+
+/// What would have happened had the baby been told each test problem's kind (the file's) instead of recognising it from the words.
+pub struct Oracle {
+    /// of the test questions, how many it routed to the unit of the file's own kind
+    pub routed_right: usize,
+    pub n: usize,
+    pub right: usize,
+    pub wrong: usize,
+    pub guess_right: usize,
+    pub guess_wrong: usize,
+    pub refused: usize,
 }
 
 pub struct Report {
+    pub oracle: Oracle,
     pub kept: usize,
     pub dropped: Vec<(&'static str, usize)>,
     pub train: usize,
     pub test: usize,
-    pub units: Vec<(String, String, f64)>,
+    pub units: Vec<(String, String, [f64; 5])>,
     pub by_kind: Vec<(String, Tally)>,
     pub all: Tally,
     /// why it refused (the start of its own reason), most common first
@@ -376,12 +397,31 @@ pub fn run(train: &[Problem], test: &[Problem], units: Units, seed: u64) -> Repo
         }
     };
     let school = School::from_items(&items, names, None, seed, true);
+    let mut oracle = Oracle { routed_right: 0, n: 0, right: 0, wrong: 0, guess_right: 0, guess_wrong: 0, refused: 0 };
+    if units == Units::ByKind {
+        for p in test {
+            let Some(r) = school.ask_as(&p.query, &p.kind) else { continue };
+            oracle.n += 1;
+            let (routed, _) = school.route(&p.query, &mut crate::ledger::Ledger::default());
+            if school.units[routed].name == p.kind {
+                oracle.routed_right += 1;
+            }
+            match (&r.answer, &r.guess) {
+                (Some(a), _) if *a == p.answer => oracle.right += 1,
+                (Some(_), _) => oracle.wrong += 1,
+                (None, Some(g)) if g.answer == p.answer => oracle.guess_right += 1,
+                (None, Some(_)) => oracle.guess_wrong += 1,
+                (None, None) => oracle.refused += 1,
+            }
+        }
+    }
     let mut report = Report {
+        oracle,
         kept: train.len() + test.len(),
         dropped: Vec::new(),
         train: train.len(),
         test: test.len(),
-        units: school.units.iter().map(|u| (u.name.clone(), u.chosen.name().to_string(), u.best_evidence())).collect(),
+        units: school.units.iter().map(|u| (u.name.clone(), u.chosen.name().to_string(), u.evidence)).collect(),
         by_kind: Vec::new(),
         all: Tally::default(),
         refusals: Vec::new(),
@@ -400,8 +440,14 @@ pub fn run(train: &[Problem], test: &[Problem], units: Units, seed: u64) -> Repo
             (None, g) => {
                 t.refused = 1;
                 match g {
-                    Some(g) if g.answer == p.answer => t.guess_right = 1,
-                    Some(_) => t.guess_wrong = 1,
+                    Some(g) if g.answer == p.answer => {
+                        t.guess_right = 1;
+                        t.stated = g.rate as f64;
+                    }
+                    Some(g) => {
+                        t.guess_wrong = 1;
+                        t.stated = g.rate as f64;
+                    }
                     None => {}
                 }
                 let class = reason_class(&r.how);
@@ -418,6 +464,7 @@ pub fn run(train: &[Problem], test: &[Problem], units: Units, seed: u64) -> Repo
             tally.refused += t.refused;
             tally.guess_right += t.guess_right;
             tally.guess_wrong += t.guess_wrong;
+            tally.stated += t.stated;
         }
     }
     refusals.sort_by(|a, b| b.1.cmp(&a.1));
@@ -440,9 +487,9 @@ pub fn print(report: &Report, total: usize) {
         println!("    {n:>5}  {why}");
     }
     println!("taught {} problems, tested on {} it was not taught\n", report.train, report.test);
-    println!("  {:<22} {:>8} {:>8} {:>9} {:>8}   {:>20}", "units it formed", "learns by", "held back", "", "", "");
+    println!("  {:<22} {:>9}   held-back score of each way to learn it: {:>9} {:>6} {:>7} {:>8} {:>8}", "units it formed", "learns by", "remember", "rule", "select", "program", "network");
     for (name, how, ev) in report.units.iter().take(12) {
-        println!("  {name:<22} {how:>8} {:>7.0}%", 100.0 * ev);
+        println!("  {name:<22} {how:>9}   {:>46.0}% {:>5.0}% {:>6.0}% {:>7.0}% {:>7.0}%", 100.0 * ev[0], 100.0 * ev[1], 100.0 * ev[2], 100.0 * ev[3], 100.0 * ev[4]);
     }
     if report.units.len() > 12 {
         println!("  ... and {} more", report.units.len() - 12);
@@ -457,6 +504,22 @@ pub fn print(report: &Report, total: usize) {
         row(k, t);
     }
     row("ALL", &report.all);
+    let made = report.all.guess_right + report.all.guess_wrong;
+    if made > 0 {
+        println!(
+            "\nit made {made} labelled guesses; the hit rate it stated for them averaged {:.1}%, and {:.1}% were right",
+            100.0 * report.all.stated / made as f64,
+            100.0 * report.all.guess_right as f64 / made as f64
+        );
+    }
+    if report.oracle.n > 0 {
+        let o = &report.oracle;
+        let p = |x: usize| 100.0 * x as f64 / o.n as f64;
+        println!(
+            "\nIF IT WERE TOLD EACH QUESTION'S KIND (the oracle: isolates the way of learning from recognising the kind), {} questions: right as fact {:.1}%, WRONG as fact {:.1}%, guess right {:.1}%, guess wrong {:.1}%, nothing {:.1}%\nrouting alone: {:.1}% of the questions went to the unit of their own kind",
+            o.n, p(o.right), p(o.wrong), p(o.guess_right), p(o.guess_wrong), p(o.refused), p(o.routed_right)
+        );
+    }
     println!("\nwhy it refused:");
     for (why, n) in &report.refusals {
         println!("    {n:>5}  {why}");

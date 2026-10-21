@@ -13,7 +13,7 @@
 *adaptive learning*: a system that keeps learning while it is used, decides for itself *how* to learn each kind of thing, and is
 measured by what it costs (operations, memory, estimated joules) rather than by parameter count alone.
 
-The current artefact is `baby/`: about 11k lines of Rust, **no dependencies**, builds offline, 92 tests. It is a research prototype
+The current artefact is `baby/`: about 11k lines of Rust, **no dependencies**, builds offline, 98 tests. It is a research prototype
 evaluated on a synthetic curriculum. It is not a language model and makes no claim to be one yet.
 
 > **Status:** active research. Every number below comes from tidy synthetic lessons and *estimated* energy. Read
@@ -73,7 +73,7 @@ The scorecard reports **WRONG separately from refused**: a refusal is an accepta
 Requires a stable Rust toolchain (edition 2021). No other dependencies, no network.
 
 ```bash
-cargo test --release --offline         # 92 tests (about 13 s)
+cargo test --release --offline         # 98 tests (about 13 s)
 cargo build --release --offline
 ./target/release/baby school           # teach 13 units (~4 s), print how each was learned and the scorecard
 ./target/release/baby ask "how far apart are two and nine"   # answers, and says how it knew
@@ -125,7 +125,8 @@ All under `baby/src/`.
 - **A rule that changes regime outside what it was taught (a sum that saturates, one that wraps) is confidently wrong if allowed to extrapolate.** Since 2026-10-21 the baby is *careful by default*: it states as fact only what is inside the range it was taught or has had checked; `--permissive` turns that off (see `baby/README.md`).
 - **Only label noise was tested** (2 % and 5 % of taught answers wrong, up to 200 units). Where most of one fact's own phrasings are wrong nothing can know, and at 5 % a few such answers remain;
   other noise kinds (ambiguous entities, real misspellings, noise correlated across phrasings) were not tested.
-- Nothing here yet shows behaviour on real text, at millions of lessons, or at "frontier" quality. Those are the open questions the
+- **First contact with real text (2026-10-21, SVAMP word problems):** nothing is stated as a wrong fact, but the baby only guesses, and 20-35 % of questions get a wrong *labelled* guess, because it cannot tell which operation a story means from its words (told the kind, its guesses are 67-90 % right; routed from the words, 49-62 %). Problems with three or four numbers still learn nothing. See `baby/README.md`.
+- Nothing here yet shows behaviour at millions of lessons, or at "frontier" quality. Those are the open questions the
   roadmap exists to answer.
 
 ## Roadmap
