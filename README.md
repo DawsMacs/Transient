@@ -12,7 +12,7 @@
 *adaptive learning*: a system that keeps learning while it is used, decides for itself *how* to learn each kind of thing, and is
 measured by what it costs (operations, memory, estimated joules) rather than by parameter count alone.
 
-The current artefact is `baby/`: about 8k lines of Rust, **no dependencies**, builds offline, 80 tests. It is a research prototype
+The current artefact is `baby/`: about 8k lines of Rust, **no dependencies**, builds offline, 82 tests. It is a research prototype
 evaluated on a synthetic curriculum. It is not a language model and makes no claim to be one yet.
 
 > **Status:** active research. Every number below comes from tidy synthetic lessons and *estimated* energy. Read
@@ -67,7 +67,7 @@ The scorecard reports **WRONG separately from refused**: a refusal is an accepta
 Requires a stable Rust toolchain (edition 2021). No other dependencies, no network.
 
 ```bash
-cargo test --release --offline         # 80 tests (about 15 s)
+cargo test --release --offline         # 82 tests (about 15 s)
 cargo build --release --offline
 ./target/release/baby school           # teach 13 units (~4 s), print how each was learned and the scorecard
 ./target/release/baby ask "how far apart are two and nine"   # answers, and says how it knew
@@ -76,7 +76,7 @@ cargo build --release --offline
 ./target/release/baby cost             # time and memory of learning
 ./target/release/baby scale --sweep 20,60,200,600   # does learning stay light as the world grows? (about 5 min)
 ./target/release/baby invent --seeds 20            # can it work out kinds of lesson nobody wrote a mechanism for? (about 8 min)
-./target/release/baby wonder                       # what would it like to be told? (questions whose answers would settle between explanations)
+./target/release/baby wonder [--check]             # what would it like to be told? (--check: where would it test its own explanations?)
 ```
 
 If the scorecard's WRONG column is ever above 0.0 %, or a refusal battery in `school.rs` starts answering, treat it as a

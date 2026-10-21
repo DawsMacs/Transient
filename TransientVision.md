@@ -332,6 +332,8 @@ description than one with a single fixed learner.
 
 - **2026-10-20** It asks what it wants to know (Entry 5: the learning process adapts; Entry 2: it chooses what to look at): when its lessons leave several explanations equally good, the baby now keeps them, answers only where they agree, and can name the number that would tell them apart (`baby wonder`). With digit sum taught on 0-15, one question took it from 88.9 % to 100 % of unseen questions where random numbers needed three; it asked nothing about random codes, primes or xor (0 wrong). Found on the way: an ambiguous guess had entered its vocabulary and hidden its own ambiguity, and units left open were never revisited when its vocabulary grew. Honest limits: a simulated, always-right teacher; numeric programs only; questions chosen by disagreement, not by expected information.
 
+- **2026-10-21** Adapting effort, reviewing itself, checking itself: the baby no longer spends cross-validation effort on a unit whose whole-data search found nothing (battery 23.5 s -> 14 s, identical results), reviews settled-looking programs when its vocabulary changes (stage-2 kinds 61 -> 66 of 72), never lets a unit be explained by vocabulary that unit contributed itself (a circle found by a test), and can name where it would check its own explanation. The self-check found nothing to refute across 105 units (87 at 5 % noise), so it is insurance, not a measured gain. Honest limit: adapting its own knobs (folds, bars, budgets) from measurement is still open.
+
 ---
 
 ## More to come

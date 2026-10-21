@@ -204,7 +204,11 @@ pub struct Library {
 pub struct Func {
     pub expr: Expr,
     pub arity: usize,
+    /// The unit it was learned from (`NO_ORIGIN` if none): a unit is never explained by vocabulary it contributed itself.
+    pub origin: usize,
 }
+
+pub const NO_ORIGIN: usize = usize::MAX;
 
 impl PartialEq for Library {
     fn eq(&self, other: &Library) -> bool {
@@ -216,6 +220,11 @@ const MAX_CONSTS: usize = 6;
 const MAX_FUNCS: usize = 8;
 
 impl Library {
+    /// The library as a unit may use it: without what that unit itself contributed.
+    pub fn without(&self, origin: usize) -> Library {
+        Library { consts: self.consts.clone(), funcs: self.funcs.iter().filter(|f| f.origin != origin).cloned().collect() }
+    }
+
     pub fn is_empty(&self) -> bool {
         self.consts.is_empty() && self.funcs.is_empty()
     }
@@ -248,7 +257,7 @@ impl Library {
     /// A program it built, as something to build with. Only if it is a bigger step than a single operation on the numbers themselves
     /// (`first x second` is already one piece; `first div 10` is not, it carries a ten), and only if it does something no function it
     /// already has does.
-    pub fn learn_program(&mut self, expr: &Expr, arity: usize) -> bool {
+    pub fn learn_program(&mut self, expr: &Expr, arity: usize, origin: usize) -> bool {
         let variable = |e: &Expr| matches!(e, Expr::A | Expr::B);
         if expr.size() < 3 || matches!(expr, Expr::Bin(_, l, r) if variable(l) && variable(r)) {
             return false;
@@ -260,7 +269,7 @@ impl Library {
         if self.funcs.len() >= MAX_FUNCS {
             self.funcs.remove(0);
         }
-        self.funcs.push(Func { expr: expr.clone(), arity });
+        self.funcs.push(Func { expr: expr.clone(), arity, origin });
         true
     }
 
@@ -268,7 +277,7 @@ impl Library {
     pub fn to_lines(&self) -> String {
         let mut out = format!("library {}\n", self.consts.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(" "));
         for f in &self.funcs {
-            out.push_str(&format!("func {} {}\n", f.arity, f.expr.to_text()));
+            out.push_str(&format!("func {} {} {}\n", f.arity, if f.origin == NO_ORIGIN { -1 } else { f.origin as i64 }, f.expr.to_text()));
         }
         out
     }
@@ -281,8 +290,10 @@ impl Library {
         let mut lib = Library { consts, funcs: Vec::new() };
         while let Some(l) = lines.peek() {
             let Some(rest) = l.strip_prefix("func ") else { break };
-            let (arity, text) = rest.split_once(' ')?;
-            lib.funcs.push(Func { expr: Expr::from_text(text)?, arity: arity.parse().ok()? });
+            let mut parts = rest.splitn(3, ' ');
+            let (arity, origin, text) = (parts.next()?, parts.next()?, parts.next()?);
+            let origin: i64 = origin.parse().ok()?;
+            lib.funcs.push(Func { expr: Expr::from_text(text)?, arity: arity.parse().ok()?, origin: if origin < 0 { NO_ORIGIN } else { origin as usize } });
             lines.next();
         }
         Some(lib)
@@ -359,7 +370,8 @@ impl ProgramRule {
     /// The program for these lessons, with the other smallest explanations that also fit kept as `alts` (answers are given only where
     /// they all agree). More than a handful of different explanations means the lessons say next to nothing: no program then.
     pub fn fit_trusted_with(items: &[Item], lib: &Library) -> Option<ProgramRule> {
-        let (found, hits, exprs) = ProgramRule::search(items, &OPS, true, lib);
+        let own = items.first().map_or(NO_ORIGIN, |i| i.unit);
+        let (found, hits, exprs) = ProgramRule::search(items, &OPS, true, &lib.without(own));
         let mut rule = found?;
         if hits == 0 || hits > MAX_AMBIGUITY {
             return None;
@@ -375,7 +387,8 @@ impl ProgramRule {
     }
 
     pub fn fit_unique_with(items: &[Item], lib: &Library) -> Option<ProgramRule> {
-        let (found, hits, _) = ProgramRule::search(items, &OPS, true, lib);
+        let own = items.first().map_or(NO_ORIGIN, |i| i.unit);
+        let (found, hits, _) = ProgramRule::search(items, &OPS, true, &lib.without(own));
         if hits != 1 {
             return None;
         }
@@ -585,7 +598,8 @@ impl ProgramRule {
     /// settle it? Returns the explanations that fit, and the questions that tell them apart: whole numbers nobody taught, best first (the
     /// ones on which the explanations give the most different answers, then the smallest numbers). None if one explanation fits, or none.
     pub fn ambiguity(items: &[Item], lib: &Library) -> Option<Ambiguity> {
-        let (found, behaviours, hits) = ProgramRule::search(items, &OPS, true, lib);
+        let own = items.first().map_or(NO_ORIGIN, |i| i.unit);
+        let (found, behaviours, hits) = ProgramRule::search(items, &OPS, true, &lib.without(own));
         let rule = found?;
         if behaviours < 2 {
             return None;
@@ -699,7 +713,7 @@ mod tests {
         let tens = ProgramRule::fit_unique_with(&items.iter().map(|i| Item { answer: (i.fact / 10).to_string(), ..i.clone() }).collect::<Vec<_>>(), &lib).expect("tens");
         assert_eq!(tens.expr.show(), "(first div 10)");
         let units = ProgramRule::fit_unique_with(&items.iter().map(|i| Item { answer: (i.fact % 10).to_string(), ..i.clone() }).collect::<Vec<_>>(), &lib).expect("units");
-        assert!(lib.learn_program(&tens.expr, 1) && lib.learn_program(&units.expr, 1));
+        assert!(lib.learn_program(&tens.expr, 1, NO_ORIGIN) && lib.learn_program(&units.expr, 1, NO_ORIGIN));
         let digit_sum = ProgramRule::fit_unique_with(&items, &lib).expect("digit sum from tens and units");
         assert_eq!(digit_sum.predict("what is zork 29", &|_| false).as_deref(), Some("11"));
         // and when the numbers taught leave the answer open it declines: up to 15, "(first + first div 10) mod 10" fits as well
@@ -713,8 +727,8 @@ mod tests {
         lib.learn_constant(10);
         let tens_items: Vec<Item> = (0..=25).map(|a: i64| Item { unit: 0, fact: a as usize, template: 0, query: format!("what is zork {a}"), answer: (a / 10).to_string() }).collect();
         let units_items: Vec<Item> = (0..=25).map(|a: i64| Item { unit: 0, fact: a as usize, template: 0, query: format!("what is zork {a}"), answer: (a % 10).to_string() }).collect();
-        lib.learn_program(&ProgramRule::fit_unique_with(&tens_items, &lib).unwrap().expr, 1);
-        lib.learn_program(&ProgramRule::fit_unique_with(&units_items, &lib).unwrap().expr, 1);
+        lib.learn_program(&ProgramRule::fit_unique_with(&tens_items, &lib).unwrap().expr, 1, NO_ORIGIN);
+        lib.learn_program(&ProgramRule::fit_unique_with(&units_items, &lib).unwrap().expr, 1, NO_ORIGIN);
         // digit sum taught on 0-15 only: "tens + units" and "(first + tens) mod 10" fit every lesson and part ways at 19
         let items: Vec<Item> = (0..=15).map(|a: i64| Item { unit: 0, fact: a as usize, template: 0, query: format!("what is zork {a}"), answer: (a / 10 + a % 10).to_string() }).collect();
         assert!(ProgramRule::fit_unique_with(&items, &lib).is_none());

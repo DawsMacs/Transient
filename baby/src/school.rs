@@ -357,6 +357,9 @@ impl School {
         // Keep 99% recognisable (the floor is a dial: lower recognises more, risks more).
         let p1 = best[(best.len() as f32 * 0.01) as usize];
         school.route_floor = if calibration.is_some() { p1 - safety * p1.abs() } else { p1 * safety };
+        // Now that every unit has been learned, and with it the vocabulary the later ones added, look again at the program units.
+        school.library_seen = String::new();
+        school.review_programs();
         school
     }
 
@@ -548,7 +551,7 @@ impl School {
         unit.remember = Remembered::from_items(&items);
         unit.state = state;
         if ev[Mech::ALL.iter().position(|m| *m == chosen).unwrap()] >= mechanisms::RELIABLE {
-            mechanisms::grow_library(&mut self.weights.lib, &self.units[u].state);
+            mechanisms::grow_library(&mut self.weights.lib, &self.units[u].state, u);
         }
     }
 
@@ -600,32 +603,12 @@ impl School {
             }
             let Some(amb) = ProgramRule::ambiguity(&unit.lessons, &self.weights.lib) else { continue };
             let Some(template) = unit.lessons.iter().find(|l| tokenize(&l.query).iter().filter(|w| self.line.value(w).is_some()).count() == amb.arity) else { continue };
-            let digits = crate::quantity::uses_digits(&template.query);
             for &(a, b) in amb.inputs.iter().take(2) {
-                let mut numbers = vec![a, b].into_iter();
-                let mut words = Vec::new();
-                let mut possible = true;
-                for t in tokenize(&template.query) {
-                    if self.line.value(&t).is_some() {
-                        let v = numbers.next().unwrap_or(0.0);
-                        if digits {
-                            words.push((v as i64).to_string());
-                        } else if let Some(w) = crate::data::NUM.get(v as usize).filter(|_| v <= 10.0) {
-                            words.push(w.to_string());
-                        } else {
-                            possible = false;
-                        }
-                    } else {
-                        words.push(t);
-                    }
-                }
-                if !possible {
-                    continue;
-                }
+                let Some(question) = self.numeric_question(&template.query, a, b) else { continue };
                 let says: Vec<String> = amb.hypotheses.iter().map(|e| format!("{} says {}", e.show(), e.eval(a, b))).collect();
                 out.push(Wonder {
                     unit: unit.name.clone(),
-                    question: words.join(" "),
+                    question,
                     why: format!("what I was taught fits {} explanations that part ways here: {}", amb.hypotheses.len(), says.join("; ")),
                 });
             }
@@ -642,6 +625,16 @@ impl School {
     /// that its vocabulary may have grown: a ten, or a program learned since, can settle what could not be settled before. Repeats while the
     /// library keeps changing (a unit settled this way can be the piece another needed).
     pub fn reconsider_open(&mut self) {
+        self.reconsider(false)
+    }
+
+    /// As `reconsider_open`, and also the program units that look settled: they may have been fitted before the vocabulary that would have
+    /// given them a competing explanation existed (a digit sum explained by "mod 9" before it had a tens digit and a units digit).
+    pub fn review_programs(&mut self) {
+        self.reconsider(true)
+    }
+
+    fn reconsider(&mut self, programs_too: bool) {
         if !self.library_changed() {
             return;
         }
@@ -649,13 +642,16 @@ impl School {
             let before = self.weights.lib.to_lines();
             for u in 0..self.units.len() {
                 let open = match &self.units[u].state {
-                    Fitted::Program(Some(p)) => !p.alts.is_empty(),
+                    Fitted::Program(Some(p)) => programs_too || !p.alts.is_empty(),
                     _ => self.units[u].chosen == Mech::Remember && self.units[u].facts() >= 5,
                 };
                 // only units of numbers: a unit of facts has no program to find
                 let numeric = self.units[u].lessons.iter().any(|l| tokenize(&l.query).iter().any(|w| self.line.value(w).is_some()))
                     && self.units[u].lessons.iter().all(|l| self.line.value(&l.answer).is_some());
-                if open && numeric {
+                // a program that looked settled is only re-fitted if, with today's vocabulary, something else fits the lessons as well
+                // (one search that ends as soon as it has found its fits, far cheaper than fitting the unit again)
+                let settled_program = matches!(&self.units[u].state, Fitted::Program(Some(p)) if p.alts.is_empty());
+                if open && numeric && (!settled_program || ProgramRule::ambiguity(&self.units[u].lessons, &self.weights.lib).is_some()) {
                     self.relearn_unit(u);
                 }
             }
@@ -666,6 +662,80 @@ impl School {
         self.library_seen = self.weights.lib.to_lines();
     }
 
+    /// The unit's own phrasing (`template`, one of its lessons) with its numbers replaced by `a` and `b`; in digits if the lesson used digits,
+    /// else in words (only possible up to ten).
+    fn numeric_question(&self, template: &str, a: f32, b: f32) -> Option<String> {
+        let digits = crate::quantity::uses_digits(template);
+        let mut numbers = vec![a, b].into_iter();
+        let mut words = Vec::new();
+        for t in tokenize(template) {
+            if self.line.value(&t).is_some() {
+                let v = numbers.next().unwrap_or(0.0);
+                if digits {
+                    words.push((v as i64).to_string());
+                } else {
+                    words.push(crate::data::NUM.get(v as usize).filter(|_| v <= 10.0)?.to_string());
+                }
+            } else {
+                words.push(t);
+            }
+        }
+        Some(words.join(" "))
+    }
+
+    /// Where would it like to check itself? For a unit that holds ONE explanation, the numbers it was never told about inside the range it was
+    /// taught (a gap) and just past it: the places its explanation has been tested least, and where a coincidence would show itself. (An
+    /// explanation that fits every lesson can still be wrong at a number nobody taught.) `limit` questions per unit at most.
+    pub fn check_myself(&self, limit: usize) -> Vec<Wonder> {
+        let mut out = Vec::new();
+        for unit in &self.units {
+            let Fitted::Program(Some(p)) = &unit.state else { continue };
+            if !p.alts.is_empty() || unit.facts() < 5 {
+                continue;
+            }
+            let arity = p.arity();
+            let Some(template) = unit.lessons.iter().find(|l| tokenize(&l.query).iter().filter(|w| self.line.value(w).is_some()).count() == arity) else { continue };
+            let taught: std::collections::HashSet<(i64, i64)> = unit
+                .lessons
+                .iter()
+                .map(|l| {
+                    let n: Vec<f32> = tokenize(&l.query).iter().filter_map(|w| self.line.value(w)).collect();
+                    (n[0] as i64, *n.get(1).unwrap_or(&0.0) as i64)
+                })
+                .collect();
+            let hi_a = taught.iter().map(|t| t.0).max().unwrap_or(0);
+            let lo_a = taught.iter().map(|t| t.0).min().unwrap_or(0);
+            let hi_b = taught.iter().map(|t| t.1).max().unwrap_or(0);
+            let mut candidates: Vec<(i64, i64)> = Vec::new();
+            if arity == 1 {
+                candidates.extend((lo_a..=hi_a).filter(|a| !taught.contains(&(*a, 0))).map(|a| (a, 0)));
+                candidates.push((hi_a + 1, 0));
+            } else {
+                // the smallest untaught pairs inside the taught range, then one just past
+                for a in lo_a..=hi_a {
+                    for b in 0..=hi_b {
+                        if !taught.contains(&(a, b)) {
+                            candidates.push((a, b));
+                        }
+                    }
+                }
+                candidates.sort_by_key(|c| c.0 + c.1);
+                candidates.push((hi_a + 1, hi_b));
+            }
+            candidates.retain(|c| c.0 <= 30 && c.1 <= 30);
+            for &(a, b) in candidates.iter().take(limit) {
+                if let Some(question) = self.numeric_question(&template.query, a as f32, b as f32) {
+                    out.push(Wonder {
+                        unit: unit.name.clone(),
+                        question,
+                        why: format!("I explain this unit with {} and it fits everything I was taught, but nobody has told me about this number", p.expr.show()),
+                    });
+                }
+            }
+        }
+        out
+    }
+
     /// Take the answer to a question it wondered about, and think again about how that unit is learned, now: a unit that can only memorise is
     /// otherwise looked at again only every tenth new fact.
     pub fn learn_wondered(&mut self, query: &str, answer: &str, unit: &str) -> Result<Learned, String> {
@@ -673,7 +743,8 @@ impl School {
         if let Some(u) = self.units.iter().position(|x| x.name == unit) {
             self.relearn_unit(u);
         }
-        self.reconsider_open();
+        // a change in vocabulary can give a settled-looking program a rival: ask each one, cheaply, whether it is still the only explanation
+        self.review_programs();
         Ok(learned)
     }
 
@@ -1640,8 +1711,8 @@ mod tests {
         let mut s = School::from_items(&items, vec!["zork".into()], None, 1, true);
         // what it would have learned from earlier kinds: a ten, and the tens and units digits as pieces
         s.weights.lib.learn_constant(10);
-        s.weights.lib.learn_program(&crate::program::Expr::from_text("(div A K10)").unwrap(), 1);
-        s.weights.lib.learn_program(&crate::program::Expr::from_text("(mod A K10)").unwrap(), 1);
+        s.weights.lib.learn_program(&crate::program::Expr::from_text("(div A K10)").unwrap(), 1, crate::program::NO_ORIGIN);
+        s.weights.lib.learn_program(&crate::program::Expr::from_text("(mod A K10)").unwrap(), 1, crate::program::NO_ORIGIN);
         s.relearn_unit(0);
         s
     }
@@ -1668,14 +1739,60 @@ mod tests {
     }
 
     #[test]
+    fn a_unit_with_one_explanation_checks_it_where_it_was_tested_least_and_corrects_itself() {
+        // digit sum taught on 0-15 without 8 and 9, and knowing only a ten: "first mod 9" is the one smallest explanation, and it is wrong at 9
+        let items: Vec<Item> = (0..=15i64).filter(|a| *a != 8 && *a != 9).map(|a| Item { unit: 0, fact: a as usize, template: 0, query: format!("what is zork {a}"), answer: (a / 10 + a % 10).to_string() }).collect();
+        let mut s = School::from_items(&items, vec!["zork".into()], None, 1, true);
+        s.weights.lib.learn_constant(10);
+        s.relearn_unit(0);
+        assert_eq!(s.units[0].chosen, Mech::Program);
+        assert!(s.wonder().is_empty(), "one explanation: nothing competes, so nothing to ask about");
+        assert_eq!(s.ask("what is zork 9").answer.as_deref(), Some("0"), "and it is confidently wrong at the number nobody taught");
+        let checks = s.check_myself(3);
+        let asked: Vec<&str> = checks.iter().map(|c| c.question.as_str()).collect();
+        assert_eq!(asked, ["what is zork 8", "what is zork 9", "what is zork 16"], "the gaps inside what it was taught, then just past it");
+        // told 8 it agrees; told 9 it is refuted and refits
+        s.learn_wondered("what is zork 8", "8", "zork").unwrap();
+        assert_eq!(s.ask("what is zork 9").answer.as_deref(), Some("0"));
+        s.learn_wondered("what is zork 9", "9", "zork").unwrap();
+        assert_eq!(s.ask("what is zork 9").answer.as_deref(), Some("9"));
+        // refuted, it no longer says 0 at 9 (asserted above), whatever it now holds...
+        // ...and with pieces for the tens and the units, which it would have from other kinds, it can see the rivals
+        s.weights.lib.learn_program(&crate::program::Expr::from_text("(div A K10)").unwrap(), 1, crate::program::NO_ORIGIN);
+        s.weights.lib.learn_program(&crate::program::Expr::from_text("(mod A K10)").unwrap(), 1, crate::program::NO_ORIGIN);
+        s.reconsider_open();
+        // now two explanations fit (tens + units, and (first + tens) mod 10): it declines at 29 and wonders about 19
+        let w = s.wonder();
+        assert!(w.iter().any(|w| w.question == "what is zork 19"), "{:?}", w.iter().map(|w| &w.question).collect::<Vec<_>>());
+        s.learn_wondered("what is zork 19", "10", "zork").unwrap();
+        assert_eq!(s.ask("what is zork 29").answer.as_deref(), Some("11"), "two questions of its own choosing, and it has the right explanation");
+    }
+
+    #[test]
+    fn a_program_that_looked_settled_is_reviewed_when_later_vocabulary_gives_it_a_rival() {
+        // fitted knowing only a ten: "first mod 9" is the one smallest explanation of a digit sum taught on 0-15 (8 and 9 missing)
+        let items: Vec<Item> = (0..=15i64).filter(|a| *a != 8 && *a != 9).map(|a| Item { unit: 0, fact: a as usize, template: 0, query: format!("what is zork {a}"), answer: (a / 10 + a % 10).to_string() }).collect();
+        let mut s = School::from_items(&items, vec!["zork".into()], None, 1, true);
+        s.weights.lib.learn_constant(10);
+        s.relearn_unit(0);
+        assert!(matches!(&s.units[0].state, Fitted::Program(Some(p)) if p.alts.is_empty()), "one explanation, as far as it knows");
+        // later kinds teach it the tens digit and the units digit; with them a rival fits just as well
+        s.weights.lib.learn_program(&crate::program::Expr::from_text("(div A K10)").unwrap(), 1, crate::program::NO_ORIGIN);
+        s.weights.lib.learn_program(&crate::program::Expr::from_text("(mod A K10)").unwrap(), 1, crate::program::NO_ORIGIN);
+        s.review_programs();
+        assert!(matches!(&s.units[0].state, Fitted::Program(Some(p)) if !p.alts.is_empty()), "now it knows it has competing explanations: {} ev {:?}", s.describe_unit_open(0), s.units[0].evidence);
+        assert!(s.ask("what is zork 9").answer.is_none(), "and no longer claims 0 at 9");
+    }
+
+    #[test]
     fn a_unit_left_open_is_reconsidered_when_its_vocabulary_grows() {
         let items: Vec<Item> = (0..=25i64).filter(|a| *a != 8 && *a != 22).map(|a| Item { unit: 0, fact: a as usize, template: 0, query: format!("what is zork {a}"), answer: (a / 10 + a % 10).to_string() }).collect();
         let mut s = School::from_items(&items, vec!["zork".into()], None, 1, true);
         assert_eq!(s.units[0].chosen, Mech::Remember, "without a ten it cannot build this");
         assert!(s.ask("what is zork 29").answer.is_none());
         s.weights.lib.learn_constant(10);
-        s.weights.lib.learn_program(&crate::program::Expr::from_text("(div A K10)").unwrap(), 1);
-        s.weights.lib.learn_program(&crate::program::Expr::from_text("(mod A K10)").unwrap(), 1);
+        s.weights.lib.learn_program(&crate::program::Expr::from_text("(div A K10)").unwrap(), 1, crate::program::NO_ORIGIN);
+        s.weights.lib.learn_program(&crate::program::Expr::from_text("(mod A K10)").unwrap(), 1, crate::program::NO_ORIGIN);
         s.reconsider_open();
         assert_eq!(s.units[0].chosen, Mech::Program);
         assert_eq!(s.ask("what is zork 29").answer.as_deref(), Some("11"));
@@ -1696,9 +1813,9 @@ mod tests {
         s.weights.lib.learn_constant(10);
         s.weights.lib.learn_constant(7);
         let tens = crate::program::Expr::from_text("(div A K10)").unwrap();
-        assert!(s.weights.lib.learn_program(&tens, 1));
+        assert!(s.weights.lib.learn_program(&tens, 1, 0));
         let sumsq = crate::program::Expr::from_text("(add (mul A A) (mul B B))").unwrap();
-        assert!(s.weights.lib.learn_program(&sumsq, 2));
+        assert!(s.weights.lib.learn_program(&sumsq, 2, 1));
         let path = "runs/test-library.school";
         s.save(path).unwrap();
         let t = School::load(path).unwrap();

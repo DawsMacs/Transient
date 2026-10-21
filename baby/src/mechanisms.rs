@@ -549,7 +549,13 @@ pub fn evidence_thrifty(unit_items: &[Item], weights: &Weights, seed: u64) -> [f
     // memory, a rule and a selection did not already explain the unit: where one does, the cheaper one wins any tie anyway.
     let first = cv_accuracy(unit_items, weights, seed, &[0, 1, 2]);
     let simple_best = first.iter().cloned().fold(0.0, f64::max);
-    let program = if simple_best >= RELIABLE { 0.0 } else { cv_accuracy(unit_items, weights, seed, &[3])[0] };
+    // And measured cheaply before spent on: if the search over ALL the lessons finds no program, searching five subsets of them cannot do
+    // better (a fold that finds one the whole does not is a coincidence), so a unit with no explanation pays for one failed search, not six.
+    let program = if simple_best >= RELIABLE || matches!(fit(Mech::Program, unit_items, weights, seed), Fitted::Program(None)) {
+        0.0
+    } else {
+        cv_accuracy(unit_items, weights, seed, &[3])[0]
+    };
     let best = simple_best.max(program);
     let network = if !(0.25..RELIABLE).contains(&best) { 0.0 } else { cv_accuracy(unit_items, weights, seed, &[4])[0] };
     [first[0], first[1], first[2], program, network]
@@ -577,13 +583,13 @@ pub fn choose_mechanism(ev: &[f64; 5], facts: usize) -> Mech {
 }
 
 /// Add what a settled unit learned to the library: the constants in a rule, the program of a built unit.
-pub fn grow_library(lib: &mut Library, state: &Fitted) {
+pub fn grow_library(lib: &mut Library, state: &Fitted, origin: usize) {
     match state {
         Fitted::Rule(q) => lib.learn_from_terms(&q.terms()),
         // only a settled program is vocabulary: one that still has a competing explanation is a guess, and building on a guess is how a
         // coincidence spreads (the ambiguous digit sum once entered the library and then hid its own ambiguity)
         Fitted::Program(Some(p)) if p.alts.is_empty() => {
-            lib.learn_program(&p.expr, p.arity());
+            lib.learn_program(&p.expr, p.arity(), origin);
         }
         _ => {}
     }
@@ -621,7 +627,7 @@ pub fn learn_items(train: &[Item], n_units: usize, seed: u64, thrifty: bool) -> 
         let program = fitted.iter().find_map(|f| if let Fitted::Program(Some(p)) = f { Some(p.expr.show()) } else { None });
         // What a reliable unit worked out becomes something later units can build with.
         if ev[Mech::ALL.iter().position(|m| *m == chosen).unwrap()] >= RELIABLE {
-            grow_library(&mut weights.lib, &fitted[Mech::ALL.iter().position(|m| *m == chosen).unwrap()]);
+            grow_library(&mut weights.lib, &fitted[Mech::ALL.iter().position(|m| *m == chosen).unwrap()], u);
         }
         units.push(UnitModel { chosen, evidence: ev, program, fitted });
         taught.push(items.iter().map(|i| shape(&i.query, &line)).collect::<Vec<_>>());

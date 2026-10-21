@@ -43,6 +43,32 @@ cargo test --offline                 # 61 tests, including numerical checks of t
 ./target/release/baby energy         # what one question and one learning step cost, counted
 ```
 
+## Adapting its effort, reviewing itself, checking itself (2026-10-21)
+
+Three changes in the direction of the learning process adapting, one of which turned out to be mostly insurance.
+
+**1. Effort follows evidence.** Every program search had the same budget, and a unit with *no* explanation paid for six full failed searches (one on all lessons, five on cross-validation folds). The baby now searches all its lessons first, and only if that finds something does it
+cross-validate: a fold that finds a program the whole data does not is a coincidence. `baby invent`: **23.5 s -> 14.0 s with identical results** (8 seeds: 128/128 hidden, 61/72 stage-2, 0 false inventions, 0 wrong). It is one rule, not a general theory of how much to try; the other knobs (folds, the 90 % bar,
+the search budget, the 10 % allowance for outliers) are still constants I chose.
+
+**2. A program that looked settled is reviewed when its vocabulary changes.** A digit sum fitted before the tens digit and the units digit existed in the library held `first mod 9` as its one explanation; later two more explanations fit equally well, but nothing told the unit. Now, once teaching is finished and whenever a lesson changes the library,
+each program unit is asked one cheap question ("is my explanation still the only one that fits?", a single search that stops as soon as it has found its fits); only if not is it re-fitted. **Stage-2 kinds worked out: 61 -> 66 of 72** (8 seeds), 0 false inventions, 0 wrong, 14 -> 16 s a seed.
+My first version re-fitted every program unit with full cross-validation: the same results at 76 s a seed, five times slower.
+
+**3. A unit is never explained by vocabulary it contributed itself.** Found by a test written to reproduce the digit-sum case: the unit's own `mod 9` program had entered the library as a function, so every later search for that unit found *its own earlier invention* at size 2, where nothing could compete.
+Each library function now records the unit it came from, and a unit is fitted and reviewed with the library minus its own contributions (the saved format gained an origin field).
+
+**4. It checks its own explanations where they were tested least (`School::check_myself`, `baby wonder --check`).** For a unit that holds one program, it names the numbers nobody taught inside the range it was taught (gaps) and the first one past it, and asks about them. The unit test is the whole arc: digit sum on 0-15 with 8 and 9 missing, knowing only a ten, holds `first mod 9`, confidently says 0 at 9; it asks 8 (confirmed), 9 (refuted),
+refits, then (given the tens and units pieces) sees two rivals, wonders about 19, and is right everywhere after two questions of its own choosing.
+
+**What the experiment found (`baby invent --check`):** 105 program units asked 202 questions in 6 seeds, and **all were confirmed**: 100 % right before and after, 0 wrong. At 5 % label noise, 87 units asked 167 and all were confirmed. **The self-check never refuted anything once the review pass (change 2) existed.** An earlier version of the experiment, before the review pass, found 3 digit-sum units
+that were not confirmed (100 % -> 88.9 % after checking, because it had become honest about two rivals, -> 100 % after following up with `wonder`): the review pass now catches those first. So its demonstrated value is the unit test and insurance against the data-gap case, at about two questions per program unit; I have not found a battery where it matters, and I would not claim more.
+
+**Mistakes on the way.** I read a stale results file because it still held the previous run's `FINISHED` marker (always delete the file before a rerun). The first debug runs filtered to one kind and so did not reproduce the full run, where earlier kinds' questions change the library under the later ones (confounded, now noted). The first "refuted" counter ignored declining at the number asked.
+Several runs hit my own timeouts because each seed teaches whole schools (about 100 s a seed for the check experiment); the experiments now run in the background to files.
+
+**What this is not.** Effort adaptation is one rule. The teacher is simulated and always right. Self-checks cover numeric programs only. Nothing here changes `RELIABLE`, the fold count, the outlier allowance or the search budget from measurement, which is what "the baby adapts its own knobs" would mean in full; that is still open.
+
 ## It asks what it wants to know (2026-10-20; Entry 5, the learning process adapting)
 
 Until now the baby learned only what it was handed. When the lessons left two explanations equally good (digit sum taught on 0-15: `tens + units` and `(first + tens) mod 10` agree on every taught number and part ways at 19) it declined the whole unit.

@@ -8,7 +8,7 @@
 //!   baby cost                               what LEARNING costs: time and memory to teach it, a new lesson, a new kind, and to tidy up
 //!   baby scale  [--units N --entities N --facts N --noise F --typos F --seed N --grade N --no-reorg | --sweep 20,60,200]   does learning stay light as the world grows?
 //!   baby invent [--seed N]                  hidden kinds nobody wrote a mechanism for, and kinds that must stay unexplained: what does it work out?
-//!   baby wonder [--school PATH]             what would it like to be told? Questions whose answers would settle which of several explanations is meant
+//!   baby wonder [--check] [--school PATH]   what would it like to be told? (--check: where would it test its own explanations?) Questions whose answers would settle which of several explanations is meant
 //!                                           (answer with: baby learn "<question>" <answer> --unit NAME --wondered)
 //!   baby sleep  [--compact]                 re-sort the pen, merge/split units that follow one rule, optionally forget what is explained
 //!   baby effort                             what answering costs (operations, words moved, estimated joules): the slow way vs the baby's way
@@ -68,7 +68,7 @@ struct Args {
 
 impl Args {
     fn parse(raw: &[String]) -> Args {
-        const FLAGS: [&str; 14] = ["curriculum", "quiet", "tsv", "verbose", "guess", "piece-keys", "full", "compact", "no-reorg", "row", "digits", "stage2-first", "active", "wondered"];
+        const FLAGS: [&str; 15] = ["curriculum", "quiet", "tsv", "verbose", "guess", "piece-keys", "full", "compact", "no-reorg", "row", "digits", "stage2-first", "active", "wondered", "check"];
         let mut positional = Vec::new();
         let mut opts = HashMap::new();
         let mut i = 0;
@@ -1340,7 +1340,7 @@ fn cmd_wonder(a: &Args) {
         eprintln!("{e}\n(teach one first: baby school)");
         std::process::exit(1);
     });
-    let wonders = school.wonder();
+    let wonders = if a.flag("check") { school.check_myself(a.get("limit", 2)) } else { school.wonder() };
     if wonders.is_empty() {
         println!("Nothing I want to ask: where I can explain a unit there is one explanation, and where I cannot there is nothing to choose between.");
         return;
@@ -1443,6 +1443,34 @@ fn main() {
         Some("wonder") => cmd_wonder(&args),
         Some("scale") => cmd_scale(&args),
         Some("invent") => {
+            if args.flag("check") {
+                let seeds: u64 = args.get("seeds", 1);
+                let limit: usize = args.get("limit", 2);
+                let mut table: std::collections::BTreeMap<&'static str, (usize, usize, usize, f32, f32, usize, usize, f32, usize)> = std::collections::BTreeMap::new();
+                for seed in args.get::<u64>("from", 1)..=seeds {
+                    for r in invent::run_check(seed, limit) {
+                        let e = table.entry(r.kind).or_default();
+                        e.0 += 1;
+                        e.1 += r.asked;
+                        e.2 += r.refuted;
+                        e.3 += r.before.0;
+                        e.4 += r.after.0;
+                        e.5 += r.before.1;
+                        e.6 += r.after.1;
+                        e.7 += r.settled.0;
+                        e.8 += r.settled.1;
+                    }
+                }
+                println!("each unit that holds ONE program asks up to {limit} questions about the numbers it was told least about; accuracy on unseen questions before and after");
+                println!("{:<14} {:>6} {:>7} {:>9} {:>12} {:>12} {:>14} {:>13}", "kind", "units", "asked", "unconfirmed", "right before", "right after", "after wonder", "WRONG b -> a");
+                let (mut tb, mut ta, mut ts, mut wb, mut wa, mut ws, mut n, mut asked, mut refuted) = (0.0, 0.0, 0.0, 0, 0, 0, 0, 0, 0);
+                for (name, (units, a, r, b, af, wbk, wak, st, wst)) in &table {
+                    println!("{name:<14} {units:>6} {a:>7} {r:>11} {:>11.1}% {:>11.1}% {:>13.1}% {:>5} -> {wak} -> {wst}", b / *units as f32, af / *units as f32, st / *units as f32, wbk);
+                    tb += b; ta += af; ts += st; wb += wbk; wa += wak; ws += wst; n += units; asked += a; refuted += r;
+                }
+                println!("all: {n} units, {asked} questions, {refuted} not confirmed; right {:.1}% -> {:.1}% -> {:.1}% (after following up); WRONG answers {wb} -> {wa} -> {ws}", tb / n.max(1) as f32, ta / n.max(1) as f32, ts / n.max(1) as f32);
+                return;
+            }
             if args.flag("active") {
                 let seeds: u64 = args.get("seeds", 1);
                 let limit: usize = args.get("limit", 4);

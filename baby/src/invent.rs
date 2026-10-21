@@ -421,3 +421,64 @@ pub fn run_active(seed: u64, limit: usize) -> Vec<ActiveResult> {
     }
     results
 }
+
+/// What happened to one kind when its unit was allowed to check its own explanation.
+pub struct CheckResult {
+    pub kind: &'static str,
+    pub asked: usize,
+    pub refuted: usize,
+    pub before: (f32, usize),
+    pub after: (f32, usize),
+    /// after the checks AND following up on what it then wonders about
+    pub settled: (f32, usize),
+}
+
+/// For every kind whose unit holds a single program: let it ask `limit` self-checking questions, answer from the truth, and see whether the
+/// explanation survived (and how accurate it is afterwards). A refuted explanation is replaced or dropped; a confirmed one costs a question.
+pub fn run_check(seed: u64, limit: usize) -> Vec<CheckResult> {
+    let b = battery(seed);
+    let mut school = School::from_items(&b.world.train, b.names.clone(), Some(&b.world.reworded), seed, true);
+    let mut results = Vec::new();
+    for (u, kind) in b.kinds.iter().enumerate() {
+        let name = b.names[u].clone();
+        let checks: Vec<_> = school.check_myself(limit).into_iter().filter(|c| c.unit == name).collect();
+        if checks.is_empty() {
+            continue;
+        }
+        if std::env::var("CHECK_ONLY").map_or(false, |o| o != kind.name) {
+            continue;
+        }
+        let before = coverage(&school, &b, u);
+        if std::env::var("CHECK_DEBUG").is_ok() {
+            eprintln!("BEFORE {} {} cov {:?}", kind.name, school.describe_unit_open(u), before);
+        }
+        let (mut asked, mut refuted) = (0, 0);
+        for c in checks {
+            let nums = numbers_in(&c.question);
+            let Some(truth) = eval(kind, nums[0], *nums.get(1).unwrap_or(&0)) else { continue };
+            let said = school.ask(&c.question).answer;
+            if std::env::var("CHECK_DEBUG").is_ok() {
+                eprintln!("   asks {:?} truth {truth} it said {:?}", c.question, said);
+            }
+            // not confirmed: it said something else, or declined at the very number it was asked about
+            if said.as_deref() != Some(truth.to_string().as_str()) {
+                refuted += 1;
+            }
+            if school.learn_wondered(&c.question, &truth.to_string(), &name).is_ok() {
+                asked += 1;
+            }
+        }
+        if std::env::var("CHECK_DEBUG").is_ok() {
+            eprintln!("AFTER  {} {} cov {:?}", kind.name, school.describe_unit_open(u), coverage(&school, &b, u));
+        }
+        let after = coverage(&school, &b, u);
+        for _ in 0..3 {
+            let Some(w) = school.wonder_about(Some(&name)).into_iter().next() else { break };
+            let nums = numbers_in(&w.question);
+            let Some(truth) = eval(kind, nums[0], *nums.get(1).unwrap_or(&0)) else { break };
+            let _ = school.learn_wondered(&w.question, &truth.to_string(), &name);
+        }
+        results.push(CheckResult { kind: kind.name, asked, refuted, before, after, settled: coverage(&school, &b, u) });
+    }
+    results
+}
