@@ -1,6 +1,6 @@
 # Transient: session handover
 
-Rewritten 2026-10-21 at the end of a very long session (two days of work), for a fresh session with Daws. **Read this first.** It is meant to be enough to continue without re-deriving anything.
+Rewritten 2026-10-21 at the end of a very long session (two days of work), for a fresh session with Daws; **updated later the same day** after the second stretch (careful default, labelled guesses, the record of its own guessing; section 2b and the changed sections 3, 7, 8). **Read this first.** It is meant to be enough to continue without re-deriving anything.
 Order of reading: this file, then `TransientVision.md` (Daws's own words: never rewrite them; the progress log at its end is a dated summary of everything below), then the section of `baby/README.md` you need
 (it is long, newest section first; the map is in section 5). Nothing here is aspirational unless marked PLAN or OPEN.
 
@@ -19,9 +19,9 @@ Order of reading: this file, then `TransientVision.md` (Daws's own words: never 
 
 ## 2. Where the work stands (2026-10-21)
 
-Everything is in `~/Transient/baby/` (pure Rust, **zero dependencies**, builds offline, **87 tests pass**, ~10k lines). Git repo, `origin` = `git@github.com:DawsMacs/Transient.git` (**public**, Daws's global account `DawsMacs`, SSH),
+Everything is in `~/Transient/baby/` (pure Rust, **zero dependencies**, builds offline, **92 tests pass**, ~10k lines). Git repo, `origin` = `git@github.com:DawsMacs/Transient.git` (**public**, Daws's global account `DawsMacs`, SSH),
 branch `main`, **CI green** (`.github/workflows/ci.yml`: build, tests, and the scorecard's WRONG column must be 0.0 %). Licence `AGPL-3.0-or-later` (SPDX headers, `REUSE.toml`, `LICENSE`, `LICENSES/`), DCO not CLA (`CONTRIBUTING.md`).
-All work from this session is committed and pushed (last code commit: "Rules that change regime: careful mode, checks for rules and selections").
+All work from this session is committed and pushed (last code commit: "It keeps and states a record of its own guessing; reach is a staircase, not a box").
 
 **The baby** (`baby school` / `baby ask`) is a unified system:
 
@@ -46,14 +46,28 @@ All work from this session is committed and pushed (last code commit: "Rules tha
 Older headline numbers still hold (tidy 13-unit curriculum `kinds.rs`): scorecard right 100 / 100 / 95.1 / 100 %, 0 % wrong; answering 8,977 -> 57 operations per question (159x fewer, ~85x less *estimated* energy);
 exact rule fit 392x fewer operations than 800-pass SGD; teaching 792 lessons 0.34 s (was 3.8 s: networks are no longer trained for plain tables); discovery finds 9 units from 792 unlabelled lessons.
 
+### 2b. The second stretch (2026-10-21, after Daws answered the open decisions): careful by default, guessing like a scientist
+
+Daws's framing (Vision Entry 7, his words): a scientist guesses, forms hypotheses, theories, then laws; being wrong and updating *is* learning; **"never silently wrong"** replaces "never wrong"; real-time updating is the advantage over LLMs. What was built, in the order of the plan he approved:
+
+1. **Careful is the default** (`--permissive` opts out; `--careful` is a no-op; a saved school writes `careful 0` only when permissive, a file with no line loads careful). Capability batteries (`invent` default run, many tests) run permissive explicitly on purpose.
+2. **Labelled guesses.** `Reply.guess: Option<Guess {answer, stretch, rate, tried}>` beyond the range taught or checked; **never counted as `answer`**; the CLI prints `probably X`; the scorecard reports guesses apart (right/wrong of the refused). Must-refuse questions get no guess (a test).
+3. **A miss ends the guessing out there.** Units record `exceptions` (lessons the rule does not explain; reach is read from the explained ones only) and are `refuted` if an exception lies outside what the explained lessons span (`settle_reach`, called wherever a unit is fitted). A refuted unit states facts only inside its explained range and does not even guess beyond; what it was told wins over the refuted rule. `learn` now keeps a confirmed guess (it was discarded as "nothing to learn"). Measured (`invent --corrections`): before, 303 of 305 other wrong guesses stayed wrong and 2 became WRONG facts; after, 0 and 0 (all refused; it stops, it does not learn the new regime from one point).
+4. **A record of its own guessing** (`guess_record`, saved as a `guessed` line): hits/misses per distance bucket; a guess carries `rate = (h+1)/(n+2)` and `tried`; withheld where it has been wrong more often than right. `invent --calibrate`: stated rate below the realised one in every bucket (under-confident, never over), 8,884 facts, **0 wrong**.
+5. **Reach is a staircase, not a box** (`Remembered::uncovered_by`): found because the calibration run stated 4 wrong facts of 9,309 (two confirmed edges vouched for the unchecked corner between them). Cost: scale never-taught 96.94 % to 94.90 % at 60 units (90.99 % at 200), scorecard never-taught 92.7 % to 90.2 %, careful recovery after 2 rounds genuine 4,674 to 4,668; WRONG 0.00 everywhere (clean, 2 %, 5 % noise).
+
+New experiment commands: `baby invent --guesses | --corrections | --calibrate [--seeds K]`. Full story, numbers and mistakes: the first section of `baby/README.md`.
+
 ## 3. How to verify the state in two minutes
 
 ```
 cd ~/Transient
-cargo test --release --offline          # 87 passed (about 12 s)
+cargo test --release --offline          # 92 passed (about 13 s)
 cargo build --release --offline
-./target/release/baby school            # teaches 13 units (~0.4 s); the honest scorecard (WRONG must be 0.0 % on every row)
+./target/release/baby school            # teaches 13 units (~0.4 s); the honest scorecard (WRONG must be 0.0 % on every row; beyond the taught range now reads 0 % right as fact, 100 % refused, 100 % of them a correct guess)
+./target/release/baby school --permissive   # (optional) the old showcase; the default is careful
 ./target/release/baby ask "how far apart are two and nine"      # seven, with how it knew
+./target/release/baby ask "what is seven times one"             # probably seven (a labelled guess: multiplication was taught on 0..5)
 ./target/release/baby ask "three minus five"                    # ?  (negative result: must refuse)
 ./target/release/baby ask "what is -3 plus 5"                   # ?  (unreadable number: must refuse)
 ./target/release/baby scale --sweep 20,60,200                   # ~1 min; every WRONG column 0.00
@@ -65,8 +79,8 @@ If `wrong` is ever above 0.0 % on the scorecard (outside the deceptive kinds, wh
 
 ## 4. Commands (`baby <command>`; usage at the top of `main.rs`)
 
-`school [--careful]`, `ask "..." [--careful]`, `learn "<q>" <a> [--unit NAME] [--wondered]`, `wonder [--check] [--limit N]`, `sleep [--compact]`, `discover`, `grade`, `cost`, `storage`, `effort`, `teach`, and the experiments:
-`scale [--units N --entities N --noise F --digits --typos F --no-reorg | --sweep 20,60,200,600]`, `invent [--seed N | --seeds K] [--noise F] [--bar F] [--stage2-first] [--active | --check | --careful [--rounds N --limit N]]`.
+`school [--permissive]`, `ask "..." [--permissive]` (careful is the default; `--careful` is a no-op), `learn "<q>" <a> [--unit NAME] [--wondered]`, `wonder [--check] [--limit N]`, `sleep [--compact]`, `discover`, `grade`, `cost`, `storage`, `effort`, `teach`, and the experiments:
+`scale [--units N --entities N --noise F --digits --typos F --no-reorg | --sweep 20,60,200,600]`, `invent [--seed N | --seeds K] [--noise F] [--bar F] [--stage2-first] [--active | --check | --careful [--rounds N --limit N] | --guesses | --corrections | --calibrate]`; add `CALIB_DEBUG` to list wrong facts.
 Global: `--bar F` forces the reliability bar (measurement only). Debug env vars that exist: `SCALE_WRONG`, `SCALE_REFUSED`, `INVENT_WRONG`, `ACTIVE_DEBUG`, `ACTIVE_ONLY`, `CHECK_DEBUG`, `CHECK_ONLY`, `CAREFUL_DEBUG`, `CAREFUL_ONLY` (each prints the cases behind a number; they are how every bug this session was found).
 
 ## 5. Code map (all under `baby/src/`)
@@ -97,35 +111,31 @@ Does learning stay light...; then the older ones), `LEARNING.md` (research notes
 - **Never ask for an answer it cannot read back** (> 4 digits).
 - **Report WRONG apart from refused, and deceptive kinds apart from the 0-wrong headline.** Add must-refuse questions with every capability (the same ambiguity family bit **four** times: apart/minus/ten-n, then order in memory).
 
-## 7. Decisions that are Daws's (do not decide these for him; raise them)
+## 7. Decisions that are Daws's (answered 2026-10-21; recorded in Vision Entry 7; do not reopen without him)
 
-1. **Should `--careful` be the default?** (new, the most important one). Permissive default = the documented showcase ("reaches numbers it was never taught"), but a rule that changes regime outside what it was taught is then confidently wrong (53 wrong/seed in the new deceptive kinds; no data in hand can reveal it).
-   Careful = never confidently wrong there, loses half the extrapolation until checks win it back (99.2 % after 2 rounds with a teacher). I left it **off**. His call.
-2. **The RAPL permission** for real joule measurements: one `sudo chmod a+r /sys/class/powercap/intel-rapl:0/energy_uj`. **Never run it yourself**; give him the command. (`perf` counters are blocked, `perf_event_paranoid=4`.)
-3. **Rent a GPU** for architecture experiments, and what data may be uploaded: asked earlier, never answered.
-4. **What "frontier" means concretely** for this project (benchmarks? chat quality like a cloud assistant?) and **what the name "Transient" means**: I deliberately did not guess.
-5. **GitHub UI only he can do:** upload `assets/social-preview.png` as the social preview; set repository topics; (optionally) update the repo description. The licence is `AGPL-3.0-or-later`; he can say if he prefers `-only` (reasoning in Vision Entry 6).
-6. **Git workflow:** he authorised commits and pushes to `origin main` for this work and said "go ahead with your plan" throughout; I have pushed after each stretch. Still ask before force-pushing, adding other remotes, or changing repo settings.
+1. **Careful is the default**: decided (and it must not make the baby timid: labelled guesses, trial and error, see 2b).
+2. **RAPL**: Daws made `/sys/class/powercap/intel-rapl:0/energy_uj` readable himself (it reads; it resets on reboot). Real joule measurements are now possible and **not yet used**: wire them into `baby effort`/`cost` next time energy is discussed. Never run the `chmod` yourself.
+3. **GPU**: Daws will **rent one** for the controlled comparison (small transformer vs the baby) and will say when it is set up; the iMac (macOS, AMD 4 GB, 40 GB RAM) was set aside. Nothing may be uploaded that is private; code and synthetic data are fine. Write the comparison model in pure Rust (or Burn) so operations and joules count the same way.
+4. **"Frontier"** = an ambition, not a destined goal: general-purpose intelligence you would trust in work and school at the range of trillion-parameter models, on ordinary hardware. **The measure that matters is capability per joule as the machine measures it**; benchmarks and chat quality are trend-based, optional, later. **The name "Transient" stays a mystery** ("lore"): never guess in docs.
+5. **GitHub UI** (social preview, topics): done by Daws. **The repo was renamed to `DawsMacs/Transient`** by another agent (commit `ecae36a`, `origin` updated); "TransientAI" is now the creator's name. Old-name mentions in Vision entries are historical on purpose.
+6. **Licence** stays `AGPL-3.0-or-later` (he accepts the trust; `-only` is his option for new releases later; it narrows once outside contributors arrive). **Git**: commits and pushes to `origin main` authorised; be careful, precise, plan, ask before anything risky (force-push, new remotes, repo settings).
 
-## 8. Options for the next session (my recommendation first; he asked to be given options, and has said "go ahead with your plan")
+## 8. Options for the next session (my recommendation first)
 
-**Recommended order:**
+Daws approved the plan: careful default, guess gear, update after a miss, adaptive boldness, **then the real-data bridge**. The first four are done (2b). Remaining, in order:
 
-1. **Settle decision 7.1 with him in one message** (careful default or not); if yes, flip `careful` to default-on, make the harnesses report beyond-range with checks, update the READMEs.
-2. **Bridge to real data (the biggest open scientific question; I have suggested it since the start).** Everything above is synthetic and tidy (made-up words, numbers <= 30, a handful of phrasings). Take a small real factoid corpus and simple word problems and see which of units, mechanisms, discovery, refusal and the noise estimate survive.
-   Be ready for the first version to fail and learn from how. Nothing else I could do is as informative.
-3. **The controlled comparison (Vision Entry 2, still owed):** a matched mini transformer vs the baby at three or more sizes on quality at equal joules, retention after new learning, adaptation speed, joules per answer, and how quality moves with a small scale-up (his "tiny nudge, huge gain" prediction). This is where the architecture claim actually gets tested.
+1. **Bridge to real data (the biggest open scientific question).** Everything above is synthetic and tidy (made-up words, numbers <= 30, a handful of phrasings). Take a small real factoid corpus and simple word problems and see which of units, mechanisms, discovery, refusal, the noise estimate, guesses and their stated rates survive. Be ready for the first version to fail and learn from how. Decide with Daws which corpus (public, small, licence-clean) before downloading anything.
+2. **The controlled comparison (Vision Entry 2, still owed; GPU to be rented by Daws):** a matched mini transformer vs the baby at three or more sizes on quality at equal joules (measured: RAPL is readable now), retention after new learning, adaptation speed (guess, one correction, repeat mistakes: the new `--corrections` experiment is the baby's side of it), joules per answer, and how quality moves with a small scale-up.
+3. **Make "update after a miss" learn the new regime, not only stop** (one correction currently turns the whole unit's guessing off; coverage returns only with more checks): let a refuting lesson count as must-explain in the program search so `min(a+b, 30)` can be found from a few points; unit- or kind-specific guess records.
 
 **Smaller, concrete OPEN items (each is in the READMEs with its evidence):**
-- **Library capacity / pinning:** 8 function slots vs ~14 program units; round 3 of the careful experiment still loses some coverage (4,306 of 4,710). Evict by use (a function that existing programs contain as a subtree should be pinned) or raise capacity and measure search cost.
-- **Asking about facts and phrasings** (today only numeric programs, rules and selections); choosing questions by expected information rather than by disagreement; a wrong answer from a *real* teacher (every experiment uses a simulated, always-right teacher).
-- **Merged rule families** are self-checked through one operator word only.
-- **Discovery at scale** (`baby discover` has quadratic pair loops, 3.6 s on 792 lessons); the pen with thousands of waiting lessons (`process_pen` re-clusters on every lesson); Zipf-shaped vocabulary; entity/word ambiguity; misspellings that land on other words (typo questions are all *refused* in the scale test, so robustness there is untested).
-- **Adapting more knobs from measurement** (folds, outlier allowance, search budget): the bar is the only one adapted. A negative result is recorded: partial progress does not separate doomed from deep program searches, so the search budget cannot be cut that way.
-- **Compact lossless storage format**, incremental exact updates, the real energy meter (needs decision 7.2).
-- **The UMA growth path** (a unit that starts tiny and grows capacity only when it saturates) and **mechanisms of a different *kind*** (not an expression): not started.
-- **Rust proof points** from `docs/Direction.md` (Rust Qwen3-0.6B forward pass vs llama.cpp logits; Burn vs PyTorch): not started.
-- Number line is still *taught* by counting lessons (digits parse by themselves, words do not).
+- Coverage cost of the staircase reach at scale (200 units: never-taught 91 %); the reach check is not counted in the operation ledger; compacted schools (`sleep --compact`) read their reach from the lessons that remain (untested under careful; likely too narrow).
+- A real teacher is sometimes wrong (every experiment uses a simulated, always-right one): a wrong correction now switches a unit's guessing off.
+- The `asked` count of the careful recovery experiment (498 over 2 rounds) disagrees with the older table (about 230 over 3 rounds); not explained.
+- **Library capacity / pinning:** 8 function slots vs ~14 program units. **Asking about facts and phrasings** (today only numeric programs, rules and selections); choosing questions by expected information. **Merged rule families** are self-checked through one operator word only.
+- **Discovery at scale** (quadratic pair loops), the pen with thousands of waiting lessons, Zipf-shaped vocabulary, entity/word ambiguity, misspellings that land on other words.
+- **Adapting more knobs from measurement** (folds, outlier allowance, search budget); a compact lossless storage format; **wiring the real energy meter into the ledger**.
+- **The UMA growth path** and **mechanisms of a different *kind***: not started. **Rust proof points** from `docs/Direction.md`: not started. The number line is still *taught* by counting lessons.
 
 ## 9. Doubts and honest caveats (state these when reporting; they are not boilerplate)
 
@@ -137,6 +147,8 @@ Does learning stay light...; then the older ones), `LEARNING.md` (research notes
 - **Experiments use a simulated, always-right teacher.** The self-check "never refuted anything" once the review pass existed: it is insurance, not a measured gain (except in the constructed unit test and the careful-mode experiment).
 - **Energy figures are estimates** (counted operations x published 45 nm costs; trust the ratios). Real measurements so far: wall time and peak memory on one laptop core.
 - **Speed:** `reorganise` 3.5 s at 600 units (1.35 s before the robust fit); the careful/check/active experiments are slow (see section 10).
+- **Guess statistics are from the simulated world.** The stated hit rate is a smoothed count per distance bucket, shared across all units, and was shown honest (under-confident) only in the invention battery; the 4 wrong facts found by the calibration run (a box reach vouching for an unchecked corner) show that a harder test finds a new hole each time. "0 wrong facts" is 0 of 8,884 in that run, not a proof.
+- **Careful costs coverage** (never-taught right 96.94 % to 94.90 % at 60 units, 91 % at 200): the price of not vouching for what was not checked; labelled guesses recover some of it as *guesses*, not facts.
 - Nothing yet shows behaviour on millions of real sentences, or that an architecture like this can reach "frontier" quality. Treat that as the open frontier, not a settled conclusion either way.
 
 ## 10. How to work on this (earned the hard way)
@@ -149,7 +161,8 @@ Does learning stay light...; then the older ones), `LEARNING.md` (research notes
 6. **Tool pitfalls:** piping a CLI into `head` closes the pipe and can kill it before it saves; scripted find-and-replace with a non-unique anchor corrupted a file once (use unique anchors, build and test straight after); the Write tool needs the file read first; `then_some` evaluates eagerly (use `then(|| ...)` when the value can panic).
 7. **Keep `TransientVision.md` Daws's voice.** Append dated entries as he gives them; assistant context goes in separate labelled sections; update the progress log (it is maintained) at the end of each stretch.
 8. **Privacy / repo is public:** never commit anything from `.local/` (git-ignored) or details of the sibling project (section 11). Do not run system-setting commands yourself (the RAPL `chmod`): give Daws the command.
-9. Commit with the `Co-Authored-By` trailer the harness specifies; push to `origin main`, then check `gh run list` for CI (wait for the run whose `headSha` equals `git rev-parse HEAD`).
+9. **Gate every commit on the tests passing** (`cargo test ... | grep -q "test result: ok"` in the `if`, not just a pipe: a pipe into `grep` returns 0 even when tests fail, and I once pushed a failing test that way). Build the failing test first when fixing a hole; run long experiments in the background and wait with `Monitor` (an until-loop on a `FINISHED` marker); a monitor expires after 10 minutes, re-arm it.
+10. Commit with the `Co-Authored-By` trailer the harness specifies; push to `origin main`, then check `gh run list` for CI (wait for the run whose `headSha` equals `git rev-parse HEAD`).
 
 ## 11. Sibling project
 
