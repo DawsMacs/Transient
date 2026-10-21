@@ -70,7 +70,7 @@ struct Args {
 
 impl Args {
     fn parse(raw: &[String]) -> Args {
-        const FLAGS: [&str; 17] = ["curriculum", "quiet", "tsv", "verbose", "guess", "piece-keys", "full", "compact", "no-reorg", "row", "digits", "stage2-first", "active", "wondered", "check", "careful", "permissive"];
+        const FLAGS: [&str; 18] = ["curriculum", "quiet", "tsv", "verbose", "guess", "piece-keys", "full", "compact", "no-reorg", "row", "digits", "stage2-first", "active", "wondered", "check", "careful", "permissive", "guesses"];
         let mut positional = Vec::new();
         let mut opts = HashMap::new();
         let mut i = 0;
@@ -395,6 +395,11 @@ fn ask_school(a: &Args, school_path: &str, query: &str) {
             println!("{answer}");
             eprintln!("  ({})", reply.how);
         }
+        None if reply.guess.is_some() => {
+            let g = reply.guess.unwrap();
+            println!("probably {}", g.answer);
+            eprintln!("  (a guess, not a fact: {}. If you know the answer, tell me and I'll learn from it: baby learn \"{query}\" <answer>)", reply.how);
+        }
         None => {
             println!("?");
             eprintln!("  I don't know this one: {}. Teach me: baby teach \"{query}\" <answer>", reply.how);
@@ -404,20 +409,37 @@ fn ask_school(a: &Args, school_path: &str, query: &str) {
 
 fn print_scorecard(school: &school::School, world: &kinds::World) {
     // The honest scorecard: not only how often it is right, but how often it answers WRONGLY instead of saying it doesn't know.
-    println!("  {:<22} {:>7} {:>9} {:>8}", "questions", "right", "refused", "WRONG");
+    println!("  {:<22} {:>7} {:>9} {:>8}   {:>24}", "questions", "right", "refused", "WRONG", "of the refused: a guess");
+    println!("  {:<22} {:>7} {:>9} {:>8}   {:>11} {:>12}", "", "", "", "", "right", "wrong");
     let sets: [(&str, &Vec<kinds::Item>); 4] =
         [("taught", &world.train), ("reworded", &world.reworded), ("never taught", &world.new_items), ("beyond the taught range", &world.beyond)];
     for (name, set) in sets {
-        let (mut right, mut refused, mut wrong) = (0usize, 0usize, 0usize);
+        let (mut right, mut refused, mut wrong, mut guess_right, mut guess_wrong) = (0usize, 0usize, 0usize, 0usize, 0usize);
         for it in set.iter() {
-            match school.ask(&it.query).answer {
+            let reply = school.ask(&it.query);
+            match reply.answer {
                 Some(a) if a == it.answer => right += 1,
                 Some(_) => wrong += 1,
-                None => refused += 1,
+                None => {
+                    refused += 1;
+                    match reply.guess {
+                        Some(g) if g.answer == it.answer => guess_right += 1,
+                        Some(_) => guess_wrong += 1,
+                        None => {}
+                    }
+                }
             }
         }
         let t = set.len().max(1) as f64;
-        println!("  {:<22} {:>6.1}% {:>8.1}% {:>7.1}%", name, 100.0 * right as f64 / t, 100.0 * refused as f64 / t, 100.0 * wrong as f64 / t);
+        println!(
+            "  {:<22} {:>6.1}% {:>8.1}% {:>7.1}%   {:>10.1}% {:>11.1}%",
+            name,
+            100.0 * right as f64 / t,
+            100.0 * refused as f64 / t,
+            100.0 * wrong as f64 / t,
+            100.0 * guess_right as f64 / t,
+            100.0 * guess_wrong as f64 / t
+        );
     }
 }
 
@@ -1454,6 +1476,27 @@ fn main() {
         Some("wonder") => cmd_wonder(&args),
         Some("scale") => cmd_scale(&args),
         Some("invent") => {
+            if args.flag("guesses") {
+                let seeds: u64 = args.get("seeds", 1);
+                let mut rows = Vec::new();
+                for seed in 1..=seeds {
+                    rows.extend(invent::run_guesses(seed));
+                }
+                println!("labelled guesses from the careful baby on unseen questions, {seeds} seeds ({} guesses). stretch = how far past the taught range, in widths of that range", rows.len());
+                println!("{:<14} {:>22} {:>22}", "stretch", "genuine kinds", "deceptive kinds");
+                println!("{:<14} {:>22} {:>22}", "", "guesses  right", "guesses  right");
+                let edges = [0.0f32, 0.25, 0.5, 1.0, 2.0, f32::MAX];
+                for w in edges.windows(2) {
+                    let cell = |dec: bool| {
+                        let sel: Vec<_> = rows.iter().filter(|r| r.deceptive == dec && r.stretch >= w[0] && r.stretch < w[1]).collect();
+                        let ok = sel.iter().filter(|r| r.right).count();
+                        if sel.is_empty() { format!("{:>7} {:>9}", 0, "-") } else { format!("{:>7} {:>8.1}%", sel.len(), 100.0 * ok as f64 / sel.len() as f64) }
+                    };
+                    let label = if w[1] == f32::MAX { format!("{:.2} and over", w[0]) } else { format!("{:.2} to {:.2}", w[0], w[1]) };
+                    println!("{label:<14} {:>22} {:>22}", cell(false), cell(true));
+                }
+                return;
+            }
             if args.flag("careful") {
                 let seeds: u64 = args.get("seeds", 1);
                 let rounds: usize = args.get("rounds", 3);

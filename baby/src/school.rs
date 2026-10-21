@@ -203,9 +203,21 @@ pub struct Wonder {
 }
 
 pub struct Reply {
+    /// Stated as fact: inside what it was taught, or has had checked. Every harness counts right/wrong on this alone.
     pub answer: Option<String>,
+    /// Offered as a labelled guess when `answer` is None: a rule it trusts, applied beyond what it was taught or has had checked.
+    /// Never counted as an answer; scored apart.
+    pub guess: Option<Guess>,
     pub unit: Option<usize>,
     pub how: String,
+}
+
+/// What the baby thinks but has not checked: its rule's value outside the numbers it was taught, and how far outside.
+#[derive(Clone, Debug)]
+pub struct Guess {
+    pub answer: String,
+    /// How far past the taught range the furthest operand lies, in widths of that range (0.5 = half a range-width beyond the edge).
+    pub stretch: f32,
 }
 
 /// What happened when it was taught something after school.
@@ -403,21 +415,26 @@ impl School {
     }
 
     /// Is any operand of this question outside the range unit `u` was taught (or has had confirmed) for the operation it names? Then why.
-    fn beyond_reach(&self, u: usize, tokens: &[String]) -> Option<String> {
+    fn beyond_reach(&self, u: usize, tokens: &[String]) -> Option<(String, f32)> {
         let unit = &self.units[u];
         let value = |w: &str| self.line.value(w);
         let hull = unit.remember.operand_hull(tokens, &value);
         let asked: Vec<f32> = tokens.iter().filter_map(|t| value(t)).collect();
+        let mut found: Option<(String, f32)> = None;
         for (i, v) in asked.iter().enumerate() {
             if let Some(&(lo, hi)) = hull.get(i) {
                 if *v < lo || *v > hi {
-                    return Some(format!(
-                        "for this kind I was only taught (or have checked) numbers from {lo} to {hi}, and this asks about {v}: I won't extrapolate unchecked (see: baby wonder --check)"
-                    ));
+                    let stretch = (if *v > hi { *v - hi } else { lo - *v }) / (hi - lo + 1.0);
+                    if found.as_ref().map_or(true, |f| stretch > f.1) {
+                        found = Some((
+                            format!("for this kind I was only taught (or have checked) numbers from {lo} to {hi}, and this asks about {v}: I won't state it as fact unchecked (see: baby wonder --check)"),
+                            stretch,
+                        ));
+                    }
                 }
             }
         }
-        None
+        found
     }
 
     /// (for diagnosis) the library as text
@@ -467,19 +484,19 @@ impl School {
         // Numbers are plain whole numbers. A sign, a decimal point, a fraction slash, a thousands comma or a percent attached to a digit
         // would be silently dropped by reading words ("-3" would become 3), so such a question is refused rather than misread.
         if let Some(bad) = unreadable_number(q) {
-            return Reply { answer: None, unit: None, how: format!("I only read plain whole numbers, not '{bad}' (signs, decimals, fractions, percentages)") };
+            return Reply { guess: None, answer: None, unit: None, how: format!("I only read plain whole numbers, not '{bad}' (signs, decimals, fractions, percentages)") };
         }
         // A word it has never met cannot be part of something it knows how to answer.
         let unmet: Vec<String> = tokens.iter().filter(|w| !self.knows(w)).cloned().collect();
         if !unmet.is_empty() {
-            return Reply { answer: None, unit: None, how: format!("I haven't met the word{} {}", if unmet.len() > 1 { "s" } else { "" }, unmet.join(", ")) };
+            return Reply { guess: None, answer: None, unit: None, how: format!("I haven't met the word{} {}", if unmet.len() > 1 { "s" } else { "" }, unmet.join(", ")) };
         }
         let u = match naive {
             Some(r) => r.route(&shape(q, &self.line), ledger),
             None => {
                 let (u, score) = self.route(q, ledger);
                 if score < self.route_floor {
-                    return Reply { answer: None, unit: None, how: "no kind of lesson I was taught is like this question".into() };
+                    return Reply { guess: None, answer: None, unit: None, how: "no kind of lesson I was taught is like this question".into() };
                 }
                 u
             }
@@ -495,8 +512,8 @@ impl School {
                 ledger.touch(4 * c.n_params());
                 let mut s = Scratch::new(&c);
                 match m.ask(q, 1, &mut s).into_iter().next() {
-                    Some((a, p)) if p >= 0.9 => Reply { answer: Some(a), unit: Some(u), how: said(&format!("a small network ({:.0}% sure)", p * 100.0)) },
-                    _ => Reply { answer: None, unit: Some(u), how: said("a small network, but it is not sure enough") },
+                    Some((a, p)) if p >= 0.9 => Reply { guess: None, answer: Some(a), unit: Some(u), how: said(&format!("a small network ({:.0}% sure)", p * 100.0)) },
+                    _ => Reply { guess: None, answer: None, unit: Some(u), how: said("a small network, but it is not sure enough") },
                 }
             }
             state => {
@@ -517,7 +534,7 @@ impl School {
                         match (&worked_out, naive.is_none()) {
                             (Some(a), true) => match unit.remember.exact(q).and_then(|_| unit.remember.recall_counted(q, &self.weights, &mut Ledger::default(), true)) {
                                 Some(m) if &m != a => {
-                                    return Reply {
+                                    return Reply { guess: None,
                                         answer: None,
                                         unit: Some(u),
                                         how: said(&format!("my rule says {a}, but I was taught {m} for this very question: they disagree, so I won't guess")),
@@ -530,8 +547,8 @@ impl School {
                     }
                 };
                 if self.careful && answer.is_some() && matches!(unit.chosen, Mech::Rule | Mech::Select | Mech::Program) {
-                    if let Some(why) = self.beyond_reach(u, &tokens) {
-                        return Reply { answer: None, unit: Some(u), how: said(&why) };
+                    if let (Some((why, stretch)), Some(a)) = (self.beyond_reach(u, &tokens), answer.as_ref()) {
+                        return Reply { guess: Some(Guess { answer: a.clone(), stretch }), answer: None, unit: Some(u), how: said(&why) };
                     }
                 }
                 match answer {
@@ -550,14 +567,14 @@ impl School {
                             )),
                             Mech::Network => said("a small network"),
                         };
-                        Reply { answer: Some(a), unit: Some(u), how }
+                        Reply { guess: None, answer: Some(a), unit: Some(u), how }
                     }
                     None => {
                         let why = match unit.chosen {
                             Mech::Remember => "I only memorise this kind of thing and nothing I was taught is close enough",
                             _ => "I couldn't work it out: it has a word or a shape I haven't learned how to handle",
                         };
-                        Reply { answer: None, unit: Some(u), how: said(why) }
+                        Reply { guess: None, answer: None, unit: Some(u), how: said(why) }
                     }
                 }
             }
@@ -1986,6 +2003,47 @@ mod tests {
         s.learn_wondered("what is 24 zork 12", "30", "zork").unwrap();
         assert!(s.ask("what is 20 zork 15").answer.is_none(), "refuted: it no longer trusts a rule that said 36 where the truth is 30");
         assert_ne!(s.ask("what is 24 zork 12").answer.as_deref(), Some("36"));
+    }
+
+    #[test]
+    fn beyond_what_it_was_taught_it_offers_a_labelled_guess_never_a_fact_and_still_refuses_what_it_must() {
+        let s = School::train(&kinds::world(1), 1, true); // careful, as by default
+        // inside what it was taught: a fact, no guess
+        let r = s.ask("what is two times three");
+        assert_eq!(r.answer.as_deref(), Some("six"));
+        assert!(r.guess.is_none());
+        // beyond it: not a fact, a labelled guess, and the guess says how far out it is
+        let r = s.ask("what is seven times one");
+        assert!(r.answer.is_none(), "a guess must never be counted as an answer");
+        let g = r.guess.expect("a rule it trusts, applied past the taught numbers, is offered as a guess");
+        assert_eq!(g.answer, "seven");
+        assert!(g.stretch > 0.0);
+        assert!(r.how.contains("won't state it as fact"), "{}", r.how);
+        // in digits, the guess follows the question's style
+        let r = s.ask("what is 17 plus 25");
+        assert!(r.answer.is_none());
+        assert_eq!(r.guess.map(|g| g.answer).as_deref(), Some("42"));
+        // the must-refuse battery gets no guess either: no unreadable numbers, no negative results, no unmet words, nothing it only memorises
+        for q in [
+            "three minus five",
+            "two minus nine",
+            "what is -3 plus 5",
+            "what is 3.5 plus 2",
+            "what is 50% of ten",
+            "what is blorp plus three",
+            "what is the capital of atlantis",
+            "what is the code for five",
+            "which is bigger banana or seven",
+        ] {
+            let r = s.ask(q);
+            assert!(r.answer.is_none() && r.guess.is_none(), "{q:?} should be refused plainly, got answer {:?} guess {:?}", r.answer, r.guess);
+        }
+        // permissive states it as a fact instead, and offers no separate guess
+        let mut p = School::train(&kinds::world(1), 1, true);
+        p.set_careful(false);
+        let r = p.ask("what is seven times one");
+        assert_eq!(r.answer.as_deref(), Some("seven"));
+        assert!(r.guess.is_none());
     }
 
     #[test]

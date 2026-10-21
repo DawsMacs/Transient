@@ -601,3 +601,30 @@ pub fn run_careful(seed: u64, rounds: usize, per_unit: usize) -> CarefulResult {
     }
     res
 }
+
+/// One labelled guess from a careful baby: how far past the taught range it was, and whether it was right.
+pub struct GuessRow {
+    pub deceptive: bool,
+    pub stretch: f32,
+    pub right: bool,
+}
+
+/// Calibration of guesses: teach the battery, stay careful, and for every unseen question (never taught + beyond the taught numbers) of a kind
+/// that has a mechanism, record the guess it offers (if any). Genuine kinds and deceptive kinds (a rule that changes regime outside the lessons)
+/// are kept apart; a guess may be wrong, but it must be wrong *labelled* and less often where it says it is less sure.
+pub fn run_guesses(seed: u64) -> Vec<GuessRow> {
+    let b = battery(seed);
+    let school = School::from_items(&b.world.train, b.names.clone(), Some(&b.world.reworded), seed, true); // careful is the default
+    let mut rows = Vec::new();
+    for (u, kind) in b.kinds.iter().enumerate() {
+        if kind.role == Role::Unexplainable {
+            continue;
+        }
+        for it in b.world.new_items.iter().chain(b.world.beyond.iter()).filter(|i| i.unit == u) {
+            if let Some(g) = school.ask(&it.query).guess {
+                rows.push(GuessRow { deceptive: kind.role == Role::Deceptive, stretch: g.stretch, right: g.answer == it.answer });
+            }
+        }
+    }
+    rows
+}
