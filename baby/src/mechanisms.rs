@@ -426,6 +426,8 @@ pub struct Baby {
     pub(crate) route_weights: Weights,
     pub(crate) line: NumberLine,
     pub(crate) weights: Weights,
+    /// The reliability bar this baby measured for its lessons.
+    pub(crate) bar: f64,
 }
 
 /// A question reduced to its shape: numbers become numbered placeholders, so "zero plus six" and "two plus four" look alike and
@@ -551,20 +553,73 @@ pub fn evidence_thrifty(unit_items: &[Item], weights: &Weights, seed: u64) -> [f
     let simple_best = first.iter().cloned().fold(0.0, f64::max);
     // And measured cheaply before spent on: if the search over ALL the lessons finds no program, searching five subsets of them cannot do
     // better (a fold that finds one the whole does not is a coincidence), so a unit with no explanation pays for one failed search, not six.
-    let program = if simple_best >= RELIABLE || matches!(fit(Mech::Program, unit_items, weights, seed), Fitted::Program(None)) {
+    let program = if simple_best >= reliable() || matches!(fit(Mech::Program, unit_items, weights, seed), Fitted::Program(None)) {
         0.0
     } else {
         cv_accuracy(unit_items, weights, seed, &[3])[0]
     };
     let best = simple_best.max(program);
-    let network = if !(0.25..RELIABLE).contains(&best) { 0.0 } else { cv_accuracy(unit_items, weights, seed, &[4])[0] };
+    let network = if !(0.25..reliable()).contains(&best) { 0.0 } else { cv_accuracy(unit_items, weights, seed, &[4])[0] };
     [first[0], first[1], first[2], program, network]
 }
 
 /// How often a mechanism other than plain memory must be right on facts held back before it may answer for a unit. A unit that is
 /// wrong most of the time on facts it was not shown must not answer them: it stays memorise-only and refuses. (The bar used to be 0.25,
 /// which clean lessons never tested, since their evidence is about 1.0 or about 0. With 2% wrong lessons, units at 0.28 answered, and were wrong.)
-pub const RELIABLE: f64 = 0.9;
+/// The bar in force. It is not a constant: how often a correct rule is right on facts held back cannot exceed about one minus the share of wrong
+/// lessons, so a fixed 0.9 collapses coverage in a noisy world (42-58 % of unseen questions answered at 10 % noise, against 99-100 % at a bar of 0.7);
+/// and it cannot go low, because a mechanism right only 72 % of the time on held-back facts does answer wrongly (28 wrong answers at 0.7 on the clean
+/// battery, 0 at 0.75). So it is `bar_for_noise` of the noise the baby measures in its own lessons. Per thread, set by whoever is about to
+/// learn (a school installs its own); `--bar` overrides it for measurement.
+thread_local! {
+    static BAR: std::cell::Cell<f64> = const { std::cell::Cell::new(0.9) };
+    static BAR_FIXED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+pub fn reliable() -> f64 {
+    BAR.with(|b| b.get())
+}
+
+/// Set the bar (unless a fixed bar was asked for with `--bar`).
+pub fn set_reliable(bar: f64) {
+    if !BAR_FIXED.with(|f| f.get()) {
+        BAR.with(|b| b.set(bar));
+    }
+}
+
+/// Force a bar for every school (measurement only).
+pub fn fix_reliable(bar: f64) {
+    BAR_FIXED.with(|f| f.set(true));
+    BAR.with(|b| b.set(bar));
+}
+
+/// The bar for a world whose lessons are wrong this often: just under the ceiling a correct rule can reach, between 0.8 (a safe floor: the
+/// failures were at 72 %) and 0.9 (a clean world, as before).
+pub fn bar_for_noise(noise: f64) -> f64 {
+    (0.98 - 2.5 * noise).clamp(0.8, 0.9)
+}
+
+/// How often lessons that say the same thing (the same content words in the same order, so one fact in several phrasings) disagree with the vote of
+/// their own group: an estimate of the share of wrong lessons. Only groups of three or more count (a vote needs voters).
+pub fn estimate_noise(units: &[Vec<Item>]) -> f64 {
+    let (mut minority, mut total) = (0usize, 0usize);
+    for items in units {
+        let mem = Remembered::from_items(items);
+        let mut groups: HashMap<Vec<&str>, Vec<&str>> = HashMap::new();
+        for (i, it) in items.iter().enumerate() {
+            groups.entry(mem.content(&mem.order[i])).or_default().push(it.answer.as_str());
+        }
+        for answers in groups.values().filter(|a| a.len() >= 3) {
+            let mut counts: HashMap<&str, usize> = HashMap::new();
+            for a in answers {
+                *counts.entry(a).or_default() += 1;
+            }
+            minority += answers.len() - counts.values().max().copied().unwrap_or(0);
+            total += answers.len();
+        }
+    }
+    if total == 0 { 0.0 } else { minority as f64 / total as f64 }
+}
 
 /// The best mechanism; a tie (within two points) goes to the cheaper one. A mechanism must clear a bar to replace plain memory:
 /// if nothing shows a reliable ability to answer facts it was not taught, the safe thing is to remember what it was told.
@@ -575,7 +630,7 @@ pub fn choose_mechanism(ev: &[f64; 5], facts: usize) -> Mech {
         return Mech::Remember;
     }
     let (i, m) = Mech::ALL.iter().enumerate().find(|(i, _)| ev[*i] >= best - 0.02).map(|(i, m)| (i, *m)).unwrap();
-    if m != Mech::Remember && ev[i] < RELIABLE {
+    if m != Mech::Remember && ev[i] < reliable() {
         Mech::Remember
     } else {
         m
@@ -607,6 +662,9 @@ pub fn learn_with(world: &World, seed: u64, thrifty: bool) -> Baby {
 
 /// As `learn_with`, for any lessons already grouped into `n_units` units (`Item::unit` says which).
 pub fn learn_items(train: &[Item], n_units: usize, seed: u64, thrifty: bool) -> Baby {
+    let per_unit: Vec<Vec<Item>> = (0..n_units).map(|u| train.iter().filter(|i| i.unit == u).cloned().collect()).collect();
+    let bar = bar_for_noise(estimate_noise(&per_unit));
+    set_reliable(bar);
     let mut weights = Weights::from(train);
     let line = NumberLine::from_counting(&counting_lessons());
     let mut units = Vec::new();
@@ -626,7 +684,7 @@ pub fn learn_items(train: &[Item], n_units: usize, seed: u64, thrifty: bool) -> 
             .collect();
         let program = fitted.iter().find_map(|f| if let Fitted::Program(Some(p)) = f { Some(p.expr.show()) } else { None });
         // What a reliable unit worked out becomes something later units can build with.
-        if ev[Mech::ALL.iter().position(|m| *m == chosen).unwrap()] >= RELIABLE {
+        if ev[Mech::ALL.iter().position(|m| *m == chosen).unwrap()] >= reliable() {
             grow_library(&mut weights.lib, &fitted[Mech::ALL.iter().position(|m| *m == chosen).unwrap()], u);
         }
         units.push(UnitModel { chosen, evidence: ev, program, fitted });
@@ -634,7 +692,7 @@ pub fn learn_items(train: &[Item], n_units: usize, seed: u64, thrifty: bool) -> 
     }
     let route_weights =
         Weights::from_lists(taught.iter().enumerate().flat_map(|(u, qs)| qs.iter().map(move |q| (u, q.clone()))).collect());
-    Baby { units, taught, route_weights, line, weights }
+    Baby { units, taught, route_weights, line, weights, bar }
 }
 
 impl Baby {
@@ -701,6 +759,33 @@ mod tests {
         let same = vec![lesson(0, 0, "ten minus one", "nine"), lesson(1, 0, "ten minus one", "eight"), lesson(2, 0, "ten minus two", "eight"), lesson(3, 0, "nine minus one", "eight")];
         let w = Weights::from(&same);
         assert_eq!(Remembered::from_items(&same).recall("ten minus one", &w), None);
+    }
+
+    #[test]
+    fn the_noise_in_its_own_lessons_is_measured_from_lessons_that_say_the_same_thing_and_sets_the_bar() {
+        // 40 facts, three phrasings each
+        let make = |wrong_every: usize| -> Vec<Item> {
+            let mut v = Vec::new();
+            for f in 0..40usize {
+                for (t, q) in ["what is the capital of {c}", "{c} capital", "the capital of {c}"].iter().enumerate() {
+                    let mut answer = format!("city{f}");
+                    if wrong_every > 0 && (f * 3 + t) % wrong_every == 0 {
+                        answer = "wrongtown".into();
+                    }
+                    v.push(Item { unit: 0, fact: f, template: t, query: q.replace("{c}", &format!("country{f}")), answer });
+                }
+            }
+            v
+        };
+        assert_eq!(estimate_noise(&[make(0)]), 0.0, "clean lessons never disagree with their group");
+        let eight = estimate_noise(&[make(12)]); // 10 of 120 lessons wrong, each in its own group of three: 8.3 %
+        assert!((eight - 10.0 / 120.0).abs() < 0.005, "{eight}");
+        assert_eq!(bar_for_noise(0.0), 0.9, "a clean world keeps the bar it always had");
+        assert!(bar_for_noise(0.02) > 0.9 - 0.06 && bar_for_noise(0.02) < 0.9 + 1e-9);
+        assert_eq!(bar_for_noise(0.083), 0.8);
+        assert_eq!(bar_for_noise(0.4), 0.8, "never below the floor: a mechanism right 72 % of the time answers wrongly");
+        // and a unit of three groups too small to vote counts for nothing
+        assert_eq!(estimate_noise(&[make(0).into_iter().take(2).collect()]), 0.0);
     }
 
     #[test]

@@ -1431,6 +1431,9 @@ fn cmd_cost(a: &Args) {
 fn main() {
     let raw: Vec<String> = std::env::args().skip(1).collect();
     let args = Args::parse(&raw);
+    if let Some(bar) = args.opts.get("bar").and_then(|b| b.parse::<f32>().ok()) {
+        mechanisms::fix_reliable(bar as f64);
+    }
     match args.positional.first().map(String::as_str) {
         Some("train") => cmd_train(&args),
         Some("ask") => cmd_ask(&args),

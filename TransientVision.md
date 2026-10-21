@@ -334,6 +334,8 @@ description than one with a single fixed learner.
 
 - **2026-10-21** Adapting effort, reviewing itself, checking itself: the baby no longer spends cross-validation effort on a unit whose whole-data search found nothing (battery 23.5 s -> 14 s, identical results), reviews settled-looking programs when its vocabulary changes (stage-2 kinds 61 -> 66 of 72), never lets a unit be explained by vocabulary that unit contributed itself (a circle found by a test), and can name where it would check its own explanation. The self-check found nothing to refute across 105 units (87 at 5 % noise), so it is insurance, not a measured gain. Honest limit: adapting its own knobs (folds, bars, budgets) from measurement is still open.
 
+- **2026-10-21** Tuning its own bar: the baby now measures the share of wrong lessons in its own data (it estimates 9.6 % where the world has 9.7 %) and sets how reliable a mechanism must be before answering from that, between a floor found by experiment (a mechanism right 72 % of the time does answer wrongly) and the old 0.9 for clean worlds. At 10 % label noise it answers 98 % of unseen questions instead of 42 %, with 0 false inventions and 0 wrong in the adversarial battery at 0, 5 and 10 % noise. A negative result is recorded too: the search budget cannot be cut by watching partial progress (doomed and deep searches look alike). Honest limit: one constant of several; the floor rests on thin evidence.
+
 ---
 
 ## More to come

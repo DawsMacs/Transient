@@ -399,6 +399,7 @@ pub fn run(c: &Config, reorg: bool, grade_cap: usize) -> Vec<(&'static str, f64)
         "  teaching from nothing: {:.2} s ({:.2} ms per lesson); memory {:.0} MB resident, {:.0} MB peak (generator + test data alone: {:.0} MB)",
         teach_s, 1000.0 * teach_s / lessons as f64, rss, peak, baseline_mb
     );
+    println!("  reliability bar it chose: {:.2} (it measures {:.1}% of its lessons as wrong; the world has {:.1}%)", school.bar(), 100.0 * crate::mechanisms::estimate_noise(&(0..sw.names.len()).map(|u| sw.world.train.iter().filter(|i| i.unit == u).cloned().collect()).collect::<Vec<_>>()), 100.0 * sw.corrupted.len() as f64 / lessons.max(1) as f64);
     println!("  chose {:?}; {:.1}% of units got the mechanism they should (facts: remember, sums: rule, ...)", by_mech, 100.0 * agree as f64 / c.units as f64);
     for (u, unit) in school.units.iter().enumerate().filter(|(u, unit)| unit.chosen.name() != sw.expect[*u]).take(6) {
         println!(

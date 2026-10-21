@@ -43,6 +43,46 @@ cargo test --offline                 # 61 tests, including numerical checks of t
 ./target/release/baby energy         # what one question and one learning step cost, counted
 ```
 
+## Tuning its own bar from what it measures (2026-10-21; Entry 5)
+
+Plan item: let the baby set some of my constants from measurement. Two attempts, one negative.
+
+**Negative: the search budget cannot be cut by watching progress.** Most successful program searches are cheap (median 2,223 candidates, 90th percentile 31,253) but the deepest need ~700,000, so a smaller fixed budget would lose solves. A cut-off would need a signal that separates a doomed search from a deep one. The obvious one, the best fraction of lessons any candidate explains,
+does not: at ~100,000 candidates, 28 searches that went on to find a program and 29 that found nothing both sit around 0.2 (a correct deep program shows nothing until it appears). Nothing was built on it.
+
+**Positive: the reliability bar (the 90 % a mechanism must reach on held-back facts before it may answer).** First I made it adjustable (`--bar`) and swept 0.5 to 0.95. What it does:
+
+| bar | 10 % label noise, unseen questions answered (words / digits) | clean adversarial battery, wrong answers (4-6 seeds) |
+|---|---|---|
+| 0.5 | | **92** |
+| 0.6, 0.7 | 100 % / 99 % | **28** |
+| 0.75, 0.8, 0.85 | 96 % / 95 % at 0.8 | 0 |
+| 0.9 (what it was) | **42 % / 58 %** | 0 |
+| 0.95 | 13 % / 5 % (already 43-49 % at 5 % noise) | 0 |
+
+Two facts. **The ceiling is noise:** a correct rule cannot score above about one minus the share of wrong lessons on held-back facts, so a fixed bar falls off a cliff when the world is noisier than it assumed. **The floor is real:** the wrong answers at low bars were a `select` mechanism that was right 72 % of the time on held-back facts
+("remainder" explained as "the bigger or smaller of the two") and answered anyway. The noisy sweeps (3 benign seeds) had not shown that; the clean adversarial battery did, which is why it was run before anything was built.
+
+**What it does now.** The baby measures the noise in its own lessons: lessons that say the same thing (the same content words in the same order, i.e. one fact in several phrasings) must agree, and the share that disagree with their group's vote estimates the share of wrong lessons. Its bar is
+`clamp(0.98 - 2.5 x noise, 0.8, 0.9)`: exactly 0.9 for a clean world (nothing changed there), 0.8 from about 7 % noise (a margin above the 72 % that failed). The bar lives in the school (saved in the file, re-measured by `reorganise`; a thread-local while learning, so schools and parallel tests cannot interfere).
+`baby scale` now prints what it believes.
+
+**It measures well.** The baby's own estimate of the noise against the world's: 2.3 / 2.3 %, 5.5 / 5.5 %, 9.6 / 9.7 %, 14.0 / 14.2 % (words), 2.0 / 2.0, 5.1 / 5.1, 9.5 / 9.5, 14.6 / 14.9 % (digits).
+
+| unseen questions answered, 0 % wrong on every row but the two noted | fixed 0.9 | adaptive bar |
+|---|---|---|
+| words, 10 % noise (60 units) | 42 % | **98.0 %** (never taught) / 99.4 % (beyond) |
+| digits, 10 % noise (60 units) | 58 % | **97.0 %** / 93.7 % (0.25 % wrong on the beyond questions) |
+| words, 15 % noise | | 92.9 % / 97.4 % (0.05 % wrong on taught) |
+| digits, 15 % noise | | 66.7 % / 66.7 % (the floor of 0.8 is above what the data can reach) |
+| 200 units: words 10 %, digits 5 % | | 93 % / 93.5 %, and 98.5 % / 98.5 %; after `reorganise` 88.8 % and 98.7 % |
+| adversarial invention battery, 4 seeds, hidden / stage-2 kinds worked out; false inventions; wrong | | clean 64/64, 32/36; 5 % noise 61/64, 31/36; 10 % noise 51/64, 27/36; **0 false inventions, 0 wrong at all three** |
+
+Clean worlds are bit-for-bit unchanged (scorecard, the clean sweep to 200 units, the clean battery).
+
+**Honest limits.** The floor 0.8 rests on one failure (72 %) and six clean seeds at 0.75: a thin margin. At 15 % noise on digits the floor still costs a third of the coverage. The noise estimate needs groups of three or more phrasings of one fact; a world taught with single phrasings gives no estimate (it then keeps 0.9). It adapts one constant of several: folds,
+the outlier allowance, the search budget and the thresholds inside voting are still mine. It measures label noise only, not ambiguity or correlated errors.
+
 ## Adapting its effort, reviewing itself, checking itself (2026-10-21)
 
 Three changes in the direction of the learning process adapting, one of which turned out to be mostly insurance.
@@ -67,7 +107,7 @@ that were not confirmed (100 % -> 88.9 % after checking, because it had become h
 **Mistakes on the way.** I read a stale results file because it still held the previous run's `FINISHED` marker (always delete the file before a rerun). The first debug runs filtered to one kind and so did not reproduce the full run, where earlier kinds' questions change the library under the later ones (confounded, now noted). The first "refuted" counter ignored declining at the number asked.
 Several runs hit my own timeouts because each seed teaches whole schools (about 100 s a seed for the check experiment); the experiments now run in the background to files.
 
-**What this is not.** Effort adaptation is one rule. The teacher is simulated and always right. Self-checks cover numeric programs only. Nothing here changes `RELIABLE`, the fold count, the outlier allowance or the search budget from measurement, which is what "the baby adapts its own knobs" would mean in full; that is still open.
+**What this is not.** Effort adaptation is one rule. The teacher is simulated and always right. Self-checks cover numeric programs only. (The reliability bar was later made adaptive; see the section above. The fold count, the outlier allowance and the search budget are still constants.)
 
 ## It asks what it wants to know (2026-10-20; Entry 5, the learning process adapting)
 

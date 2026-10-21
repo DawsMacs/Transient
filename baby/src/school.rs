@@ -183,6 +183,8 @@ pub struct School {
     pub seed: u64,
     /// The library as it was when the units were last fitted or reconsidered.
     library_seen: String,
+    /// The reliability bar measured from the noise in its lessons (see `mechanisms::bar_for_noise`).
+    bar: f64,
     /// Lessons that fit no unit it knows. They wait here until enough of them gather to form a unit of their own.
     pub pen: Vec<(String, String)>,
 }
@@ -325,6 +327,7 @@ impl School {
     pub fn from_items(train: &[Item], names: Vec<String>, calibration: Option<&[Item]>, seed: u64, thrifty: bool) -> School {
         let baby = mechanisms::learn_items(train, names.len(), seed, thrifty);
         let library = baby.weights.lib.clone();
+        let bar = baby.bar;
         let mut units = Vec::new();
         for (u, um) in baby.units.into_iter().enumerate() {
             let idx = Mech::ALL.iter().position(|m| *m == um.chosen).unwrap();
@@ -345,7 +348,7 @@ impl School {
         weights.lib = library;
         let routing = Routing::build(&units, &line);
         let library_seen = weights.lib.to_lines();
-        let mut school = School { units, weights, routing, line, route_floor: f32::NEG_INFINITY, seed, library_seen, pen: Vec::new() };
+        let mut school = School { units, weights, routing, line, route_floor: f32::NEG_INFINITY, seed, library_seen, bar, pen: Vec::new() };
         // How decisive must a question be to count as a recognisable kind? Learned from rewordings of lessons it was taught.
         let own: Vec<&Item> = train.iter().collect();
         let (queries, safety): (Vec<&str>, f32) = match calibration {
@@ -387,6 +390,11 @@ impl School {
     /// (for diagnosis) one unit's competing explanations
     pub fn describe_unit_open(&self, u: usize) -> String {
         self.units[u].describe_open(&self.weights.lib)
+    }
+
+    /// The reliability bar this baby measured for its lessons.
+    pub fn bar(&self) -> f64 {
+        self.bar
     }
 
     /// Words it knows (from any lesson, or the number line).
@@ -550,7 +558,7 @@ impl School {
         unit.chosen = chosen;
         unit.remember = Remembered::from_items(&items);
         unit.state = state;
-        if ev[Mech::ALL.iter().position(|m| *m == chosen).unwrap()] >= mechanisms::RELIABLE {
+        if ev[Mech::ALL.iter().position(|m| *m == chosen).unwrap()] >= mechanisms::reliable() {
             mechanisms::grow_library(&mut self.weights.lib, &self.units[u].state, u);
         }
     }
@@ -560,10 +568,10 @@ impl School {
     /// or when there is no settled mechanism to refit: then the unit must be worked out again from scratch.
     fn refit_in_place(&mut self, u: usize) -> bool {
         let unit = &self.units[u];
-        let settled_rule = matches!(unit.chosen, Mech::Rule | Mech::Select | Mech::Program) && unit.best_evidence() >= mechanisms::RELIABLE;
+        let settled_rule = matches!(unit.chosen, Mech::Rule | Mech::Select | Mech::Program) && unit.best_evidence() >= mechanisms::reliable();
         // A unit that is known not to be reliably workable-out (nothing clears the bar) is re-tested only every ten new facts: re-deciding
         // costs a cross-validation of every mechanism, which for a unit that is mostly a rule with a few wrong lessons is 60-260 ms.
-        let settled_facts = unit.chosen == Mech::Remember && unit.best_evidence() < mechanisms::RELIABLE && unit.facts() >= 10 && unit.facts() % 10 != 0;
+        let settled_facts = unit.chosen == Mech::Remember && unit.best_evidence() < mechanisms::reliable() && unit.facts() >= 10 && unit.facts() % 10 != 0;
         if !(settled_rule || settled_facts) {
             return false;
         }
@@ -625,12 +633,14 @@ impl School {
     /// that its vocabulary may have grown: a ten, or a program learned since, can settle what could not be settled before. Repeats while the
     /// library keeps changing (a unit settled this way can be the piece another needed).
     pub fn reconsider_open(&mut self) {
+        mechanisms::set_reliable(self.bar);
         self.reconsider(false)
     }
 
     /// As `reconsider_open`, and also the program units that look settled: they may have been fitted before the vocabulary that would have
     /// given them a competing explanation existed (a digit sum explained by "mod 9" before it had a tens digit and a units digit).
     pub fn review_programs(&mut self) {
+        mechanisms::set_reliable(self.bar);
         self.reconsider(true)
     }
 
@@ -739,6 +749,7 @@ impl School {
     /// Take the answer to a question it wondered about, and think again about how that unit is learned, now: a unit that can only memorise is
     /// otherwise looked at again only every tenth new fact.
     pub fn learn_wondered(&mut self, query: &str, answer: &str, unit: &str) -> Result<Learned, String> {
+        mechanisms::set_reliable(self.bar);
         let learned = self.learn(query, answer, Some(unit))?;
         if let Some(u) = self.units.iter().position(|x| x.name == unit) {
             self.relearn_unit(u);
@@ -751,6 +762,7 @@ impl School {
     /// Teach it one more lesson, after school. With `unit` it joins that unit (or opens one of that name); without, it joins the
     /// unit the question resembles, if it recognises a kind at all. Then the unit's way of learning is worked out again.
     pub fn learn(&mut self, query: &str, answer: &str, unit: Option<&str>) -> Result<Learned, String> {
+        mechanisms::set_reliable(self.bar);
         let tokens = tokenize(query);
         if tokens.is_empty() {
             return Err("nothing to learn: the question is empty".into());
@@ -837,13 +849,16 @@ impl School {
     }
 
     fn word_keyed(&self, u: usize) -> bool {
-        matches!(self.units[u].chosen, Mech::Rule | Mech::Select) && self.units[u].best_evidence() >= mechanisms::RELIABLE
+        matches!(self.units[u].chosen, Mech::Rule | Mech::Select) && self.units[u].best_evidence() >= mechanisms::reliable()
     }
 
     /// Look again at how the lessons are grouped. A unit that is no longer fully explained (its newer lessons stopped following one
     /// rule) is taken apart if its lessons separate into groups that each ARE explained; two units that were taught separately but
     /// are right for each other's lessons under one rule, or a rule per word, become one.
     pub fn reorganise(&mut self) -> Reorg {
+        // the noise in its lessons may have changed since it was taught: measure again, and use the bar that goes with it
+        self.bar = mechanisms::bar_for_noise(mechanisms::estimate_noise(&self.units.iter().map(|u| u.lessons.clone()).collect::<Vec<_>>()));
+        mechanisms::set_reliable(self.bar);
         let mut report = Reorg { merged: Vec::new(), split: Vec::new() };
 
         // 1. Split what has stopped following one rule.
@@ -1061,6 +1076,7 @@ impl School {
     /// Teach it one more lesson without saying which unit it belongs to. If it recognises a kind of lesson it joins that unit.
     /// If not, it goes to the pen; and when enough pen lessons gather to be a kind of their own, a unit opens by itself.
     pub fn learn_anywhere(&mut self, query: &str, answer: &str) -> Result<Outcome, String> {
+        mechanisms::set_reliable(self.bar);
         let tokens = tokenize(query);
         if tokens.is_empty() {
             return Err("nothing to learn: the question is empty".into());
@@ -1085,6 +1101,7 @@ impl School {
     /// joins the unit that already builds exactly the same expression). Anything smaller stays, with a note if an existing unit
     /// already gets it right, for the teacher to confirm.
     pub fn process_pen(&mut self) -> PenReport {
+        mechanisms::set_reliable(self.bar);
         let mut report = PenReport { opened: Vec::new(), joined: Vec::new(), suggestions: Vec::new(), left: 0 };
         let mut used = vec![false; self.pen.len()];
         let mut changed: Vec<usize> = Vec::new();
@@ -1199,6 +1216,7 @@ impl School {
     /// taught: it keeps a small support set (the facts the fitted unit could not have got right without, and every word it needs
     /// to understand). A unit of facts keeps two phrasings of each. What it knows does not change.
     pub fn compact(&mut self) -> Compacted {
+        mechanisms::set_reliable(self.bar);
         let before: usize = self.units.iter().map(|u| u.lessons.len()).sum();
         let mut removed: Vec<Item> = Vec::new();
         for u in 0..self.units.len() {
@@ -1348,6 +1366,7 @@ impl School {
         writeln!(out, "seed {}", self.seed).unwrap();
         writeln!(out, "route_floor {}", self.route_floor).unwrap();
         out.push_str(&self.weights.lib.to_lines());
+        writeln!(out, "bar {}", self.bar).unwrap();
         writeln!(out, "pen {}", self.pen.len()).unwrap();
         for (q, a) in &self.pen {
             writeln!(out, "p {a}\t{q}").unwrap();
@@ -1379,6 +1398,14 @@ impl School {
         let route_floor: f32 = field(it.next(), "route_floor")?.parse().map_err(|e| format!("{e}"))?;
         // what it had learned to build with (a file written before there was a library has none)
         let library = Library::from_lines(&mut it).unwrap_or_default();
+        let bar: f64 = match it.peek().and_then(|l| l.strip_prefix("bar ")) {
+            Some(b) => {
+                let b = b.trim().parse().map_err(|e| format!("{e}"))?;
+                it.next();
+                b
+            }
+            None => 0.9,
+        };
         let pen_n: usize = field(it.next(), "pen")?.parse().map_err(|e| format!("{e}"))?;
         let mut pen = Vec::new();
         for _ in 0..pen_n {
@@ -1462,7 +1489,7 @@ impl School {
         weights.lib = library;
         let routing = Routing::build(&units, &line);
         let library_seen = weights.lib.to_lines();
-        Ok(School { units, weights, routing, line, route_floor, seed, library_seen, pen })
+        Ok(School { units, weights, routing, line, route_floor, seed, library_seen, bar, pen })
     }
 }
 

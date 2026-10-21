@@ -12,7 +12,7 @@
 *adaptive learning*: a system that keeps learning while it is used, decides for itself *how* to learn each kind of thing, and is
 measured by what it costs (operations, memory, estimated joules) rather than by parameter count alone.
 
-The current artefact is `baby/`: about 8k lines of Rust, **no dependencies**, builds offline, 82 tests. It is a research prototype
+The current artefact is `baby/`: about 8k lines of Rust, **no dependencies**, builds offline, 83 tests. It is a research prototype
 evaluated on a synthetic curriculum. It is not a language model and makes no claim to be one yet.
 
 > **Status:** active research. Every number below comes from tidy synthetic lessons and *estimated* energy. Read
@@ -56,6 +56,7 @@ All on the synthetic curriculum in `baby/src/kinds.rs` (13 units, 792 lessons), 
 | **scale** (clean synthetic world, 20 -> 600 units, 828 -> 25,776 lessons, up to 10,000-word vocabulary) | teaching 26k lessons 2.65 s and 56 MB; learning one new fact **0.4-0.6 ms at every size**; answering ~10 us; reorganising 1.35 s; 100 % right, **0 % wrong**, all traps refused |
 | **inventing mechanisms** (16 hidden + 9 stage-2 numeric kinds in digits, 20 seeds) | all 16 hidden kinds worked out every time; 7 of 9 stage-2 kinds every time using constants and programs it learned earlier (taught in the wrong order: 8 of 72); 0 of 120 unexplainable kinds explained; 0 wrong; digit sum declined as ambiguous |
 | **asking** (digit sum taught on 0-15, 6 seeds) | where two explanations fit, it asks the number that separates them: 100 % after one question where random numbers need three; it asks nothing about random codes, primes or xor (0 wrong) |
+| **its own reliability bar** | measured from the noise in its lessons (it estimates 9.6 % where the world has 9.7 %) and set just under what a correct rule can reach; at 10 % label noise unseen questions answered 98 % instead of 42 %; clean worlds unchanged |
 | **label noise** (2 % and 5 % of taught answers wrong, 60-200 units, words and digits) | **0 % wrong** on unseen questions; at 2 % essentially as good as clean data (97-100 % of unseen questions right); wrongly taught lessons answered with the truth by voting memory, robust rule fitting and cross-checks |
 | storage | school file 29 KB, of which 1.3 KB is what was learned; `--compact` keeps 49 % of the file, still answers all 792 taught lessons, 0 % wrong |
 | unit discovery from 792 unlabelled, shuffled lessons | 9 units found (13 named by the teacher), scorecard identical |
@@ -67,7 +68,7 @@ The scorecard reports **WRONG separately from refused**: a refusal is an accepta
 Requires a stable Rust toolchain (edition 2021). No other dependencies, no network.
 
 ```bash
-cargo test --release --offline         # 82 tests (about 15 s)
+cargo test --release --offline         # 83 tests (about 15 s)
 cargo build --release --offline
 ./target/release/baby school           # teach 13 units (~4 s), print how each was learned and the scorecard
 ./target/release/baby ask "how far apart are two and nine"   # answers, and says how it knew
