@@ -1,8 +1,6 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: light)" srcset="assets/banner-light.svg">
-    <img src="assets/banner.svg" alt="TransientAI" width="81%">
-  </picture>
+  <img src="assets/banner.svg#gh-dark-mode-only" alt="TransientAI" width="81%">
+  <img src="assets/banner-light.svg#gh-light-mode-only" alt="TransientAI" width="81%">
 </p>
 
 <p align="center">
