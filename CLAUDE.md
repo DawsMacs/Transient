@@ -1,5 +1,8 @@
 # Transient repo instructions
 
+**Naming (2026-10-21):** the project and the repo are **Transient** (`DawsMacs/Transient`). **TransientAI** is the name of the *creator* of Transient (as OpenAI is to ChatGPT); Daws is its owner, founder and creator, so
+copyright and licence headers naming `DawsMacs` are correct. Never call the project "TransientAI"; the meaning of the name "Transient" is Daws's to tell, so never guess it in docs.
+
 Transient is Daws's long-horizon project: a light, adaptive "system of intelligence" meant to run on ordinary consumer hardware, winning differently from cloud models (not out-scaling them). It is pursued
 whether or not it works. The code is `baby/` (pure Rust, zero dependencies, builds offline).
 

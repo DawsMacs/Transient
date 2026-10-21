@@ -19,7 +19,7 @@ Order of reading: this file, then `TransientVision.md` (Daws's own words: never 
 
 ## 2. Where the work stands (2026-10-21)
 
-Everything is in `~/Transient/baby/` (pure Rust, **zero dependencies**, builds offline, **92 tests pass**, ~10k lines). Git repo, `origin` = `git@github.com:DawsMacs/Transient.git` (**public**, Daws's global account `DawsMacs`, SSH),
+Everything is in `~/Transient/baby/` (pure Rust, **zero dependencies**, builds offline, **92 tests pass**, ~11k lines). Git repo, `origin` = `git@github.com:DawsMacs/Transient.git` (**public**, Daws's global account `DawsMacs`, SSH),
 branch `main`, **CI green** (`.github/workflows/ci.yml`: build, tests, and the scorecard's WRONG column must be 0.0 %). Licence `AGPL-3.0-or-later` (SPDX headers, `REUSE.toml`, `LICENSE`, `LICENSES/`), DCO not CLA (`CONTRIBUTING.md`).
 All work from this session is committed and pushed (last code commit: "It keeps and states a record of its own guessing; reach is a staircase, not a box").
 

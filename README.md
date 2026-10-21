@@ -13,7 +13,7 @@
 *adaptive learning*: a system that keeps learning while it is used, decides for itself *how* to learn each kind of thing, and is
 measured by what it costs (operations, memory, estimated joules) rather than by parameter count alone.
 
-The current artefact is `baby/`: about 8k lines of Rust, **no dependencies**, builds offline, 87 tests. It is a research prototype
+The current artefact is `baby/`: about 11k lines of Rust, **no dependencies**, builds offline, 92 tests. It is a research prototype
 evaluated on a synthetic curriculum. It is not a language model and makes no claim to be one yet.
 
 > **Status:** active research. Every number below comes from tidy synthetic lessons and *estimated* energy. Read
@@ -39,6 +39,9 @@ evaluated on a synthetic curriculum. It is not a language model and makes no cla
 4. **Explains every answer and every refusal.** It says how it knew, and refuses (with a reason) on unmet words, unrecognised
    kinds, memorise-only units it was not told the fact for, and mechanism-level declines (negative results, out-of-line numbers,
    missing operands).
+   Past the range it was taught or has had checked it does not state a value as fact: it offers a *labelled guess* ("probably 42"),
+   keeps a record of how often its guesses at each distance turn out right and says so, and stops guessing where they have been
+   wrong more often than right. A teacher's correction ends its guessing in the region it contradicted.
 5. **Keeps learning after training.** A surprise gate skips lessons it can already work out; consistent lessons refit a unit in
    place; unrecognised lessons wait in a *pen* and open a new unit once enough gather; `baby sleep` merges units that follow one
    rule, splits units that stopped following one, and can forget lessons that are fully explained (`--compact`).
@@ -70,7 +73,7 @@ The scorecard reports **WRONG separately from refused**: a refusal is an accepta
 Requires a stable Rust toolchain (edition 2021). No other dependencies, no network.
 
 ```bash
-cargo test --release --offline         # 87 tests (about 15 s)
+cargo test --release --offline         # 92 tests (about 13 s)
 cargo build --release --offline
 ./target/release/baby school           # teach 13 units (~4 s), print how each was learned and the scorecard
 ./target/release/baby ask "how far apart are two and nine"   # answers, and says how it knew
