@@ -308,3 +308,116 @@ pub fn run(seed: u64, quiet: bool) -> Outcome {
     }
     out
 }
+
+/// What happened to one kind when the baby was allowed to ask.
+pub struct ActiveResult {
+    pub kind: &'static str,
+    pub role: Role,
+    /// Percent of unseen questions (never taught, and beyond the taught numbers) answered rightly: before any question, then after each.
+    pub asking: Vec<f32>,
+    /// The same with a teacher who gives random numbers instead.
+    pub random: Vec<f32>,
+    pub wrong: usize,
+    /// How many questions it actually had to ask (it asks only when explanations compete).
+    pub questions: usize,
+}
+
+fn coverage(school: &School, b: &Battery, u: usize) -> (f32, usize) {
+    let never: Vec<&Item> = b.world.new_items.iter().filter(|i| i.unit == u).collect();
+    let beyond: Vec<&Item> = b.world.beyond.iter().filter(|i| i.unit == u).collect();
+    let (sn, sb) = (score(school, &never), score(school, &beyond));
+    let n = (sn.n() + sb.n()).max(1);
+    (100.0 * (sn.right + sb.right) as f32 / n as f32, sn.wrong + sb.wrong)
+}
+
+/// The numbers a question is about, read back from its digits.
+fn numbers_in(q: &str) -> Vec<i64> {
+    crate::data::tokenize(q).iter().filter_map(|w| w.parse().ok()).collect()
+}
+
+/// For the kinds that are not fully worked out by ordinary teaching: let the baby ask, one question at a time (`limit` at most), answer from
+/// the truth, and record how much of the unseen it then gets right; then do the same with a teacher giving random numbers. Each teacher gets
+/// its own school, taught once; every kind is its own unit, so they share it.
+pub fn run_active(seed: u64, limit: usize) -> Vec<ActiveResult> {
+    let b = battery(seed);
+    let fresh = || School::from_items(&b.world.train, b.names.clone(), Some(&b.world.reworded), seed, true);
+    let mut school = fresh();
+    let mut school_random = fresh();
+    let mut results = Vec::new();
+    for (u, kind) in b.kinds.iter().enumerate() {
+        let (start, w0) = coverage(&school, &b, u);
+        if std::env::var("ACTIVE_ONLY").map_or(false, |o| o != kind.name) {
+            continue;
+        }
+        if kind.role == Role::Base || (start >= 99.9 && w0 == 0 && kind.role != Role::Unexplainable) {
+            continue;
+        }
+        let name = b.names[u].clone();
+        if std::env::var("ACTIVE_DEBUG").is_ok() {
+            eprintln!("START {} {}", kind.name, school.describe_unit_open(u));
+        }
+        let mut asking = vec![start];
+        let mut wrong = w0;
+        let mut questions = 0;
+        for _ in 0..limit {
+            let last = *asking.last().unwrap();
+            let wonders = school.wonder_about(Some(&name));
+            if std::env::var("ACTIVE_DEBUG").is_ok() {
+                eprintln!("  wonders for {}: {:?}", kind.name, wonders.iter().map(|w| w.question.clone()).collect::<Vec<_>>());
+            }
+            let next = match wonders.into_iter().next() {
+                Some(w) => {
+                    let nums = numbers_in(&w.question);
+                    match eval(kind, nums[0], *nums.get(1).unwrap_or(&0)) {
+                        Some(truth) if { let r = school.learn_wondered(&w.question, &truth.to_string(), &name); if std::env::var("ACTIVE_DEBUG").is_ok() { eprintln!("  learn_wondered -> {:?}", r.as_ref().map(|l| l.surprised)); } r.is_ok() } => {
+                            if std::env::var("ACTIVE_DEBUG").is_ok() {
+                                eprintln!("  {} asked {:?} -> {truth}; unit now {} ({:.0}%) {}", kind.name, w.question, school.units[u].chosen.name(), 100.0 * school.units[u].best_evidence(), school.units[u].program().unwrap_or_default());
+                                let never: Vec<&Item> = b.world.new_items.iter().chain(b.world.beyond.iter()).filter(|i| i.unit == u).collect();
+                                for it in never.iter().filter(|i| school.ask(&i.query).answer.as_deref() != Some(i.answer.as_str())).take(4) {
+                                    eprintln!("      still not right: {:?} want {} got {:?}: {}", it.query, it.answer, school.ask(&it.query).answer, school.ask(&it.query).how);
+                                }
+                            }
+                            questions += 1;
+                            let (c, w2) = coverage(&school, &b, u);
+                            wrong = wrong.max(w2);
+                            c
+                        }
+                        _ => last,
+                    }
+                }
+                None => last,
+            };
+            asking.push(next);
+        }
+        // the random teacher
+        let mut rng = Rng::new(seed.wrapping_add(1234 + u as u64));
+        let template = b.world.train.iter().find(|i| i.unit == u).map(|i| i.query.clone()).unwrap_or_default();
+        let mut tried: std::collections::HashSet<(i64, i64)> =
+            b.world.train.iter().filter(|i| i.unit == u).map(|i| { let n = numbers_in(&i.query); (n[0], *n.get(1).unwrap_or(&0)) }).collect();
+        let mut random = vec![coverage(&school_random, &b, u).0];
+        for _ in 0..limit {
+            let mut given = false;
+            for _ in 0..50 {
+                let a = rng.below(31) as i64;
+                let c = if kind.arity == 2 { rng.below(31) as i64 } else { 0 };
+                if !tried.insert((a, c)) {
+                    continue;
+                }
+                if let Some(truth) = eval(kind, a, c) {
+                    let toks = crate::data::tokenize(&template);
+                    let mut nums = vec![a, c].into_iter();
+                    let q: Vec<String> = toks.iter().map(|t| if t.parse::<i64>().is_ok() { nums.next().unwrap_or(0).to_string() } else { t.clone() }).collect();
+                    let _ = school_random.learn_wondered(&q.join(" "), &truth.to_string(), &name);
+                    given = true;
+                    break;
+                }
+            }
+            let _ = given;
+            let (c, w2) = coverage(&school_random, &b, u);
+            wrong = wrong.max(w2);
+            random.push(c);
+        }
+        results.push(ActiveResult { kind: kind.name, role: kind.role.clone(), asking, random, wrong, questions });
+    }
+    results
+}

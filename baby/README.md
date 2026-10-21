@@ -43,6 +43,37 @@ cargo test --offline                 # 61 tests, including numerical checks of t
 ./target/release/baby energy         # what one question and one learning step cost, counted
 ```
 
+## It asks what it wants to know (2026-10-20; Entry 5, the learning process adapting)
+
+Until now the baby learned only what it was handed. When the lessons left two explanations equally good (digit sum taught on 0-15: `tens + units` and `(first + tens) mod 10` agree on every taught number and part ways at 19) it declined the whole unit.
+It now keeps the small set of smallest explanations that fit, **answers wherever they all agree, declines where they differ, and can say which number would settle it**. `baby wonder` prints those questions; `baby learn "<q>" <a> --unit NAME --wondered` answers one
+and makes it think again at once. This is the first place the baby chooses *what to look at*, which is the part of Adaptive Learning that had no implementation.
+
+**What was built.** `ProgramRule::alts` (the other smallest fits; saved with the school), `predict` that declines where they disagree, `ProgramRule::ambiguity` (the numbers on which the explanations give the most different answers, then the smallest), `School::wonder`,
+`learn_wondered`, and `reconsider_open` (below). The old rule, "a program is trusted only if its smallest fit is unique", is now "trusted where its smallest fits agree"; a unit taught only subtraction with a >= b is the model case:
+`first - second` and `first apart second` agree exactly where it was taught and part ways on negative results, which is exactly where it should decline.
+
+**The experiment (`baby invent --active`, 6 seeds).** For each kind not already perfect, the baby asks one question at a time and a simulated teacher answers from the truth; a second teacher gives random numbers instead.
+
+| kind | what happened |
+|---|---|
+| digit sum (taught on 0-15), 3 of 6 seeds where explanations compete | percent of unseen questions right: **asking 88.9 -> 100.0 after ONE question**; random numbers 88.9 -> 92.6 -> 92.6 -> 100 (three) |
+| digit sum, the other 3 seeds | **no question to ask** (66.7 %, 0 wrong): the unit holds `first mod 9` as its only explanation within its vocabulary, so nothing competes; a gap that only a second explanation could expose goes unseen (a known limit) |
+| four random codes, primality, xor (all 6 seeds) | **it asked nothing**, stayed at 0 % right and **0 wrong**: no competing explanations, so it invents no puzzle where there is none (the random teacher "improves" these only by memorising one fact per number) |
+
+**Mistakes on the way (recorded on purpose).**
+- **An ambiguous program entered the library.** The unit fitted `tens + units` while `(first + tens) mod 10` was still a live alternative, `grow_library` added it as vocabulary, and the unit's own explanation was then found as a single library function, hiding its ambiguity from `wonder`. A guess had become a building block.
+  Only a settled program (no competing explanation) is now vocabulary; a test pins it.
+- **Cross-validation penalises hypotheses that rest on one fact.** After the baby asked "19" and was told 10 the unit still did not solve, because any fold that held 19 out was ambiguous again (80 % held back). Keeping the alternatives (answer where they agree) removes that cliff, and also
+  raised the invention battery under 2 % noise from 56/72 to 32/36 stage-2 kinds (4 seeds, 89 %).
+- **Units left open were never revisited when the vocabulary grew.** Asking about one digit sum settled it and added a clean `digitsum` to the library, but a later wider digit-sum unit kept its stale state (76 %) while `wonder` searched with the new library and saw no ambiguity. A baby that gains vocabulary should look again at what it left open:
+  `reconsider_open` re-fits numeric units that were left open, only when the library has actually changed. (My first version did it on every lesson and made the experiment take over 25 minutes.)
+
+**Checks that nothing else moved:** the school and discovery scorecards, the clean sweep, the noisy scale worlds (0 wrong), the invention battery (clean 8 seeds: 128/128 hidden, 61/72 stage-2, 0 of 48 false inventions, 0 wrong; 2 % noise, 4 seeds: 62/64 and 32/36, 0 false, 0 wrong).
+
+**What this is not.** The teacher is a simulation that always answers correctly; a wrong answer from a real teacher would be treated as one more lesson (noise handling applies, but nothing here tests it). It asks only about numeric programs, one hypothesis family (small expressions), up to eight competing hypotheses; it does not ask about rules, selections, facts or
+phrasings. "Which question" is chosen by how many different answers the hypotheses give, not by expected information; there is no cost model for the teacher's time. It is not yet curiosity in the sense of exploring: it asks only when it has found two explanations and no more.
+
 ## Noise, finished: robust fitting and cross-checks (2026-10-20)
 
 The previous noise round left honesty solved and coverage open: with 2 % wrong lessons a few rule units fell below the bar and became memorise-only, so unseen questions were refused (55-62 % right). Closing that took six changes, three of which were
@@ -970,4 +1001,4 @@ The road there before `program`, because the dead ends are the useful part:
 2. **Compress what it keeps without forgetting anything**: a compact binary format, and the phrasings of a fact stored as templates plus facts.
 3. **Incremental and exact updates**, sparse updates, small integers, and the real energy meter to replace time and memory as the measure.
 4. **Let it propose its own mechanisms** when nothing generalises (the units that stay "memorise only").
-5. ~~Digits~~ done; ~~a richer space to build rules in~~ done (floor-divide, remainder, a learned library). Still open: discover the number line without counting lessons; mechanisms of a different *kind* (not an expression); the baby adapting its own learning knobs.
+5. ~~Digits~~ done; ~~a richer space to build rules in~~ done (floor-divide, remainder, a learned library). It now also asks questions (see "It asks what it wants to know"). Still open: discover the number line without counting lessons; mechanisms of a different *kind* (not an expression); the baby adapting its own numeric knobs (folds, search effort, thresholds) from what it measures; asking about rules, selections and facts.

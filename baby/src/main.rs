@@ -8,6 +8,8 @@
 //!   baby cost                               what LEARNING costs: time and memory to teach it, a new lesson, a new kind, and to tidy up
 //!   baby scale  [--units N --entities N --facts N --noise F --typos F --seed N --grade N --no-reorg | --sweep 20,60,200]   does learning stay light as the world grows?
 //!   baby invent [--seed N]                  hidden kinds nobody wrote a mechanism for, and kinds that must stay unexplained: what does it work out?
+//!   baby wonder [--school PATH]             what would it like to be told? Questions whose answers would settle which of several explanations is meant
+//!                                           (answer with: baby learn "<question>" <answer> --unit NAME --wondered)
 //!   baby sleep  [--compact]                 re-sort the pen, merge/split units that follow one rule, optionally forget what is explained
 //!   baby effort                             what answering costs (operations, words moved, estimated joules): the slow way vs the baby's way
 //!   baby ask    "what is two times four"    ask it; it answers, says how it knew, or says why it won't (uses the school)
@@ -66,7 +68,7 @@ struct Args {
 
 impl Args {
     fn parse(raw: &[String]) -> Args {
-        const FLAGS: [&str; 12] = ["curriculum", "quiet", "tsv", "verbose", "guess", "piece-keys", "full", "compact", "no-reorg", "row", "digits", "stage2-first"];
+        const FLAGS: [&str; 14] = ["curriculum", "quiet", "tsv", "verbose", "guess", "piece-keys", "full", "compact", "no-reorg", "row", "digits", "stage2-first", "active", "wondered"];
         let mut positional = Vec::new();
         let mut opts = HashMap::new();
         let mut i = 0;
@@ -996,7 +998,8 @@ fn cmd_learn(a: &Args) {
             }
         }
     }
-    match school.learn(&query, answer, unit.as_deref()) {
+    let learned = if a.flag("wondered") && unit.is_some() { school.learn_wondered(&query, answer, unit.as_deref().unwrap()) } else { school.learn(&query, answer, unit.as_deref()) };
+    match learned {
         Ok(r) => {
             if let Err(e) = school.save(&path) {
                 eprintln!("could not save {path}: {e}");
@@ -1330,6 +1333,26 @@ fn cmd_scale(a: &Args) {
     }
 }
 
+/// `baby wonder`: where its lessons leave several explanations equally good, say which number it would like to be told about.
+fn cmd_wonder(a: &Args) {
+    let path = a.string("school", DEFAULT_SCHOOL);
+    let school = school::School::load(&path).unwrap_or_else(|e| {
+        eprintln!("{e}\n(teach one first: baby school)");
+        std::process::exit(1);
+    });
+    let wonders = school.wonder();
+    if wonders.is_empty() {
+        println!("Nothing I want to ask: where I can explain a unit there is one explanation, and where I cannot there is nothing to choose between.");
+        return;
+    }
+    println!("I would like to be told:\n");
+    for w in &wonders {
+        println!("  unit '{}': {}", w.unit, w.question);
+        println!("      why: {}", w.why);
+    }
+    println!("\nAnswer one with: baby learn \"<question>\" <answer> --unit <unit> --wondered");
+}
+
 fn cmd_cost(a: &Args) {
     let seed: u64 = a.get("seed", 1);
     let world = kinds::world(seed);
@@ -1417,8 +1440,34 @@ fn main() {
         Some("school") => cmd_school(&args),
         Some("learn") => cmd_learn(&args),
         Some("cost") => cmd_cost(&args),
+        Some("wonder") => cmd_wonder(&args),
         Some("scale") => cmd_scale(&args),
         Some("invent") => {
+            if args.flag("active") {
+                let seeds: u64 = args.get("seeds", 1);
+                let limit: usize = args.get("limit", 4);
+                // per kind: seeds where it had a question (asking curve, random curve for the same seeds), seeds where it had none, wrong
+                struct Row { role: invent::Role, asked: Vec<(Vec<f32>, Vec<f32>)>, silent: Vec<(Vec<f32>, Vec<f32>)>, wrong: usize }
+                let mut table: std::collections::BTreeMap<&'static str, Row> = std::collections::BTreeMap::new();
+                for seed in 1..=seeds {
+                    for r in invent::run_active(seed, limit) {
+                        let e = table.entry(r.kind).or_insert(Row { role: r.role.clone(), asked: Vec::new(), silent: Vec::new(), wrong: 0 });
+                        if r.questions > 0 { e.asked.push((r.asking, r.random)) } else { e.silent.push((r.asking, r.random)) }
+                        e.wrong += r.wrong;
+                    }
+                }
+                let mean = |v: &Vec<(Vec<f32>, Vec<f32>)>, which: usize, k: usize| v.iter().map(|x| { let c = if which == 0 { &x.0 } else { &x.1 }; c[k.min(c.len() - 1)] }).sum::<f32>() / v.len().max(1) as f32;
+                let row = |v: &Vec<(Vec<f32>, Vec<f32>)>, which: usize| (0..=limit).map(|k| format!("{:>5.1}", mean(v, which, k))).collect::<Vec<_>>().join(" ");
+                println!("percent of unseen questions answered rightly after k questions; {limit} questions at most. A kind appears if it was not already perfect.");
+                println!("{:<14} {:<13} {:<28} {:<28} {:<28} {:>5}", "kind", "role", "baby asks (k=0..)", "random numbers (same seeds)", "no question to ask (k=0..)", "WRONG");
+                for (name, r) in &table {
+                    let asked = if r.asked.is_empty() { "-".to_string() } else { format!("[{}] {}", r.asked.len(), row(&r.asked, 0)) };
+                    let rand = if r.asked.is_empty() { "-".to_string() } else { format!("[{}] {}", r.asked.len(), row(&r.asked, 1)) };
+                    let silent = if r.silent.is_empty() { "-".to_string() } else { format!("[{}] {}", r.silent.len(), row(&r.silent, 0)) };
+                    println!("{name:<14} {:<13} {asked:<28} {rand:<28} {silent:<28} {:>5}", format!("{:?}", r.role).to_lowercase(), r.wrong);
+                }
+                return;
+            }
             invent::STAGE2_FIRST.store(args.flag("stage2-first"), std::sync::atomic::Ordering::Relaxed);
             invent::NOISE_PERMILLE.store((args.get("noise", 0.0f32) * 1000.0).round() as usize, std::sync::atomic::Ordering::Relaxed);
             let seeds: u64 = args.get("seeds", 1);
@@ -1462,7 +1511,7 @@ fn main() {
         Some("life") => cmd_life(&args),
         Some("energy") => cmd_energy(&args),
         _ => {
-            eprintln!("usage: baby <school|ask|learn|sleep|storage|cost|scale|invent|grade|discover|teach|effort|data|train|know|curious|rules|kinds|eval|life|energy> ...  (see the top of src/main.rs)");
+            eprintln!("usage: baby <school|ask|learn|wonder|sleep|storage|cost|scale|invent|grade|discover|teach|effort|data|train|know|curious|rules|kinds|eval|life|energy> ...  (see the top of src/main.rs)");
             std::process::exit(2);
         }
     }

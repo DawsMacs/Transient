@@ -389,9 +389,9 @@ pub fn fit(mech: Mech, items: &[Item], weights: &Weights, seed: u64) -> Fitted {
             Fitted::Rule(rule)
         }
         Mech::Select => Fitted::Select(SelectRule::fit(items)),
-        // Trusted only if the data say exactly one thing: when several smallest expressions agree on every lesson but differ elsewhere,
-        // the data cannot say which was meant, and building on a guess is how a coincidence gets believed.
-        Mech::Program => Fitted::Program(ProgramRule::fit_unique_with(items, &weights.lib)),
+        // The smallest explanations that fit, answering only where they all agree: when several agree on every lesson but differ elsewhere,
+        // the data cannot say which was meant there, and building on a guess is how a coincidence gets believed.
+        Mech::Program => Fitted::Program(ProgramRule::fit_trusted_with(items, &weights.lib)),
         Mech::Network => Fitted::Network(Box::new(know::fit_examples(&as_examples(items), Reader::Bag, seed))),
     }
 }
@@ -580,7 +580,9 @@ pub fn choose_mechanism(ev: &[f64; 5], facts: usize) -> Mech {
 pub fn grow_library(lib: &mut Library, state: &Fitted) {
     match state {
         Fitted::Rule(q) => lib.learn_from_terms(&q.terms()),
-        Fitted::Program(Some(p)) => {
+        // only a settled program is vocabulary: one that still has a competing explanation is a guess, and building on a guess is how a
+        // coincidence spreads (the ambiguous digit sum once entered the library and then hid its own ambiguity)
+        Fitted::Program(Some(p)) if p.alts.is_empty() => {
             lib.learn_program(&p.expr, p.arity());
         }
         _ => {}

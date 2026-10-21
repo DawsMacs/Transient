@@ -296,6 +296,8 @@ const CAP_PER_LEVEL: usize = 40_000;
 /// combination of everything smaller; with a library of constants and functions that is minutes. Bounded effort is part of being light.
 /// Bits of information the lessons must carry beyond the bits of searching spent finding the program.
 const INFO_MARGIN_BITS: f32 = 1.0;
+/// The most different explanations that may fit the lessons before they are taken to say nothing.
+const MAX_AMBIGUITY: usize = 6;
 const WORK_BUDGET: usize = 1_000_000;
 
 struct Cand {
@@ -309,6 +311,9 @@ fn signature(vals: &[f32]) -> Vec<i32> {
 
 pub struct ProgramRule {
     pub expr: Expr,
+    /// Other explanations (of the smallest size) that fit every lesson but behave differently somewhere. The program answers only
+    /// where all of them agree: where they part ways the lessons do not decide the answer.
+    pub alts: Vec<Expr>,
     /// How many candidate expressions had been tried when this one fit (the effort of the search, for judging whether the lessons carry
     /// enough information to believe it).
     pub work: usize,
@@ -330,7 +335,7 @@ impl ProgramRule {
 
     /// Rebuild a program that was saved as text.
     pub fn rebuild(expr: Expr, arity: usize, vocab: Vec<String>) -> ProgramRule {
-        ProgramRule { expr, work: 0, arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.into_iter().collect() }
+        ProgramRule { expr, alts: Vec::new(), work: 0, arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.into_iter().collect() }
     }
 
     fn read(line: &NumberLine, q: &str) -> (Vec<f32>, Vec<String>) {
@@ -351,8 +356,26 @@ impl ProgramRule {
     }
 
     /// As `fit_unique`, building with what has been learned (`lib`) as well as the given operations.
+    /// The program for these lessons, with the other smallest explanations that also fit kept as `alts` (answers are given only where
+    /// they all agree). More than a handful of different explanations means the lessons say next to nothing: no program then.
+    pub fn fit_trusted_with(items: &[Item], lib: &Library) -> Option<ProgramRule> {
+        let (found, hits, exprs) = ProgramRule::search(items, &OPS, true, lib);
+        let mut rule = found?;
+        if hits == 0 || hits > MAX_AMBIGUITY {
+            return None;
+        }
+        let mut seen: HashSet<Vec<i32>> = HashSet::new();
+        seen.insert(ProgramRule::grid_signature(&rule.expr, rule.arity));
+        for e in exprs {
+            if seen.insert(ProgramRule::grid_signature(&e, rule.arity)) {
+                rule.alts.push(e);
+            }
+        }
+        rule.is_believable(items).then_some(rule)
+    }
+
     pub fn fit_unique_with(items: &[Item], lib: &Library) -> Option<ProgramRule> {
-        let (found, hits) = ProgramRule::search(items, &OPS, true, lib);
+        let (found, hits, _) = ProgramRule::search(items, &OPS, true, lib);
         if hits != 1 {
             return None;
         }
@@ -372,7 +395,7 @@ impl ProgramRule {
     }
 
     /// The search. With `count_all`, it finishes the size at which the first expression fits and reports how many fit there.
-    fn search(items: &[Item], ops: &[Op], count_all: bool, lib: &Library) -> (Option<ProgramRule>, usize) {
+    fn search(items: &[Item], ops: &[Op], count_all: bool, lib: &Library) -> (Option<ProgramRule>, usize, Vec<Expr>) {
         let line = NumberLine::from_counting(&counting_lessons());
         let mut points: Vec<(f32, f32, f32)> = Vec::new();
         let mut vocab = HashSet::new();
@@ -381,10 +404,10 @@ impl ProgramRule {
             let (nums, rest) = ProgramRule::read(&line, &it.query);
             let y = match line.value(&it.answer) {
                 Some(y) => y,
-                None => return (None, 0),
+                None => return (None, 0, Vec::new()),
             };
             if nums.is_empty() || nums.len() > 2 {
-                return (None, 0);
+                return (None, 0, Vec::new());
             }
             arity = arity.max(nums.len());
             let p = (nums[0], *nums.get(1).unwrap_or(&0.0), y);
@@ -416,7 +439,7 @@ impl ProgramRule {
             })
             .collect();
         if points.is_empty() {
-            return (None, 0);
+            return (None, 0, Vec::new());
         }
         let mut first: Option<ProgramRule> = None;
         let mut hits_n = 0usize;
@@ -443,10 +466,10 @@ impl ProgramRule {
                 hits_n += 1;
                 hit_exprs.push(c.expr.clone());
                 if first.is_none() {
-                    first = Some(ProgramRule { expr: c.expr.clone(), arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work });
+                    first = Some(ProgramRule { expr: c.expr.clone(), arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work, alts: Vec::new() });
                 }
                 if !count_all {
-                    return (first, behaviours(&hit_exprs));
+                    return (first, behaviours(&hit_exprs), hit_exprs);
                 }
             }
             if seen.insert(signature(&c.vals)) {
@@ -454,7 +477,7 @@ impl ProgramRule {
             }
         }
         if first.is_some() {
-            return (first, behaviours(&hit_exprs));
+            return (first, behaviours(&hit_exprs), hit_exprs);
         }
         for size in 2..=MAX_SIZE {
             let mut made: Vec<Cand> = Vec::new();
@@ -465,10 +488,10 @@ impl ProgramRule {
                     hits_n += 1;
                     hit_exprs.push(Expr::Half(Box::new(c.expr.clone())));
                     if first.is_none() {
-                        first = Some(ProgramRule { expr: Expr::Half(Box::new(c.expr.clone())), arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work });
+                        first = Some(ProgramRule { expr: Expr::Half(Box::new(c.expr.clone())), arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work, alts: Vec::new() });
                     }
                     if !count_all {
-                        return (first, behaviours(&hit_exprs));
+                        return (first, behaviours(&hit_exprs), hit_exprs);
                     }
                 }
                 if seen.insert(signature(&vals)) {
@@ -486,7 +509,7 @@ impl ProgramRule {
                         for &op in ops {
                             work += 1;
                             if work > WORK_BUDGET {
-                                return (first, behaviours(&hit_exprs));
+                                return (first, behaviours(&hit_exprs), hit_exprs);
                             }
                             let vals: Vec<f32> = l.vals.iter().zip(&r.vals).map(|(x, y)| apply(op, *x, *y)).collect();
                             if vals.iter().any(|v| !v.is_finite()) {
@@ -497,10 +520,10 @@ impl ProgramRule {
                                 hit_exprs.push(Expr::Bin(op, Box::new(l.expr.clone()), Box::new(r.expr.clone())));
                                 if first.is_none() {
                                     let expr = Expr::Bin(op, Box::new(l.expr.clone()), Box::new(r.expr.clone()));
-                                    first = Some(ProgramRule { expr, arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work });
+                                    first = Some(ProgramRule { expr, arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work, alts: Vec::new() });
                                 }
                                 if !count_all {
-                                    return (first, behaviours(&hit_exprs));
+                                    return (first, behaviours(&hit_exprs), hit_exprs);
                                 }
                             }
                             if made.len() < CAP_PER_LEVEL && seen.insert(signature(&vals)) {
@@ -519,7 +542,7 @@ impl ProgramRule {
                         for r in rights {
                             work += 1;
                             if work > WORK_BUDGET {
-                                return (first, behaviours(&hit_exprs));
+                                return (first, behaviours(&hit_exprs), hit_exprs);
                             }
                             let vals: Vec<f32> = if f.arity == 1 {
                                 l.vals.iter().map(|x| f.expr.eval(*x, 0.0)).collect()
@@ -534,10 +557,10 @@ impl ProgramRule {
                                 hits_n += 1;
                                 hit_exprs.push(expr.clone());
                                 if first.is_none() {
-                                    first = Some(ProgramRule { expr: expr.clone(), arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work });
+                                    first = Some(ProgramRule { expr: expr.clone(), arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work, alts: Vec::new() });
                                 }
                                 if !count_all {
-                                    return (first, behaviours(&hit_exprs));
+                                    return (first, behaviours(&hit_exprs), hit_exprs);
                                 }
                             }
                             if made.len() < CAP_PER_LEVEL && seen.insert(signature(&vals)) {
@@ -549,13 +572,48 @@ impl ProgramRule {
             }
             levels[size] = made;
             if first.is_some() {
-                return (first, behaviours(&hit_exprs));
+                return (first, behaviours(&hit_exprs), hit_exprs);
             }
             if work > WORK_BUDGET {
                 break;
             }
         }
-        (None, 0)
+        (None, 0, Vec::new())
+    }
+
+    /// When the lessons leave several explanations equally good (they agree on every lesson and part ways elsewhere), which numbers would
+    /// settle it? Returns the explanations that fit, and the questions that tell them apart: whole numbers nobody taught, best first (the
+    /// ones on which the explanations give the most different answers, then the smallest numbers). None if one explanation fits, or none.
+    pub fn ambiguity(items: &[Item], lib: &Library) -> Option<Ambiguity> {
+        let (found, behaviours, hits) = ProgramRule::search(items, &OPS, true, lib);
+        let rule = found?;
+        if behaviours < 2 {
+            return None;
+        }
+        let arity = rule.arity;
+        let mut seen: HashSet<Vec<i32>> = HashSet::new();
+        let mut hypotheses: Vec<Expr> = Vec::new();
+        for e in hits {
+            if seen.insert(ProgramRule::grid_signature(&e, arity)) && hypotheses.len() < 8 {
+                hypotheses.push(e);
+            }
+        }
+        let taught: HashSet<(i32, i32)> = points_of(items).iter().map(|p| (p.0 as i32, p.1 as i32)).collect();
+        let mut scored: Vec<((i32, i32), usize)> = Vec::new();
+        for a in 0..=30i32 {
+            for b in 0..=if arity == 2 { 30 } else { 0 } {
+                if taught.contains(&(a, b)) {
+                    continue;
+                }
+                let answers: HashSet<i32> = hypotheses.iter().map(|e| { let v = e.eval(a as f32, b as f32); if v.is_finite() { (v * 100.0).round() as i32 } else { i32::MIN } }).collect();
+                if answers.len() >= 2 {
+                    scored.push(((a, b), answers.len()));
+                }
+            }
+        }
+        scored.sort_by(|x, y| y.1.cmp(&x.1).then((x.0 .0 + x.0 .1).cmp(&(y.0 .0 + y.0 .1))));
+        let inputs: Vec<(f32, f32)> = scored.iter().take(3).map(|(k, _)| (k.0 as f32, k.1 as f32)).collect();
+        (!inputs.is_empty()).then_some(Ambiguity { hypotheses, inputs, arity })
     }
 
     /// Do the lessons carry enough information to believe this program? A search that tries N candidates will, by luck alone, find one that
@@ -598,7 +656,15 @@ impl ProgramRule {
         if nums.len() != self.arity || rest.iter().any(|w| !self.vocab.contains(w) && !filler(w)) {
             return None;
         }
-        let y = self.expr.eval(nums[0], *nums.get(1).unwrap_or(&0.0));
+        let (a, b) = (nums[0], *nums.get(1).unwrap_or(&0.0));
+        let y = self.expr.eval(a, b);
+        // Where explanations that fit every lesson part ways, the lessons do not decide the answer: decline.
+        if self.alts.iter().any(|e| {
+            let z = e.eval(a, b);
+            !(z.is_finite() && (z - y).abs() < 0.01)
+        }) {
+            return None;
+        }
         let (word, dist) = self.line.say(y, crate::quantity::uses_digits(q))?;
         if dist < 0.2 { Some(word) } else { None }
     }
@@ -617,7 +683,7 @@ mod tests {
     fn a_long_fit_found_late_over_thin_data_is_not_believed_but_a_short_one_found_early_is() {
         let thin: Vec<Item> = (0..13).map(|a: i64| Item { unit: 0, fact: a as usize, template: 0, query: format!("zork {a}"), answer: ((a % 3 == 0) as i64).to_string() }).collect();
         let rich: Vec<Item> = (0..12).flat_map(|a: i64| (0..4).map(move |b: i64| (a, b))).map(|(a, b)| Item { unit: 0, fact: (a * 4 + b) as usize, template: 0, query: format!("zork {a} {b}"), answer: (a * a + b * b).to_string() }).collect();
-        let rule = |work| ProgramRule { expr: Expr::A, work, arity: 1, line: NumberLine::from_counting(&counting_lessons()), vocab: HashSet::new(), };
+        let rule = |work| ProgramRule { expr: Expr::A, alts: Vec::new(), work, arity: 1, line: NumberLine::from_counting(&counting_lessons()), vocab: HashSet::new(), };
         assert!(!rule(100_000).is_believable(&thin), "13 bits of 0/1 against 17 bits of searching: luck explains it");
         assert!(rule(500).is_believable(&thin), "9 bits of searching against 13 bits of data");
         assert!(rule(3_000_000).is_believable(&rich), "48 facts with many answers carry far more than 22 bits");
@@ -639,6 +705,33 @@ mod tests {
         // and when the numbers taught leave the answer open it declines: up to 15, "(first + first div 10) mod 10" fits as well
         let narrow: Vec<Item> = items.iter().filter(|i| i.fact <= 15).cloned().collect();
         assert!(ProgramRule::fit_unique_with(&narrow, &lib).is_none(), "two explanations fit; the data cannot say which");
+    }
+
+    #[test]
+    fn when_the_lessons_leave_it_open_it_can_say_which_number_would_settle_it() {
+        let mut lib = Library::default();
+        lib.learn_constant(10);
+        let tens_items: Vec<Item> = (0..=25).map(|a: i64| Item { unit: 0, fact: a as usize, template: 0, query: format!("what is zork {a}"), answer: (a / 10).to_string() }).collect();
+        let units_items: Vec<Item> = (0..=25).map(|a: i64| Item { unit: 0, fact: a as usize, template: 0, query: format!("what is zork {a}"), answer: (a % 10).to_string() }).collect();
+        lib.learn_program(&ProgramRule::fit_unique_with(&tens_items, &lib).unwrap().expr, 1);
+        lib.learn_program(&ProgramRule::fit_unique_with(&units_items, &lib).unwrap().expr, 1);
+        // digit sum taught on 0-15 only: "tens + units" and "(first + tens) mod 10" fit every lesson and part ways at 19
+        let items: Vec<Item> = (0..=15).map(|a: i64| Item { unit: 0, fact: a as usize, template: 0, query: format!("what is zork {a}"), answer: (a / 10 + a % 10).to_string() }).collect();
+        assert!(ProgramRule::fit_unique_with(&items, &lib).is_none());
+        let amb = ProgramRule::ambiguity(&items, &lib).expect("it is ambiguous");
+        assert!(amb.hypotheses.len() >= 2);
+        assert!(amb.inputs.iter().all(|i| i.0 > 15.0), "asks about numbers nobody taught: {:?}", amb.inputs);
+        // asking about the number it names settles it
+        let n = amb.inputs[0].0 as i64;
+        let mut more = items.clone();
+        more.push(Item { unit: 0, fact: 99, template: 0, query: format!("what is zork {n}"), answer: (n / 10 + n % 10).to_string() });
+        let settled = ProgramRule::fit_unique_with(&more, &lib).expect("one question settles it");
+        assert_eq!(settled.predict("what is zork 29", &|_| false).as_deref(), Some("11"));
+        // nothing ambiguous, nothing to ask: an exactly explained kind, and an arbitrary table
+        let exact: Vec<Item> = (0..=20).map(|a: i64| Item { unit: 0, fact: a as usize, template: 0, query: format!("what is zork {a}"), answer: (a * 2).to_string() }).collect();
+        assert!(ProgramRule::ambiguity(&exact, &lib).is_none());
+        let table: Vec<Item> = (0..=15).map(|a: i64| Item { unit: 0, fact: a as usize, template: 0, query: format!("what is zork {a}"), answer: ((a * 7 + 3) % 11).to_string() }).collect();
+        assert!(ProgramRule::ambiguity(&table, &lib).is_none() || ProgramRule::fit_unique_with(&table, &lib).is_none());
     }
 
     #[test]
@@ -705,4 +798,28 @@ mod tests {
         let half = ProgramRule::fit(&unit_items(&w, 5)).unwrap();
         assert_eq!(half.expr.show(), "half(first)");
     }
+}
+
+/// Several explanations fit every lesson; these numbers would tell them apart.
+pub struct Ambiguity {
+    pub hypotheses: Vec<Expr>,
+    /// (first, second) to ask about; the second is 0 for a one-number kind.
+    pub inputs: Vec<(f32, f32)>,
+    pub arity: usize,
+}
+
+/// The (first, second, answer) of each distinct taught lesson.
+fn points_of(items: &[Item]) -> Vec<(f32, f32, f32)> {
+    let line = NumberLine::from_counting(&counting_lessons());
+    let mut points: Vec<(f32, f32, f32)> = Vec::new();
+    for it in items {
+        let (nums, _) = ProgramRule::read(&line, &it.query);
+        if let (Some(y), false) = (line.value(&it.answer), nums.is_empty()) {
+            let p = (nums[0], *nums.get(1).unwrap_or(&0.0), y);
+            if !points.contains(&p) {
+                points.push(p);
+            }
+        }
+    }
+    points
 }
