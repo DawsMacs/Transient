@@ -186,8 +186,9 @@ pub struct School {
     /// The reliability bar measured from the noise in its lessons (see `mechanisms::bar_for_noise`).
     bar: f64,
     /// Careful about extrapolating: a rule, selection or program answers only for numbers within the range it was taught or has had checked
-    /// (see `beyond_reach`). Off by default: a rule that is right on what it was taught usually is right beyond it, but one that changes regime
-    /// outside it (a sum that saturates, one that wraps) is then confidently wrong, and nothing in the lessons can say so.
+    /// (see `beyond_reach`). On by default (Daws, 2026-10-21): a rule that is right on what it was taught usually is right beyond it, but one
+    /// that changes regime outside it (a sum that saturates, one that wraps) is then confidently wrong, and nothing in the lessons can say so.
+    /// `set_careful(false)` is the permissive showcase.
     careful: bool,
     /// Lessons that fit no unit it knows. They wait here until enough of them gather to form a unit of their own.
     pub pen: Vec<(String, String)>,
@@ -352,7 +353,7 @@ impl School {
         weights.lib = library;
         let routing = Routing::build(&units, &line);
         let library_seen = weights.lib.to_lines();
-        let mut school = School { units, weights, routing, line, route_floor: f32::NEG_INFINITY, seed, library_seen, bar, careful: false, pen: Vec::new() };
+        let mut school = School { units, weights, routing, line, route_floor: f32::NEG_INFINITY, seed, library_seen, bar, careful: true, pen: Vec::new() };
         // How decisive must a question be to count as a recognisable kind? Learned from rewordings of lessons it was taught.
         let own: Vec<&Item> = train.iter().collect();
         let (queries, safety): (Vec<&str>, f32) = match calibration {
@@ -1471,8 +1472,9 @@ impl School {
         writeln!(out, "route_floor {}", self.route_floor).unwrap();
         out.push_str(&self.weights.lib.to_lines());
         writeln!(out, "bar {}", self.bar).unwrap();
-        if self.careful {
-            writeln!(out, "careful 1").unwrap();
+        // careful is the default, so only its absence is written (a file from before careful mode loads as careful)
+        if !self.careful {
+            writeln!(out, "careful 0").unwrap();
         }
         writeln!(out, "pen {}", self.pen.len()).unwrap();
         for (q, a) in &self.pen {
@@ -1513,11 +1515,17 @@ impl School {
             }
             None => 0.9,
         };
-        let careful = if it.peek().map_or(false, |l| l.trim() == "careful 1") {
-            it.next();
-            true
-        } else {
-            false
+        // "careful 1" was written by files made when permissive was the default; both it and a missing line mean careful
+        let careful = match it.peek().map(|l| l.trim()) {
+            Some("careful 0") => {
+                it.next();
+                false
+            }
+            Some("careful 1") => {
+                it.next();
+                true
+            }
+            _ => true,
         };
         let pen_n: usize = field(it.next(), "pen")?.parse().map_err(|e| format!("{e}"))?;
         let mut pen = Vec::new();
@@ -1611,8 +1619,11 @@ mod tests {
     use super::*;
     use crate::kinds;
 
+    /// The capability tests ask what the baby can work out, so they run permissive; the careful default has its own tests.
     fn trained() -> School {
-        School::train(&kinds::world(1), 1, true)
+        let mut s = School::train(&kinds::world(1), 1, true);
+        s.set_careful(false);
+        s
     }
 
     #[test]
@@ -1694,6 +1705,7 @@ mod tests {
     fn forgetting_what_is_explained_halves_the_lessons_and_keeps_every_promise() {
         let w = kinds::world(1);
         let mut s = School::train(&w, 1, true);
+        s.set_careful(false);
         let c = s.compact();
         assert!(c.after * 10 < c.before * 6, "kept {} of {}", c.after, c.before);
         // It still answers every lesson it was ever taught, right, and never wrongly on anything else it is asked.
@@ -1849,6 +1861,7 @@ mod tests {
     fn numbers_school(f: impl Fn(i64) -> i64, upto: i64) -> School {
         let items: Vec<Item> = (0..=upto).map(|a| Item { unit: 0, fact: a as usize, template: 0, query: format!("what is zork {a}"), answer: f(a).to_string() }).collect();
         let mut s = School::from_items(&items, vec!["zork".into()], None, 1, true);
+        s.set_careful(false);
         // what it would have learned from earlier kinds: a ten, and the tens and units digits as pieces
         s.weights.lib.learn_constant(10);
         s.weights.lib.learn_program(&crate::program::Expr::from_text("(div A K10)").unwrap(), 1, crate::program::NO_ORIGIN);
@@ -1883,6 +1896,7 @@ mod tests {
         // digit sum taught on 0-15 without 8 and 9, and knowing only a ten: "first mod 9" is the one smallest explanation, and it is wrong at 9
         let items: Vec<Item> = (0..=15i64).filter(|a| *a != 8 && *a != 9).map(|a| Item { unit: 0, fact: a as usize, template: 0, query: format!("what is zork {a}"), answer: (a / 10 + a % 10).to_string() }).collect();
         let mut s = School::from_items(&items, vec!["zork".into()], None, 1, true);
+        s.set_careful(false);
         s.weights.lib.learn_constant(10);
         s.relearn_unit(0);
         assert_eq!(s.units[0].chosen, Mech::Program);
@@ -1913,6 +1927,7 @@ mod tests {
         // fitted knowing only a ten: "first mod 9" is the one smallest explanation of a digit sum taught on 0-15 (8 and 9 missing)
         let items: Vec<Item> = (0..=15i64).filter(|a| *a != 8 && *a != 9).map(|a| Item { unit: 0, fact: a as usize, template: 0, query: format!("what is zork {a}"), answer: (a / 10 + a % 10).to_string() }).collect();
         let mut s = School::from_items(&items, vec!["zork".into()], None, 1, true);
+        s.set_careful(false);
         s.weights.lib.learn_constant(10);
         s.relearn_unit(0);
         assert!(matches!(&s.units[0].state, Fitted::Program(Some(p)) if p.alts.is_empty()), "one explanation, as far as it knows");
@@ -1928,6 +1943,7 @@ mod tests {
     fn a_unit_left_open_is_reconsidered_when_its_vocabulary_grows() {
         let items: Vec<Item> = (0..=25i64).filter(|a| *a != 8 && *a != 22).map(|a| Item { unit: 0, fact: a as usize, template: 0, query: format!("what is zork {a}"), answer: (a / 10 + a % 10).to_string() }).collect();
         let mut s = School::from_items(&items, vec!["zork".into()], None, 1, true);
+        s.set_careful(false);
         assert_eq!(s.units[0].chosen, Mech::Remember, "without a ten it cannot build this");
         assert!(s.ask("what is zork 29").answer.is_none());
         s.weights.lib.learn_constant(10);
@@ -1945,7 +1961,9 @@ mod tests {
                 items.push(Item { unit: 0, fact: items.len(), template: 0, query: format!("what is {a} zork {b}"), answer: f(a, b).to_string() });
             }
         }
-        School::from_items(&items, vec!["zork".into()], None, 1, true)
+        let mut s = School::from_items(&items, vec!["zork".into()], None, 1, true);
+        s.set_careful(false);
+        s
     }
 
     #[test]
@@ -1968,6 +1986,30 @@ mod tests {
         s.learn_wondered("what is 24 zork 12", "30", "zork").unwrap();
         assert!(s.ask("what is 20 zork 15").answer.is_none(), "refuted: it no longer trusts a rule that said 36 where the truth is 30");
         assert_ne!(s.ask("what is 24 zork 12").answer.as_deref(), Some("36"));
+    }
+
+    #[test]
+    fn careful_is_the_default_and_survives_saving_and_loading() {
+        let items: Vec<Item> = (0..=12i64)
+            .flat_map(|a| (0..=12i64).map(move |b| (a, b)))
+            .enumerate()
+            .map(|(i, (a, b))| Item { unit: 0, fact: i, template: 0, query: format!("what is {a} zork {b}"), answer: (a + b).to_string() })
+            .collect();
+        let mut s = School::from_items(&items, vec!["zork".into()], None, 1, true);
+        assert!(s.ask("what is 20 zork 15").answer.is_none(), "beyond what it was taught: not stated as fact by default");
+        assert_eq!(s.ask("what is 7 zork 9").answer.as_deref(), Some("16"));
+        let dir = std::env::temp_dir().join(format!("careful_default_{}", std::process::id()));
+        let path = dir.join("a.school").to_string_lossy().to_string();
+        s.save(&path).unwrap();
+        assert!(School::load(&path).unwrap().ask("what is 20 zork 15").answer.is_none(), "a saved baby stays careful");
+        // permissive is remembered too, and a file with no careful line at all (older files) loads careful
+        s.set_careful(false);
+        s.save(&path).unwrap();
+        assert_eq!(School::load(&path).unwrap().ask("what is 20 zork 15").answer.as_deref(), Some("35"));
+        let text = std::fs::read_to_string(&path).unwrap().replace("careful 0\n", "");
+        std::fs::write(&path, text).unwrap();
+        assert!(School::load(&path).unwrap().ask("what is 20 zork 15").answer.is_none());
+        std::fs::remove_dir_all(dir).ok();
     }
 
     #[test]

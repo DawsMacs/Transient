@@ -260,7 +260,9 @@ pub struct Outcome {
 /// Teach everything, then report each kind. `quiet` suppresses the table.
 pub fn run(seed: u64, quiet: bool) -> Outcome {
     let b = battery(seed);
-    let school = School::from_items(&b.world.train, b.names.clone(), Some(&b.world.reworded), seed, true);
+    let mut school = School::from_items(&b.world.train, b.names.clone(), Some(&b.world.reworded), seed, true);
+    // this battery asks what it can WORK OUT, beyond the taught numbers too, so it runs permissive (careful is the default, see `run_careful`)
+    school.set_careful(false);
     if !quiet {
         println!("{:<10} {:<9} {:<9} {:>5}  {:<12} {:<12} {}", "kind", "role", "chose", "held", "never", "beyond", "(right/refused/WRONG)  how");
     }
@@ -364,7 +366,11 @@ fn numbers_in(q: &str) -> Vec<i64> {
 /// its own school, taught once; every kind is its own unit, so they share it.
 pub fn run_active(seed: u64, limit: usize) -> Vec<ActiveResult> {
     let b = battery(seed);
-    let fresh = || School::from_items(&b.world.train, b.names.clone(), Some(&b.world.reworded), seed, true);
+    let fresh = || {
+        let mut s = School::from_items(&b.world.train, b.names.clone(), Some(&b.world.reworded), seed, true);
+        s.set_careful(false); // capability battery: permissive
+        s
+    };
     let mut school = fresh();
     let mut school_random = fresh();
     let mut results = Vec::new();
@@ -462,6 +468,7 @@ pub struct CheckResult {
 pub fn run_check(seed: u64, limit: usize) -> Vec<CheckResult> {
     let b = battery(seed);
     let mut school = School::from_items(&b.world.train, b.names.clone(), Some(&b.world.reworded), seed, true);
+    school.set_careful(false); // capability battery: permissive
     let mut results = Vec::new();
     for (u, kind) in b.kinds.iter().enumerate() {
         let name = b.names[u].clone();
@@ -543,6 +550,7 @@ pub fn run_careful(seed: u64, rounds: usize, per_unit: usize) -> CarefulResult {
     let mut school = School::from_items(&b.world.train, b.names.clone(), Some(&b.world.reworded), seed, true);
     let deceptive = |r: &Role| *r == Role::Deceptive;
     let genuine = |r: &Role| matches!(r, Role::Base | Role::Hidden | Role::Stage2);
+    school.set_careful(false); // the first row is the permissive baseline; careful is the default since 2026-10-21
     let mut res = CarefulResult { deceptive: vec![tally(&school, &b, &deceptive)], genuine: vec![tally(&school, &b, &genuine)], asked: 0 };
     if std::env::var("CAREFUL_DEBUG").is_ok() {
         eprintln!("LIBRARY at start:\n{}", school.library_text());

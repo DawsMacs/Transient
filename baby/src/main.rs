@@ -13,7 +13,8 @@
 //!   baby sleep  [--compact]                 re-sort the pen, merge/split units that follow one rule, optionally forget what is explained
 //!   baby effort                             what answering costs (operations, words moved, estimated joules): the slow way vs the baby's way
 //!   baby ask    "what is two times four"    ask it; it answers, says how it knew, or says why it won't (uses the school)
-//!                                           (--careful: it will not extrapolate beyond the numbers it was taught or has had checked)
+//!                                           (careful is the default: it will not state as fact a number beyond what it was taught or has had checked;
+//!                                            --permissive turns that off and lets rules extrapolate unchecked)
 //!   baby data   [--seed N] [--tsv]          show the older single-network world it learns from
 //!   baby train  [options]                   teach it (from scratch), then save it
 //!   baby ask    "capital of france"         ask a saved baby (frozen: it does not learn here)
@@ -69,7 +70,7 @@ struct Args {
 
 impl Args {
     fn parse(raw: &[String]) -> Args {
-        const FLAGS: [&str; 16] = ["curriculum", "quiet", "tsv", "verbose", "guess", "piece-keys", "full", "compact", "no-reorg", "row", "digits", "stage2-first", "active", "wondered", "check", "careful"];
+        const FLAGS: [&str; 17] = ["curriculum", "quiet", "tsv", "verbose", "guess", "piece-keys", "full", "compact", "no-reorg", "row", "digits", "stage2-first", "active", "wondered", "check", "careful", "permissive"];
         let mut positional = Vec::new();
         let mut opts = HashMap::new();
         let mut i = 0;
@@ -343,7 +344,9 @@ fn ask_school(a: &Args, school_path: &str, query: &str) {
         eprintln!("{e}");
         std::process::exit(1);
     });
-    if a.flag("careful") {
+    if a.flag("permissive") {
+        school.set_careful(false);
+    } else if a.flag("careful") {
         school.set_careful(true);
     }
     let memory = Memory::open(&memory_path(a, school_path), a.get("match", 0.6));
@@ -440,7 +443,7 @@ fn cmd_school(a: &Args) {
         kinds::UNITS.len()
     );
     let mut school = school::School::train(&world, seed, !a.flag("full"));
-    school.set_careful(a.flag("careful"));
+    school.set_careful(!a.flag("permissive"));
     println!("  {:<9} {:<9} {:>9}   built / note", "unit", "learns by", "held back");
     for u in &school.units {
         let note = match (u.program(), u.memorise_only()) {

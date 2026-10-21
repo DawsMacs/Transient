@@ -357,7 +357,8 @@ mod tests {
             d.items[d.origin.iter().position(|x| *x == o).unwrap()].unit
         };
         assert_ne!(unit_of("times"), unit_of("sum"));
-        let school = crate::school::School::from_items(&d.items, d.names.clone(), None, 1, true);
+        let mut school = crate::school::School::from_items(&d.items, d.names.clone(), None, 1, true);
+        school.set_careful(false);
         assert!(school.ask("three minus five").answer.is_none(), "answered a minus question with a negative result");
         assert!(school.ask("two minus nine").answer.is_none());
         assert_eq!(school.ask("how far apart are two and nine").answer.as_deref(), Some("seven"));
