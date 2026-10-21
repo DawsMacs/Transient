@@ -5,7 +5,7 @@ whether or not it works. The code is `baby/` (pure Rust, zero dependencies, buil
 
 ## Start of session
 
-1. Read `TransientHandover.md` in full. It has the state, the numbers, the code map, the plan and what is next, the honest caveats, and the working habits. Then `TransientVision.md` (Daws's own entries, in his
+1. Read `TransientHandover.md` in full (rewritten 2026-10-21: state, decisions that are Daws's, options, guards, working lessons). It has the state, the numbers, the code map, the plan and what is next, the honest caveats, and the working habits. Then `TransientVision.md` (Daws's own entries, in his
    voice: append dated entries, never rewrite them; assistant context goes in separate labelled sections).
 2. Run the two-minute check in the handover (`cargo test --release --offline`; `./target/release/baby school`; the scorecard's WRONG column must read 0.0%).
 
@@ -16,5 +16,5 @@ whether or not it works. The code is `baby/` (pure Rust, zero dependencies, buil
 - **Pessimism is input, never a brake.** Daws wants risks phrased as design constraints/terrain/checkpoints that redirect the work. Do not propose kill criteria or stop the project over difficulty; do not claim certainty of success.
 - **Absolute freedom, within the stated goals** (frontier-class intelligence on typical hardware, light on RAM/memory, built around Adaptive Learning, Rust-first, measured in joules not just parameters). Default to doing the plan.
 - **After every new capability, ask adversarial questions** (the apart/minus/"N less than ten" ambiguity bit three times) and keep batteries of must-refuse questions in the tests.
-- **Do not run system-setting commands** (e.g. the RAPL `chmod`): give Daws the command instead. **This is not a git repo;** offer `git init` when he wants, and never add a remote or push without asking.
+- **Do not run system-setting commands** (e.g. the RAPL `chmod`): give Daws the command instead. **This is a git repo** (`origin` = `git@github.com:DawsMacs/TransientAI.git`, public, AGPL-3.0-or-later; use his global git account). He has authorised commits and pushes to `origin main` for this work; still ask before force-pushing, adding other remotes or changing repo settings. The repo is public: never commit `.local/` or details of the sibling project.
 - The sibling project `~/Hiraketa` (Nana) has its own `CLAUDE.md`; its offline-mode work is Nana's private research and is separate from Transient.
