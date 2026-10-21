@@ -5,6 +5,7 @@
 //!   baby school [--seed N] [--out PATH]     TEACH THE BABY (the unified one): units of lessons, each learned the way evidence says
 //!   baby learn  "what is two multiplied by three" six --unit times    keep learning AFTER school: add a lesson, re-work how that unit is learned
 //!   baby discover [--seed N] [--out PATH]   hand it a heap of UNLABELLED lessons: it finds the units itself, then is scored like the others
+//!   baby bridge (--svamp FILE | --pairs FILE) [--units kind|discover] [--split random|blocks] [--test F] [--seed N]   REAL TEXT: what does the baby make of problems somebody else wrote?
 //!   baby cost                               what LEARNING costs: time and memory to teach it, a new lesson, a new kind, and to tidy up
 //!   baby scale  [--units N --entities N --facts N --noise F --typos F --seed N --grade N --no-reorg | --sweep 20,60,200]   does learning stay light as the world grows?
 //!   baby invent [--seed N]                  hidden kinds nobody wrote a mechanism for, and kinds that must stay unexplained: what does it work out?
@@ -32,6 +33,7 @@
 //! life options:  --strategies naive,replay,store,sleep,retrain --seeds K --seed N --days N --verbose
 //!                --max-steps N --replay-k N --sleep-every N --sleep-epochs N --threshold F --lr F --optimizer adam|sgd --reader concat|bag|bigram|letters --buckets N --typo-aug K
 
+mod bridge;
 mod curious;
 mod data;
 mod discover;
@@ -446,6 +448,42 @@ fn print_scorecard(school: &school::School, world: &kinds::World) {
             100.0 * guess_wrong as f64 / t
         );
     }
+}
+
+fn cmd_bridge(a: &Args) {
+    let (svamp, tsv) = (a.string("svamp", ""), a.string("pairs", ""));
+    let (path, loader): (String, fn(&str) -> Result<Vec<bridge::Problem>, String>) = match (svamp.is_empty(), tsv.is_empty()) {
+        (false, true) => (svamp, bridge::load_svamp),
+        (true, false) => (tsv, bridge::load_tsv),
+        _ => {
+            eprintln!("usage: baby bridge (--svamp SVAMP.json | --pairs FILE) [--units kind|discover] [--split random|blocks] [--test 0.3] [--seed N]");
+            std::process::exit(2);
+        }
+    };
+    let text = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+        eprintln!("cannot read {path}: {e}");
+        std::process::exit(1);
+    });
+    let problems = loader(&text).unwrap_or_else(|e| {
+        eprintln!("{path}: {e}");
+        std::process::exit(1);
+    });
+    let total = problems.len();
+    let (kept, dropped) = bridge::readable(problems);
+    let how = match a.string("split", "random").as_str() {
+        "blocks" => bridge::Split::Blocks,
+        _ => bridge::Split::Random,
+    };
+    let units = match a.string("units", "kind").as_str() {
+        "discover" => bridge::Units::Discover,
+        _ => bridge::Units::ByKind,
+    };
+    let seed: u64 = a.get("seed", 1);
+    let (train, test) = bridge::split(&kept, how, a.get("test", 0.3f32), seed);
+    println!("units: {:?}, split: {:?}, seed {seed}\n", units, how);
+    let mut report = bridge::run(&train, &test, units, seed);
+    report.dropped = dropped;
+    bridge::print(&report, total);
 }
 
 fn cmd_grade(a: &Args) {
@@ -1480,6 +1518,7 @@ fn main() {
         Some("cost") => cmd_cost(&args),
         Some("wonder") => cmd_wonder(&args),
         Some("scale") => cmd_scale(&args),
+        Some("bridge") => cmd_bridge(&args),
         Some("invent") => {
             if args.flag("calibrate") {
                 let seeds: u64 = args.get("seeds", 1);
