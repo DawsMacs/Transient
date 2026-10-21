@@ -16,6 +16,9 @@ measured by what it costs (operations, memory, estimated joules) rather than by 
 The current artefact is `baby/`: about 11k lines of Rust, **no dependencies**, builds offline, 98 tests. It is a research prototype
 evaluated on a synthetic curriculum. It is not a language model and makes no claim to be one yet.
 
+Transient is made by **[TransientAI](https://transientai.org)**, an independent research effort (currently one person, Daws Macs). Its
+website has an overview, documentation, a progress page and a blog.
+
 > **Status:** active research. Every number below comes from tidy synthetic lessons and *estimated* energy. Read
 > [Limitations](#limitations) before drawing conclusions.
 
@@ -156,6 +159,8 @@ to find out by measurement. The reasoning behind the project, in the author's ow
 | [`docs/Direction.md`](docs/Direction.md) | strategy, hardware terrain, language choice, candidate architectures |
 | [`TransientVision.md`](TransientVision.md) | the author's dated vision entries |
 | [`TransientHandover.md`](TransientHandover.md) | current state and next steps, for resuming work |
+
+The website, [transientai.org](https://transientai.org), is a separate repository ([`DawsMacs/TransientAI-site`](https://github.com/DawsMacs/TransientAI-site)): overview, documentation, progress and a blog.
 
 ## Licence
 
