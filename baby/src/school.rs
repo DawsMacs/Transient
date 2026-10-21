@@ -1995,7 +1995,8 @@ mod tests {
         s.set_careful(true);
         assert_eq!(s.ask("what is 7 zork 9").answer.as_deref(), Some("16"));
         let r = s.ask("what is 20 zork 15");
-        assert!(r.answer.is_none() && r.how.contains("extrapolate"), "{}", r.how);
+        assert!(r.answer.is_none() && r.how.contains("state it as fact"), "{}", r.how);
+        assert_eq!(r.guess.map(|g| g.answer).as_deref(), Some("35"), "the hazardous value is now only ever a labelled guess");
         // it asks about the edge; the first probe refutes the rule
         let checks = s.check_myself(3);
         let asked: Vec<&str> = checks.iter().map(|c| c.question.as_str()).collect();
