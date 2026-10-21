@@ -70,7 +70,7 @@ struct Args {
 
 impl Args {
     fn parse(raw: &[String]) -> Args {
-        const FLAGS: [&str; 18] = ["curriculum", "quiet", "tsv", "verbose", "guess", "piece-keys", "full", "compact", "no-reorg", "row", "digits", "stage2-first", "active", "wondered", "check", "careful", "permissive", "guesses"];
+        const FLAGS: [&str; 19] = ["curriculum", "quiet", "tsv", "verbose", "guess", "piece-keys", "full", "compact", "no-reorg", "row", "digits", "stage2-first", "active", "wondered", "check", "careful", "permissive", "guesses", "corrections"];
         let mut positional = Vec::new();
         let mut opts = HashMap::new();
         let mut i = 0;
@@ -1476,6 +1476,25 @@ fn main() {
         Some("wonder") => cmd_wonder(&args),
         Some("scale") => cmd_scale(&args),
         Some("invent") => {
+            if args.flag("corrections") {
+                let seeds: u64 = args.get("seeds", 1);
+                let runs: Vec<_> = (1..=seeds).map(invent::run_corrections).collect();
+                for (label, deceptive) in [("deceptive kinds (a rule that changes regime)", true), ("genuine kinds", false)] {
+                    let mut t = invent::CorrectionTally::default();
+                    for run in &runs {
+                        let r = if deceptive { run.0 } else { run.1 };
+                        t.kinds += r.kinds; t.wrong_before += r.wrong_before; t.still_wrong_guess += r.still_wrong_guess; t.still_wrong_fact += r.still_wrong_fact;
+                        t.now_refused += r.now_refused; t.now_right_guess += r.now_right_guess; t.now_right_fact += r.now_right_fact; t.right_before += r.right_before;
+                        t.kept_right_guess += r.kept_right_guess; t.kept_right_fact += r.kept_right_fact; t.lost_to_refusal += r.lost_to_refusal; t.broke += r.broke;
+                    }
+                    println!("\n{label}: {} kinds with a wrong guess, over {seeds} seeds. One correction each (the wrong guess nearest the taught range).", t.kinds);
+                    println!("  the other {} wrong guesses of those kinds are now: still a wrong guess {}, still WRONG as a fact {}, refused {}, right as a guess {}, right as a fact {}",
+                        t.wrong_before, t.still_wrong_guess, t.still_wrong_fact, t.now_refused, t.now_right_guess, t.now_right_fact);
+                    println!("  the {} guesses that were right: still right as a guess {}, now right as a fact {}, now refused {}, BROKEN (wrong) {}",
+                        t.right_before, t.kept_right_guess, t.kept_right_fact, t.lost_to_refusal, t.broke);
+                }
+                return;
+            }
             if args.flag("guesses") {
                 let seeds: u64 = args.get("seeds", 1);
                 let mut rows = Vec::new();

@@ -275,8 +275,9 @@ impl Remembered {
     }
 
     /// The range of each operand over the lessons that share an operation word with `q_words` (every lesson if it has none): for each operand
-    /// position, the smallest and largest number the unit was taught there. `value` says whether a word is a number.
-    pub fn operand_hull(&self, q_words: &[String], value: &dyn Fn(&str) -> Option<f32>) -> Vec<(f32, f32)> {
+    /// position, the smallest and largest number the unit was taught there. `value` says whether a word is a number. Lessons listed in `skip`
+    /// (sorted indices) are ignored: those are the ones the unit's rule does not explain, and they do not show where it can be trusted.
+    pub fn operand_hull(&self, q_words: &[String], value: &dyn Fn(&str) -> Option<f32>, skip: &[usize]) -> Vec<(f32, f32)> {
         let mut candidates: Vec<usize> = q_words
             .iter()
             .filter(|w| value(w).is_none() && !self.glue.contains(*w))
@@ -289,6 +290,9 @@ impl Remembered {
         candidates.dedup();
         let mut hull: Vec<(f32, f32)> = Vec::new();
         for i in candidates {
+            if skip.binary_search(&i).is_ok() {
+                continue;
+            }
             let mut pos = 0;
             for t in &self.order[i] {
                 if let Some(v) = value(t) {

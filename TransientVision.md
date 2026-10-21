@@ -369,3 +369,38 @@ not spelled out as it is in this file), with a banner built from the logo and th
 - **Public means public.** Anything committed, including its history, is permanently visible and may be cached or forked. Private-project notes were kept out
   of the first commit for that reason (`.local/` is git-ignored).
 
+
+---
+
+## Entry 7 (2026-10-21): Frontier, guessing like a scientist, and what is trusted
+
+### What "frontier" means here
+
+The ambition is to bring the level of models with trillions of parameters (proprietary ones run through APIs in large data centres, or open-weight ones such as Kimi K3, over 2 trillion parameters, about 40 billion active) to
+ordinary hardware, locally. "Frontier" simply means what is in that range: **"I trust this AI in my workflow, education, coding, job, school"**, general-purpose intelligence. It is vague on purpose. It is **an ambition, not a destined goal**, and it
+must not falsely lead the work elsewhere. Daws still bets on it because it could change how intelligence is distributed globally, so that disadvantaged people can have it too one day without expensive hardware.
+Of the possible measures, the one that matters is **capability per unit of computation as the machine itself measures it (joules)**. Benchmarks and chat quality are trend-based and can change; they come later, optionally, if the joule measure is substantially met.
+
+### Careful, but not timid: the baby should guess like a scientist
+
+Careful becomes the default. But an intelligent system that cannot find patterns, predict or hypothesise would be a very smart and very restrictive system, and one that is always confident would be a chatbot that is wrong all the time.
+The human parallel is the way out: scientists guess, form hypotheses, then theories, then establish laws or facts, and do it rigorously. Risk-taking sometimes pays more than being overly cautious, because restraint keeps you in the same loop; **guess, get something wrong, update: that is learning.**
+The baby does not have to be perfect. It has to understand **what is true, the range of complexity, and why something is true or false**, and then, through trial and error, learn using Adaptive Learning. LLMs need extensive training or post-training to update something; **ours can update in real time, which is the biggest advantage.**
+Keep that in mind in handling this.
+
+### What is trusted, and the licence
+
+The licence stays **AGPL-3.0-or-later**. Daws accepts the trust it involves (the FSF, and GitHub, and the assistant: "we have to trust many things here"). If the AGPL's nature ever changed in a way he disliked, new releases could go out under AGPL-3.0-only, and older ones remain under what they were granted.
+He trusts the GNU foundation: Stallman went through a lot to invent copyleft. On git: freedom was given so that there is progress without him having to spoon-feed or sit through everything; risk is real, so **being careful, precise, planning, and asking in risky situations is still the right call.**
+**The name "Transient" stays a mystery for now** ("for the lore").
+
+### Decisions in this entry
+- `--careful` becomes the default (permissive is `--permissive`).
+- GPU: Daws will rent one for the controlled comparison with a small transformer (he will say when it is set up); a local iMac (macOS, AMD Radeon 4 GB, 40 GB RAM) was considered and set aside as complicated.
+- The energy meter (RAPL) was made readable by Daws himself.
+- GitHub social preview and topics were set by Daws.
+
+### Context added by the assistant (labelled)
+
+- Daws's ladder (hypothesis, theory, law) is implemented as: a labelled **guess** (a trusted rule used outside the range taught or checked), a **checked** range (a confirmed answer extends where it may speak as fact), and **taught** facts. See the 2026-10-21 section of `baby/README.md`.
+- The honesty rule became "never *silently* wrong": WRONG (a fact stated and false) must stay at 0, a labelled guess may be wrong, and what is measured is whether guesses are calibrated and whether one correction fixes the next mistake.

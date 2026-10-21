@@ -628,3 +628,88 @@ pub fn run_guesses(seed: u64) -> Vec<GuessRow> {
     }
     rows
 }
+
+/// What one correction does. Per kind with at least one wrong guess: teach the true answer to the wrong guess nearest the taught range (the first
+/// miss a teacher would meet), then re-ask every other question that kind had a guess for.
+#[derive(Default, Clone, Copy)]
+pub struct CorrectionTally {
+    pub kinds: usize,
+    /// other guesses that were wrong before: how they stand after one correction
+    pub wrong_before: usize,
+    pub still_wrong_guess: usize,
+    pub still_wrong_fact: usize,
+    pub now_refused: usize,
+    pub now_right_guess: usize,
+    pub now_right_fact: usize,
+    /// guesses that were right before: any damage?
+    pub right_before: usize,
+    pub kept_right_guess: usize,
+    pub kept_right_fact: usize,
+    pub lost_to_refusal: usize,
+    pub broke: usize,
+}
+
+pub fn run_corrections(seed: u64) -> (CorrectionTally, CorrectionTally) {
+    let b = battery(seed);
+    let mut school = School::from_items(&b.world.train, b.names.clone(), Some(&b.world.reworded), seed, true);
+    // 1. before: every guess, per kind
+    struct Plan<'a> {
+        u: usize,
+        deceptive: bool,
+        first: &'a Item,
+        wrong: Vec<&'a Item>,
+        right: Vec<&'a Item>,
+    }
+    let mut plans: Vec<Plan> = Vec::new();
+    for (u, kind) in b.kinds.iter().enumerate() {
+        if kind.role == Role::Unexplainable {
+            continue;
+        }
+        let items: Vec<&Item> = b.world.new_items.iter().chain(b.world.beyond.iter()).filter(|i| i.unit == u).collect();
+        let mut wrong: Vec<(f32, &Item)> = Vec::new();
+        let mut right: Vec<&Item> = Vec::new();
+        for it in &items {
+            if let Some(g) = school.ask(&it.query).guess {
+                if g.answer == it.answer { right.push(it) } else { wrong.push((g.stretch, it)) }
+            }
+        }
+        if wrong.is_empty() {
+            continue;
+        }
+        wrong.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        let first = wrong[0].1;
+        plans.push(Plan { u, deceptive: kind.role == Role::Deceptive, first, wrong: wrong.iter().skip(1).map(|w| w.1).collect(), right });
+    }
+    // 2. one correction per kind: the wrong guess nearest the taught range
+    for p in &plans {
+        let _ = school.learn(&p.first.query, &p.first.answer, Some(&b.names[p.u]));
+    }
+    // 3. after
+    let (mut dec, mut gen) = (CorrectionTally::default(), CorrectionTally::default());
+    for p in &plans {
+        let t = if p.deceptive { &mut dec } else { &mut gen };
+        t.kinds += 1;
+        for it in &p.wrong {
+            t.wrong_before += 1;
+            let r = school.ask(&it.query);
+            match (r.answer, r.guess) {
+                (Some(a), _) if a == it.answer => t.now_right_fact += 1,
+                (Some(_), _) => t.still_wrong_fact += 1,
+                (None, Some(g)) if g.answer == it.answer => t.now_right_guess += 1,
+                (None, Some(_)) => t.still_wrong_guess += 1,
+                (None, None) => t.now_refused += 1,
+            }
+        }
+        for it in &p.right {
+            t.right_before += 1;
+            let r = school.ask(&it.query);
+            match (r.answer, r.guess) {
+                (Some(a), _) if a == it.answer => t.kept_right_fact += 1,
+                (None, Some(g)) if g.answer == it.answer => t.kept_right_guess += 1,
+                (None, None) => t.lost_to_refusal += 1,
+                _ => t.broke += 1,
+            }
+        }
+    }
+    (dec, gen)
+}

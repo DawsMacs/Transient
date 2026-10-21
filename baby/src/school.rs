@@ -31,6 +31,12 @@ pub struct SchoolUnit {
     lessons: Vec<Item>,
     remember: Remembered,
     state: Fitted,
+    /// Indices of lessons the current rule, selection or program does not explain (sorted). Where a rule can be trusted is read off the lessons it
+    /// DOES explain; a lesson it gets wrong does not widen that.
+    exceptions: Vec<usize>,
+    /// An unexplained lesson lies outside what the explained lessons span: the rule has been shown wrong out there (a teacher's correction of a
+    /// guess, say), so it may not even guess beyond its explained range.
+    refuted: bool,
 }
 
 impl SchoolUnit {
@@ -358,6 +364,8 @@ impl School {
                 remember: Remembered::from_items(&lessons),
                 lessons,
                 state,
+                exceptions: Vec::new(),
+                refuted: false,
             });
         }
         let line = NumberLine::from_counting(&counting_lessons());
@@ -380,6 +388,7 @@ impl School {
         // Now that every unit has been learned, and with it the vocabulary the later ones added, look again at the program units.
         school.library_seen = String::new();
         school.review_programs();
+        school.settle_all_reach();
         school
     }
 
@@ -414,11 +423,49 @@ impl School {
         self.careful = careful;
     }
 
+    /// Work out which lessons of unit `u` its current rule does not explain, and whether one of them lies outside what the others span (the rule
+    /// has been shown wrong out there). Called whenever a unit is (re)fitted. The tolerance for a few unexplained lessons is right for wrong
+    /// labels inside the taught range, and wrong for a correction of a guess outside it: such a lesson must not widen where the rule may speak.
+    fn settle_reach(&mut self, u: usize) {
+        let unit = &self.units[u];
+        let numeric = matches!(unit.state, Fitted::Rule(_) | Fitted::Select(_) | Fitted::Program(Some(_)));
+        let mut exceptions: Vec<usize> = Vec::new();
+        if numeric {
+            for (i, l) in unit.lessons.iter().enumerate() {
+                if predict(&unit.state, &l.query, &self.weights).as_deref() != Some(l.answer.as_str()) {
+                    exceptions.push(i);
+                }
+            }
+        }
+        let value = |w: &str| self.line.value(w);
+        let refuted = exceptions.iter().any(|&i| {
+            let tokens = tokenize(&unit.lessons[i].query);
+            let hull = unit.remember.operand_hull(&tokens, &value, &exceptions);
+            let asked: Vec<f32> = tokens.iter().filter_map(|t| value(t)).collect();
+            asked.iter().enumerate().any(|(k, v)| hull.get(k).map_or(false, |&(lo, hi)| *v < lo || *v > hi))
+        });
+        let unit = &mut self.units[u];
+        unit.exceptions = exceptions;
+        unit.refuted = refuted;
+    }
+
+    fn settle_all_reach(&mut self) {
+        for u in 0..self.units.len() {
+            self.settle_reach(u);
+        }
+    }
+
+    /// (for tests) the cached exceptions and refutations of every unit
+    #[cfg(test)]
+    fn reach_snapshot(&self) -> Vec<(Vec<usize>, bool)> {
+        self.units.iter().map(|u| (u.exceptions.clone(), u.refuted)).collect()
+    }
+
     /// Is any operand of this question outside the range unit `u` was taught (or has had confirmed) for the operation it names? Then why.
     fn beyond_reach(&self, u: usize, tokens: &[String]) -> Option<(String, f32)> {
         let unit = &self.units[u];
         let value = |w: &str| self.line.value(w);
-        let hull = unit.remember.operand_hull(tokens, &value);
+        let hull = unit.remember.operand_hull(tokens, &value, &unit.exceptions);
         let asked: Vec<f32> = tokens.iter().filter_map(|t| value(t)).collect();
         let mut found: Option<(String, f32)> = None;
         for (i, v) in asked.iter().enumerate() {
@@ -533,6 +580,15 @@ impl School {
                         // never disagree, so this costs nothing there.
                         match (&worked_out, naive.is_none()) {
                             (Some(a), true) => match unit.remember.exact(q).and_then(|_| unit.remember.recall_counted(q, &self.weights, &mut Ledger::default(), true)) {
+                                // Out where a lesson has already shown the rule wrong, what it was told is the better witness.
+                                Some(m) if &m != a && self.careful && unit.refuted && self.beyond_reach(u, &tokens).is_some() => {
+                                    return Reply {
+                                        guess: None,
+                                        answer: Some(m),
+                                        unit: Some(u),
+                                        how: said(&format!("recalled from what I was told: my rule says {a} here, but a lesson out here has already shown my rule wrong")),
+                                    };
+                                }
                                 Some(m) if &m != a => {
                                     return Reply { guess: None,
                                         answer: None,
@@ -548,6 +604,14 @@ impl School {
                 };
                 if self.careful && answer.is_some() && matches!(unit.chosen, Mech::Rule | Mech::Select | Mech::Program) {
                     if let (Some((why, stretch)), Some(a)) = (self.beyond_reach(u, &tokens), answer.as_ref()) {
+                        if unit.refuted {
+                            return Reply {
+                                guess: None,
+                                answer: None,
+                                unit: Some(u),
+                                how: said(&format!("{why}; and a lesson out there has already shown my rule wrong, so I won't even guess")),
+                            };
+                        }
                         return Reply { guess: Some(Guess { answer: a.clone(), stretch }), answer: None, unit: Some(u), how: said(&why) };
                     }
                 }
@@ -616,6 +680,7 @@ impl School {
         if ev[Mech::ALL.iter().position(|m| *m == chosen).unwrap()] >= mechanisms::reliable() {
             mechanisms::grow_library(&mut self.weights.lib, &self.units[u].state, u);
         }
+        self.settle_reach(u);
     }
 
     /// The cheap way to take on a lesson when nothing structural has changed: refit the unit's current mechanism on all its lessons and
@@ -643,6 +708,7 @@ impl School {
         let unit = &mut self.units[u];
         unit.remember = Remembered::from_items(&items);
         unit.state = if chosen == Mech::Remember { Fitted::Remember(unit.remember.clone()) } else { state };
+        self.settle_reach(u);
         true
     }
 
@@ -904,6 +970,8 @@ impl School {
                         lessons: Vec::new(),
                         remember: Remembered::from_items(&[]),
                         state: Fitted::Remember(Remembered::from_items(&[])),
+                        exceptions: Vec::new(),
+                        refuted: false,
                     });
                     (self.units.len() - 1, true)
                 }
@@ -925,7 +993,10 @@ impl School {
         };
         let was = if opened { None } else { Some(self.units[u].chosen) };
         // Surprise-gated: if the unit can already work this out, there is nothing to learn and nothing to keep.
+        // (A confirmed GUESS is not nothing to learn: it is what extends the range the unit may state as fact.)
+        let was_a_guess = self.careful && self.beyond_reach(u, &tokens).is_some();
         if !opened
+            && !was_a_guess
             && self.units[u].lessons.iter().all(|l| lesson_key(&l.query) != lesson_key(query))
             && self.unit_predicts(u, query).as_deref() == Some(answer)
         {
@@ -978,6 +1049,12 @@ impl School {
     /// rule) is taken apart if its lessons separate into groups that each ARE explained; two units that were taught separately but
     /// are right for each other's lessons under one rule, or a rule per word, become one.
     pub fn reorganise(&mut self) -> Reorg {
+        let report = self.reorganise_inner();
+        self.settle_all_reach();
+        report
+    }
+
+    fn reorganise_inner(&mut self) -> Reorg {
         // the noise in its lessons may have changed since it was taught: measure again, and use the bar that goes with it
         self.bar = mechanisms::bar_for_noise(mechanisms::estimate_noise(&self.units.iter().map(|u| u.lessons.clone()).collect::<Vec<_>>()));
         mechanisms::set_reliable(self.bar);
@@ -1052,6 +1129,8 @@ impl School {
                             lessons: Vec::new(),
                             remember: Remembered::from_items(&[]),
                             state: Fitted::Remember(Remembered::from_items(&[])),
+                            exceptions: Vec::new(),
+                            refuted: false,
                         });
                         self.units.len() - 1
                     }
@@ -1128,6 +1207,7 @@ impl School {
                     unit.evidence[mech] = accuracy;
                     unit.remember = Remembered::from_items(&items);
                     unit.state = state;
+                    self.settle_reach(u);
                 }
             }
         }
@@ -1223,6 +1303,12 @@ impl School {
     /// joins the unit that already builds exactly the same expression). Anything smaller stays, with a note if an existing unit
     /// already gets it right, for the teacher to confirm.
     pub fn process_pen(&mut self) -> PenReport {
+        let report = self.process_pen_inner();
+        self.settle_all_reach();
+        report
+    }
+
+    fn process_pen_inner(&mut self) -> PenReport {
         mechanisms::set_reliable(self.bar);
         let mut report = PenReport { opened: Vec::new(), joined: Vec::new(), suggestions: Vec::new(), left: 0 };
         let mut used = vec![false; self.pen.len()];
@@ -1269,6 +1355,8 @@ impl School {
                             lessons: Vec::new(),
                             remember: Remembered::from_items(&[]),
                             state: Fitted::Remember(Remembered::from_items(&[])),
+                            exceptions: Vec::new(),
+                            refuted: false,
                         });
                         self.units.len() - 1
                     }
@@ -1338,6 +1426,12 @@ impl School {
     /// taught: it keeps a small support set (the facts the fitted unit could not have got right without, and every word it needs
     /// to understand). A unit of facts keeps two phrasings of each. What it knows does not change.
     pub fn compact(&mut self) -> Compacted {
+        let report = self.compact_inner();
+        self.settle_all_reach();
+        report
+    }
+
+    fn compact_inner(&mut self) -> Compacted {
         mechanisms::set_reliable(self.bar);
         let before: usize = self.units.iter().map(|u| u.lessons.len()).sum();
         let mut removed: Vec<Item> = Vec::new();
@@ -1620,14 +1714,16 @@ impl School {
                 ["state", "network", file] => Fitted::Network(Box::new(Model::load(file)?)),
                 other => return Err(format!("{path}: bad state line {other:?}")),
             };
-            units.push(SchoolUnit { name: head[2].to_string(), chosen, evidence, lessons, remember, state });
+            units.push(SchoolUnit { name: head[2].to_string(), chosen, evidence, lessons, remember, state, exceptions: Vec::new(), refuted: false });
         }
         let line = NumberLine::from_counting(&counting_lessons());
         let mut weights = Weights::from(&all_items(&units));
         weights.lib = library;
         let routing = Routing::build(&units, &line);
         let library_seen = weights.lib.to_lines();
-        Ok(School { units, weights, routing, line, route_floor, seed, library_seen, bar, careful, pen })
+        let mut school = School { units, weights, routing, line, route_floor, seed, library_seen, bar, careful, pen };
+        school.settle_all_reach();
+        Ok(school)
     }
 }
 
@@ -2045,6 +2141,40 @@ mod tests {
         let r = p.ask("what is seven times one");
         assert_eq!(r.answer.as_deref(), Some("seven"));
         assert!(r.guess.is_none());
+    }
+
+    #[test]
+    fn a_correction_of_a_guess_ends_the_guessing_out_there_and_a_confirmation_extends_the_reach() {
+        // the truth saturates at 30; nothing taught (sums up to 24) says so
+        let mut s = sums_school(|a, b| (a + b).min(30));
+        s.set_careful(true);
+        let r = s.ask("what is 20 zork 15");
+        assert_eq!(r.guess.map(|g| g.answer).as_deref(), Some("35"), "a labelled guess, wrong");
+        // told the truth about a neighbour (an ordinary `learn`, not a check it asked for)
+        s.learn("what is 24 zork 12", "30", Some("zork")).unwrap();
+        let again = s.ask("what is 20 zork 15");
+        assert!(again.answer.is_none() && again.guess.is_none(), "after a correction out there the rule may not even guess there: {}", again.how);
+        assert!(again.how.contains("already shown my rule wrong"), "{}", again.how);
+        assert_eq!(s.ask("what is 7 zork 9").answer.as_deref(), Some("16"), "inside what the rule explains it still speaks as fact");
+        assert!(s.ask("what is 24 zork 12").answer.as_deref() == Some("30"), "what it was told it knows");
+        let stated: Vec<String> = ["what is 22 zork 12", "what is 20 zork 12", "what is 13 zork 13"].iter().filter_map(|q| s.ask(q).answer).collect();
+        assert!(stated.is_empty(), "the correction must not widen the range the rule may state as fact: {stated:?}");
+        let snap = s.reach_snapshot();
+        s.settle_all_reach();
+        assert_eq!(snap, s.reach_snapshot(), "no stale record of what the rule explains");
+
+        // a rule that holds: a confirmed guess is kept and extends where it may state facts
+        let mut s = sums_school(|a, b| a + b);
+        s.set_careful(true);
+        assert!(s.ask("what is 20 zork 15").answer.is_none());
+        s.learn("what is 20 zork 15", "35", Some("zork")).unwrap();
+        assert_eq!(s.ask("what is 20 zork 15").answer.as_deref(), Some("35"), "told, so a fact");
+        assert_eq!(s.ask("what is 18 zork 14").answer.as_deref(), Some("32"), "inside the extended range it is a fact");
+        assert!(s.ask("what is 40 zork 15").answer.is_none(), "still not past what was confirmed");
+        assert_eq!(s.ask("what is 40 zork 15").guess.map(|g| g.answer).as_deref(), Some("55"));
+        let snap = s.reach_snapshot();
+        s.settle_all_reach();
+        assert_eq!(snap, s.reach_snapshot());
     }
 
     #[test]
