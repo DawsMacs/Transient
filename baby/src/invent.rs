@@ -713,3 +713,63 @@ pub fn run_corrections(seed: u64) -> (CorrectionTally, CorrectionTally) {
     }
     (dec, gen)
 }
+
+/// One guess made in the online loop: the distance bucket, the hit rate it stated, and whether it was right.
+pub struct CalibRow {
+    pub bucket: usize,
+    pub stated: f32,
+    pub tried: u32,
+    pub right: bool,
+}
+
+pub struct CalibResult {
+    pub rows: Vec<CalibRow>,
+    /// questions it answered as fact, refused with no guess, and refused because its record as a guesser was bad
+    pub facts: usize,
+    /// of those, stated as fact and false: the number that must stay 0
+    pub wrong_facts: usize,
+    pub refused: usize,
+    pub withheld: usize,
+    pub record: [(u32, u32); 5],
+}
+
+/// Guess, be told, update. The unseen questions of every kind that has a mechanism come in random order; whenever the baby offers a guess the
+/// teacher (simulated, always right) tells it the truth and it learns it. Nothing is told after a fact or a refusal. The question is whether the
+/// hit rate it STATES for a distance matches how often its guesses at that distance are really right, from the very first guess on.
+pub fn run_calibrate(seed: u64) -> CalibResult {
+    let b = battery(seed);
+    let mut school = School::from_items(&b.world.train, b.names.clone(), Some(&b.world.reworded), seed, true);
+    let mut items: Vec<(&Item, &str)> = Vec::new();
+    for (u, kind) in b.kinds.iter().enumerate() {
+        if kind.role == Role::Unexplainable {
+            continue;
+        }
+        for it in b.world.new_items.iter().chain(b.world.beyond.iter()).filter(|i| i.unit == u) {
+            items.push((it, b.names[u].as_str()));
+        }
+    }
+    Rng::new(seed ^ 0xC0FFEE).shuffle(&mut items);
+    let mut res = CalibResult { rows: Vec::new(), facts: 0, wrong_facts: 0, refused: 0, withheld: 0, record: [(0, 0); 5] };
+    for (it, unit) in items {
+        let r = school.ask(&it.query);
+        match (r.answer.is_some(), r.guess) {
+            (true, _) => {
+                res.facts += 1;
+                if r.answer.as_deref() != Some(it.answer.as_str()) {
+                    res.wrong_facts += 1;
+                    if std::env::var("CALIB_DEBUG").is_ok() {
+                        eprintln!("WRONG FACT {unit}: {:?} want {} got {:?}: {}", it.query, it.answer, r.answer, r.how);
+                    }
+                }
+            }
+            (false, Some(g)) => {
+                res.rows.push(CalibRow { bucket: crate::school::stretch_bucket(g.stretch), stated: g.rate, tried: g.tried, right: g.answer == it.answer });
+                let _ = school.learn(&it.query, &it.answer, Some(unit));
+            }
+            (false, None) if r.how.contains("so I won't guess") && r.how.contains("wrong more often than right") => res.withheld += 1,
+            (false, None) => res.refused += 1,
+        }
+    }
+    res.record = school.guess_record();
+    res
+}

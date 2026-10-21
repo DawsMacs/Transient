@@ -310,6 +310,39 @@ impl Remembered {
         hull
     }
 
+    /// Is the point `asked` (the numbers of a question, in order) covered by what was taught: some lesson sharing an operation word with the question,
+    /// not in `skip`, has every operand at least as large? A box of per-operand ranges alone vouches for corners nobody looked at (two confirmed
+    /// edges, (20, 2) and (2, 20), would stretch it to (18, 18)). None if covered; else how far it is from the nearest taught point, in number units
+    /// (the largest shortfall among the operands, for the lesson where that is smallest).
+    pub fn uncovered_by(&self, q_words: &[String], value: &dyn Fn(&str) -> Option<f32>, skip: &[usize], asked: &[f32]) -> Option<f32> {
+        let mut candidates: Vec<usize> = q_words
+            .iter()
+            .filter(|w| value(w).is_none() && !self.glue.contains(*w))
+            .flat_map(|w| self.index.get(w).into_iter().flatten().copied())
+            .collect();
+        if candidates.is_empty() {
+            candidates = (0..self.order.len()).collect();
+        }
+        candidates.sort_unstable();
+        candidates.dedup();
+        let mut nearest: Option<f32> = None;
+        for i in candidates {
+            if skip.binary_search(&i).is_ok() {
+                continue;
+            }
+            let taught: Vec<f32> = self.order[i].iter().filter_map(|t| value(t)).collect();
+            if taught.len() != asked.len() {
+                continue;
+            }
+            let shortfall = asked.iter().zip(&taught).map(|(a, t)| (a - t).max(0.0)).fold(0.0f32, f32::max);
+            if shortfall <= 0.0 {
+                return None;
+            }
+            nearest = Some(nearest.map_or(shortfall, |n| n.min(shortfall)));
+        }
+        nearest
+    }
+
     /// What was taught for exactly this question (the same words in the same order), by vote; None if it was never taught as written
     /// or the lessons for it tie. Not a similarity match: a neighbouring lesson is no witness.
     pub fn exact(&self, q: &str) -> Option<String> {

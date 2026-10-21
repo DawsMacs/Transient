@@ -196,6 +196,8 @@ pub struct School {
     /// that changes regime outside it (a sum that saturates, one that wraps) is then confidently wrong, and nothing in the lessons can say so.
     /// `set_careful(false)` is the permissive showcase.
     careful: bool,
+    /// Its own record as a guesser: for each distance bucket, (guesses that turned out right, wrong). Learned from the answers it is given.
+    guess_record: [(u32, u32); 5],
     /// Lessons that fit no unit it knows. They wait here until enough of them gather to form a unit of their own.
     pub pen: Vec<(String, String)>,
 }
@@ -224,6 +226,17 @@ pub struct Guess {
     pub answer: String,
     /// How far past the taught range the furthest operand lies, in widths of that range (0.5 = half a range-width beyond the edge).
     pub stretch: f32,
+    /// How often its own guesses this far out have turned out right, from the ones that were checked: (hits + 1) / (tried + 2).
+    pub rate: f32,
+    /// How many guesses this far out have been checked.
+    pub tried: u32,
+}
+
+/// The distances (in widths of the taught range) that separate the buckets its guesses are sorted into.
+pub const STRETCH_EDGES: [f32; 4] = [0.25, 0.5, 1.0, 2.0];
+
+pub fn stretch_bucket(stretch: f32) -> usize {
+    STRETCH_EDGES.iter().take_while(|e| stretch >= **e).count()
 }
 
 /// What happened when it was taught something after school.
@@ -373,7 +386,7 @@ impl School {
         weights.lib = library;
         let routing = Routing::build(&units, &line);
         let library_seen = weights.lib.to_lines();
-        let mut school = School { units, weights, routing, line, route_floor: f32::NEG_INFINITY, seed, library_seen, bar, careful: true, pen: Vec::new() };
+        let mut school = School { units, weights, routing, line, route_floor: f32::NEG_INFINITY, seed, library_seen, bar, careful: true, guess_record: [(0, 0); 5], pen: Vec::new() };
         // How decisive must a question be to count as a recognisable kind? Learned from rewordings of lessons it was taught.
         let own: Vec<&Item> = train.iter().collect();
         let (queries, safety): (Vec<&str>, f32) = match calibration {
@@ -481,12 +494,27 @@ impl School {
                 }
             }
         }
+        if found.is_none() && !asked.is_empty() {
+            // inside every operand's range, but is the corner it names anywhere near something taught or checked?
+            if let Some(short) = unit.remember.uncovered_by(tokens, &value, &unit.exceptions, &asked) {
+                let width = hull.iter().map(|(lo, hi)| hi - lo + 1.0).fold(1.0f32, f32::max);
+                found = Some((
+                    format!("each number is within what I was taught (or have checked), but never together like this (nothing taught is as large in every place at once): I won't state it as fact unchecked (see: baby wonder --check)"),
+                    short / width,
+                ));
+            }
+        }
         found
     }
 
     /// (for diagnosis) the library as text
     pub fn library_text(&self) -> String {
         self.weights.lib.to_lines()
+    }
+
+    /// Its record as a guesser, per distance bucket: (right, wrong).
+    pub fn guess_record(&self) -> [(u32, u32); 5] {
+        self.guess_record
     }
 
     /// The reliability bar this baby measured for its lessons.
@@ -612,7 +640,17 @@ impl School {
                                 how: said(&format!("{why}; and a lesson out there has already shown my rule wrong, so I won't even guess")),
                             };
                         }
-                        return Reply { guess: Some(Guess { answer: a.clone(), stretch }), answer: None, unit: Some(u), how: said(&why) };
+                        let (hit, miss) = self.guess_record[stretch_bucket(stretch)];
+                        if miss > hit {
+                            return Reply {
+                                guess: None,
+                                answer: None,
+                                unit: Some(u),
+                                how: said(&format!("{why}; and my guesses this far out have been wrong more often than right ({hit} right, {miss} wrong), so I won't guess")),
+                            };
+                        }
+                        let rate = (hit as f32 + 1.0) / ((hit + miss) as f32 + 2.0);
+                        return Reply { guess: Some(Guess { answer: a.clone(), stretch, rate, tried: hit + miss }), answer: None, unit: Some(u), how: said(&why) };
                     }
                 }
                 match answer {
@@ -994,7 +1032,15 @@ impl School {
         let was = if opened { None } else { Some(self.units[u].chosen) };
         // Surprise-gated: if the unit can already work this out, there is nothing to learn and nothing to keep.
         // (A confirmed GUESS is not nothing to learn: it is what extends the range the unit may state as fact.)
-        let was_a_guess = self.careful && self.beyond_reach(u, &tokens).is_some();
+        let beyond = if self.careful && !opened { self.beyond_reach(u, &tokens).map(|(_, stretch)| stretch) } else { None };
+        let was_a_guess = beyond.is_some();
+        // it would have offered a guess only from a numeric rule that no lesson had refuted
+        let guessed_at = beyond.filter(|_| !self.units[u].refuted && matches!(self.units[u].chosen, Mech::Rule | Mech::Select | Mech::Program));
+        // Its own record as a guesser: it would have guessed here (the unit has a prediction), and now it is told.
+        if let (Some(stretch), Some(guess)) = (guessed_at, if guessed_at.is_some() { self.unit_predicts(u, query) } else { None }) {
+            let slot = &mut self.guess_record[stretch_bucket(stretch)];
+            if guess == answer { slot.0 += 1 } else { slot.1 += 1 }
+        }
         if !opened
             && !was_a_guess
             && self.units[u].lessons.iter().all(|l| lesson_key(&l.query) != lesson_key(query))
@@ -1587,6 +1633,10 @@ impl School {
         if !self.careful {
             writeln!(out, "careful 0").unwrap();
         }
+        if self.guess_record.iter().any(|g| *g != (0, 0)) {
+            let nums: Vec<String> = self.guess_record.iter().flat_map(|g| [g.0.to_string(), g.1.to_string()]).collect();
+            writeln!(out, "guessed {}", nums.join(" ")).unwrap();
+        }
         writeln!(out, "pen {}", self.pen.len()).unwrap();
         for (q, a) in &self.pen {
             writeln!(out, "p {a}\t{q}").unwrap();
@@ -1638,6 +1688,16 @@ impl School {
             }
             _ => true,
         };
+        let mut guess_record = [(0u32, 0u32); 5];
+        if let Some(line) = it.peek().and_then(|l| l.strip_prefix("guessed ")) {
+            let nums: Vec<u32> = line.split_whitespace().filter_map(|x| x.parse().ok()).collect();
+            if nums.len() == 10 {
+                for (i, g) in guess_record.iter_mut().enumerate() {
+                    *g = (nums[2 * i], nums[2 * i + 1]);
+                }
+            }
+            it.next();
+        }
         let pen_n: usize = field(it.next(), "pen")?.parse().map_err(|e| format!("{e}"))?;
         let mut pen = Vec::new();
         for _ in 0..pen_n {
@@ -1721,7 +1781,7 @@ impl School {
         weights.lib = library;
         let routing = Routing::build(&units, &line);
         let library_seen = weights.lib.to_lines();
-        let mut school = School { units, weights, routing, line, route_floor, seed, library_seen, bar, careful, pen };
+        let mut school = School { units, weights, routing, line, route_floor, seed, library_seen, bar, careful, guess_record, pen };
         school.settle_all_reach();
         Ok(school)
     }
@@ -2178,6 +2238,79 @@ mod tests {
     }
 
     #[test]
+    fn confirming_two_edges_does_not_vouch_for_the_corner_between_them() {
+        // the truth saturates at 30; sums up to 24 were taught
+        let truth = |a: i64, b: i64| (a + b).min(30);
+        let mut s = sums_school(truth);
+        s.set_careful(true);
+        // two confirmed guesses, each stretching one operand: (20, 2) and (2, 20) are right (22) whether or not the sum saturates
+        s.learn("what is 20 zork 2", "22", Some("zork")).unwrap();
+        s.learn("what is 2 zork 20", "22", Some("zork")).unwrap();
+        // inside the box those two stretch, but nothing near (18, 18) was ever checked: the rule says 36, the truth is 30
+        let r = s.ask("what is 18 zork 18");
+        assert!(r.answer.is_none(), "stated as fact, and false: {:?}", r.answer);
+        assert_eq!(r.guess.map(|g| g.answer).as_deref(), Some("36"), "a labelled guess instead");
+        // what is covered stays covered
+        assert_eq!(s.ask("what is 20 zork 1").answer.as_deref(), Some("21"));
+        assert_eq!(s.ask("what is 7 zork 9").answer.as_deref(), Some("16"));
+        assert_eq!(s.ask("what is 12 zork 12").answer.as_deref(), Some("24"));
+    }
+
+    /// `n` units that all saturate at 30 (taught sums up to 24), told apart only by their operator word: a world where guessing out there fails.
+    fn capped_units(n: usize) -> School {
+        let mut items = Vec::new();
+        for u in 0..n {
+            for a in 0..=12i64 {
+                for b in 0..=12i64 {
+                    items.push(Item { unit: u, fact: items.len(), template: 0, query: format!("what is {a} zork{u} {b}"), answer: (a + b).min(30).to_string() });
+                }
+            }
+        }
+        let names: Vec<String> = (0..n).map(|u| format!("zork{u}")).collect();
+        let mut s = School::from_items(&items, names, None, 1, true);
+        s.set_careful(true);
+        s
+    }
+
+    #[test]
+    fn it_keeps_a_record_of_its_own_guesses_states_it_and_stops_guessing_where_it_has_been_wrong_more_often_than_right() {
+        let mut s = capped_units(8);
+        // an untried guesser states a modest rate and says how little it has to go on
+        let g = s.ask("what is 20 zork0 15").guess.expect("a guess");
+        assert_eq!(g.answer, "35");
+        assert_eq!(g.tried, 0);
+        assert!((g.rate - 0.5).abs() < 1e-6, "{}", g.rate);
+        // told the truth about four such guesses, each wrong, in four different units
+        for u in 0..4 {
+            s.learn(&format!("what is 20 zork{u} 15"), "30", Some(&format!("zork{u}"))).unwrap();
+        }
+        let (hit, miss) = s.guess_record()[stretch_bucket(g.stretch)];
+        assert_eq!((hit, miss), (0, 4));
+        // a fifth unit's guess at that distance is now withheld, and says why
+        let r = s.ask("what is 20 zork5 15");
+        assert!(r.answer.is_none() && r.guess.is_none(), "{:?}", r.guess);
+        assert!(r.how.contains("wrong more often than right"), "{}", r.how);
+        // a different distance has its own record: a much nearer guess is still offered
+        let near = s.ask("what is 14 zork6 3").guess;
+        assert!(near.is_some(), "{}", s.ask("what is 14 zork6 3").how);
+        // the record survives saving and loading
+        let dir = std::env::temp_dir().join(format!("guess_record_{}", std::process::id()));
+        let path = dir.join("a.school").to_string_lossy().to_string();
+        s.save(&path).unwrap();
+        assert_eq!(School::load(&path).unwrap().guess_record(), s.guess_record());
+        std::fs::remove_dir_all(dir).ok();
+
+        // in a world where the rule holds, confirmations raise the stated rate
+        let mut t = sums_school(|a, b| a + b);
+        t.set_careful(true);
+        for (a, b) in [(14, 3), (15, 3), (16, 3), (13, 4), (14, 4), (15, 4)] {
+            t.learn(&format!("what is {a} zork {b}"), &(a + b).to_string(), Some("zork")).unwrap();
+        }
+        let g = t.ask("what is 17 zork 5").guess.expect("still a guess a little further out");
+        assert!(g.tried >= 5 && g.rate > 0.8, "tried {} rate {}", g.tried, g.rate);
+    }
+
+    #[test]
     fn careful_is_the_default_and_survives_saving_and_loading() {
         let items: Vec<Item> = (0..=12i64)
             .flat_map(|a| (0..=12i64).map(move |b| (a, b)))
@@ -2206,10 +2339,19 @@ mod tests {
         let mut s = sums_school(|a, b| a + b);
         s.set_careful(true);
         assert!(s.ask("what is 20 zork 15").answer.is_none(), "unchecked");
-        for q in s.check_myself(2) {
+        // the two edges alone (each operand pushed out, the other at its largest) do not vouch for the corner between them
+        let checks = s.check_myself(3);
+        for q in checks.iter().take(2) {
             let n: Vec<i64> = q.question.split_whitespace().filter_map(|w| w.parse().ok()).collect();
             s.learn_wondered(&q.question, &(n[0] + n[1]).to_string(), "zork").unwrap();
         }
+        assert!(s.ask("what is 20 zork 15").answer.is_none(), "two edges are not the corner");
+        assert_eq!(s.ask("what is 20 zork 15").guess.map(|g| g.answer).as_deref(), Some("35"));
+        // the third check is the corner (both large at once)
+        let corner = &checks[2];
+        assert!(corner.why.contains("both"), "{}", corner.why);
+        let n: Vec<i64> = corner.question.split_whitespace().filter_map(|w| w.parse().ok()).collect();
+        s.learn_wondered(&corner.question, &(n[0] + n[1]).to_string(), "zork").unwrap();
         assert_eq!(s.units[0].chosen, Mech::Rule, "every check was confirmed");
         assert_eq!(s.ask("what is 20 zork 15").answer.as_deref(), Some("35"), "now it may answer out there");
         assert!(s.ask("what is 100 zork 15").answer.is_none(), "but not much further than it has checked");

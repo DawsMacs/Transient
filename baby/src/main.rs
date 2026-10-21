@@ -70,7 +70,7 @@ struct Args {
 
 impl Args {
     fn parse(raw: &[String]) -> Args {
-        const FLAGS: [&str; 19] = ["curriculum", "quiet", "tsv", "verbose", "guess", "piece-keys", "full", "compact", "no-reorg", "row", "digits", "stage2-first", "active", "wondered", "check", "careful", "permissive", "guesses", "corrections"];
+        const FLAGS: [&str; 20] = ["curriculum", "quiet", "tsv", "verbose", "guess", "piece-keys", "full", "compact", "no-reorg", "row", "digits", "stage2-first", "active", "wondered", "check", "careful", "permissive", "guesses", "corrections", "calibrate"];
         let mut positional = Vec::new();
         let mut opts = HashMap::new();
         let mut i = 0;
@@ -398,7 +398,12 @@ fn ask_school(a: &Args, school_path: &str, query: &str) {
         None if reply.guess.is_some() => {
             let g = reply.guess.unwrap();
             println!("probably {}", g.answer);
-            eprintln!("  (a guess, not a fact: {}. If you know the answer, tell me and I'll learn from it: baby learn \"{query}\" <answer>)", reply.how);
+            let record = if g.tried >= 5 {
+                format!("my guesses this far out have been right {:.0}% of the time, over {} checked", 100.0 * g.rate, g.tried)
+            } else {
+                format!("only {} of my guesses this far out have been checked, so I can't say how often they are right", g.tried)
+            };
+            eprintln!("  (a guess, not a fact: {}. {record}. If you know the answer, tell me and I'll learn from it: baby learn \"{query}\" <answer>)", reply.how);
         }
         None => {
             println!("?");
@@ -1476,6 +1481,33 @@ fn main() {
         Some("wonder") => cmd_wonder(&args),
         Some("scale") => cmd_scale(&args),
         Some("invent") => {
+            if args.flag("calibrate") {
+                let seeds: u64 = args.get("seeds", 1);
+                let runs: Vec<_> = (1..=seeds).map(invent::run_calibrate).collect();
+                let (facts, refused, withheld): (usize, usize, usize) = runs.iter().fold((0, 0, 0), |a, r| (a.0 + r.facts, a.1 + r.refused, a.2 + r.withheld));
+                let wrong_facts: usize = runs.iter().map(|r| r.wrong_facts).sum();
+                let n: usize = runs.iter().map(|r| r.rows.len()).sum();
+                println!("guess, be told, update: {seeds} seeds, {n} guesses made; besides: {facts} stated as fact (of which WRONG: {wrong_facts}), {refused} refused with no guess, {withheld} withheld because its guesses this far out had been wrong more often than right");
+                println!("{:<14} {:>8} {:>16} {:>16}   {:>34}", "stretch", "guesses", "rate it stated", "actually right", "(stated, over the first 20 | the rest)");
+                let names = ["under 0.25", "0.25 to 0.5", "0.5 to 1", "1 to 2", "2 and over"];
+                for (bucket, name) in names.iter().enumerate() {
+                    let rows: Vec<_> = runs.iter().flat_map(|r| r.rows.iter()).filter(|r| r.bucket == bucket).collect();
+                    if rows.is_empty() {
+                        println!("{name:<14} {:>8}", 0);
+                        continue;
+                    }
+                    let stated = rows.iter().map(|r| r.stated as f64).sum::<f64>() / rows.len() as f64;
+                    let right = rows.iter().filter(|r| r.right).count() as f64 / rows.len() as f64;
+                    let early: Vec<_> = rows.iter().filter(|r| r.tried < 20).collect();
+                    let early_stated = early.iter().map(|r| r.stated as f64).sum::<f64>() / early.len().max(1) as f64;
+                    let early_right = early.iter().filter(|r| r.right).count() as f64 / early.len().max(1) as f64;
+                    println!(
+                        "{name:<14} {:>8} {:>15.1}% {:>15.1}%   early: said {:>5.1}% was right {:>5.1}% (n={})",
+                        rows.len(), 100.0 * stated, 100.0 * right, 100.0 * early_stated, 100.0 * early_right, early.len()
+                    );
+                }
+                return;
+            }
             if args.flag("corrections") {
                 let seeds: u64 = args.get("seeds", 1);
                 let runs: Vec<_> = (1..=seeds).map(invent::run_corrections).collect();
