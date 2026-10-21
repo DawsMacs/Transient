@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="TransientAI" width="81%">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="assets/banner-light.svg">
+    <img src="assets/banner.svg" alt="TransientAI" width="81%">
+  </picture>
 </p>
 
 <p align="center">
