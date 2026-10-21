@@ -43,6 +43,36 @@ cargo test --offline                 # 61 tests, including numerical checks of t
 ./target/release/baby energy         # what one question and one learning step cost, counted
 ```
 
+## Careful by default, labelled guesses, and what one correction does (2026-10-21; Daws's call, Vision Entry 7)
+
+**The decision.** Daws chose `careful` as the default, and asked that it not make the baby timid: a scientist guesses, then hypothesis, theory, law; a guess that is wrong and corrected is learning, a *silent* wrong answer is the failure. So the honesty rule became: **WRONG (a fact stated and false) stays at 0; a labelled guess may be wrong; what is measured is whether guesses are calibrated and whether one correction fixes the next mistake.**
+
+**What was built.**
+1. `careful` is on by default (`--permissive` opts out; `--careful` is accepted and does nothing; a saved school records `careful 0` only when permissive, and a file with no line loads careful).
+2. `Reply.guess`: beyond the range taught or checked, a trusted rule's value is offered as a *labelled guess* with its `stretch` (how far past the range, in widths of that range). It is never `answer`, so every harness still counts right/wrong on facts alone. The CLI prints `probably 42` with the reason on stderr. The scorecard reports, apart, how many of the refused had a guess and whether it was right. The must-refuse battery (negative results, unreadable numbers, unmet words, memorise-only units) gets no guess; it is a test.
+3. **A miss ends the guessing out there.** Each numeric unit now records the lessons its rule does not explain (`exceptions`) and reads its reach from the lessons it *does* explain. If an unexplained lesson lies outside what the explained ones span, the unit is `refuted`: it still speaks as fact inside its explained range, it no longer guesses beyond it, and what it was told wins over the refuted rule. `learn` now keeps a confirmed guess (it used to throw it away as "nothing to learn", so a confirmed guess never extended the reach).
+
+**Numbers (simulated always-right teacher; the invention battery).**
+- Guesses by stretch (`baby invent --guesses --seeds 6`, 5,672 guesses): genuine kinds **4,921 of 4,921 right at every distance**; deceptive kinds (a rule that secretly changes regime) 79.5 % right close in, about 50 % further out. The baby cannot tell the two apart from its lessons, so a distance label is all it can say honestly.
+- One correction (`baby invent --corrections --seeds 6`, one correction per deceptive kind, the wrong guess nearest the taught range): **before** this change 303 of the other 305 wrong guesses stayed wrong and **2 became WRONG facts** (the correction widened the reach of a rule it had just contradicted). **After**: 0 and 0, all 305 refused. Honest limit: the 251 *right* guesses of those kinds are refused too. It learned "my rule is wrong out there", not what the new regime is; coverage comes back with more checks.
+- Recovery (`baby invent --careful --seeds 3 --rounds 2 --limit 4`): after 1 round of self-checks the deceptive kinds' wrong facts fell **96 to 4** (right 471 to 433); after 2 rounds the table is identical to the earlier one (deceptive 521 / 199 / 0, genuine 4,674 / 36 / 0). Noise batteries (`scale --noise 0.02 / 0.05`, `invent --noise 0.05`) stay at 0 wrong.
+- The tidy curriculum under the new default: beyond the taught range 0 % right as fact, 100 % refused, 0 % wrong, **100 % of them offered as a correct guess**; never-taught 92.7 % right (was 95.1 %: some unseen questions have an operand past the taught range) and 7.3 % refused, 0 % wrong.
+
+**Mistakes and surprises (recorded as they happened).**
+- Flipping the default made the invention battery read "hidden kinds worked out 0 of 32" with no failure anywhere: it grades beyond-range questions, which careful now refuses. It measures what can be *worked out*, so the capability batteries now run permissive explicitly and say so; `run_careful`'s first row sets permissive itself.
+- I pushed one commit with a failing test (my command chain did not gate on the test result); fixed in the next commit. Commits are now gated on the tests passing.
+- The first version of the correction experiment built a fresh school per kind and timed out; it now builds one per seed.
+- A blanket text replace added a `guess` field to function *signatures*; the compiler caught it.
+- The baseline of the correction experiment was the surprise: the 5 % allowance for unexplained lessons, built for wrong labels *inside* the taught range, absorbed a teacher's correction *outside* it as one more wrong label.
+- The cross-check "rule vs the exact question taught" refused the very question the teacher had just corrected (the rule says 36, memory 30); out where the rule is refuted, what it was told now wins.
+
+**Honest limits.**
+- The teacher is simulated and always right; a real teacher is sometimes wrong, and a wrong correction now makes a unit stop guessing where it should not.
+- `stretch` is a distance, not a probability. No stated confidence yet.
+- One correction stops the mistakes; it does not teach the new regime. `check_myself` rounds win coverage back, a few points at a time.
+- After `sleep --compact` the reach is read from the lessons that remain (the unexplained ones stay, the explained ones are forgotten): not tested under careful; likely too narrow, which errs safe.
+- The `asked` count of the recovery experiment is 498 over 2 rounds against "about 230" over 3 rounds in the older table below; I have not found out why.
+
 ## Rules that change regime: a hole, a careful mode, and a library bug it exposed (2026-10-21)
 
 **The hole.** Plan item: extend asking from numeric programs to rules and selections. Before building, I asked whether rules and selections can be *confidently wrong at all*. They can, in a way no earlier battery tested: a rule that fits everything taught perfectly and
