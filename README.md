@@ -104,6 +104,8 @@ All under `baby/src/`.
 | `discover.rs` | unit discovery from unlabelled lessons (anchor words, fact and rule-coherence merges) |
 | `program.rs` | expression search and ambiguity detection (by behaviour, not by taught examples) |
 | `quantity.rs` | number line, per-word operator weights, exact ridge fit |
+| `bridge.rs` | `baby bridge`: real-text corpora (SVAMP JSON or question/answer TSV) taught, graded and explained; a minimal JSON reader |
+| `transformer.rs`, `compare.rs` | `baby compare`: a from-scratch attention transformer (hand-written backward pass) and the controlled comparison against the baby, with measured energy |
 | `kinds.rs` | the synthetic curriculum |
 | `ledger.rs` | counted operations and words moved, priced with published 45 nm figures; optional RAPL reader |
 | `memory.rs`, `store.rs` | user-taught open-vocabulary facts and the weighted-Jaccard fact store |
