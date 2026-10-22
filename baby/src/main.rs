@@ -5,7 +5,7 @@
 //!   baby school [--seed N] [--out PATH]     TEACH THE BABY (the unified one): units of lessons, each learned the way evidence says
 //!   baby learn  "what is two multiplied by three" six --unit times    keep learning AFTER school: add a lesson, re-work how that unit is learned
 //!   baby discover [--seed N] [--out PATH]   hand it a heap of UNLABELLED lessons: it finds the units itself, then is scored like the others
-//!   baby bridge (--svamp FILE | --pairs FILE) [--units kind|discover] [--split random|blocks] [--numbers N] [--test F] [--seed N]   REAL TEXT: what does the baby make of problems somebody else wrote?
+//!   baby bridge (--svamp FILE | --pairs FILE) [--units kind|discover] [--split random|blocks] [--numbers N] [--select] [--test F] [--seed N]   REAL TEXT: what does the baby make of problems somebody else wrote?
 //!   baby compare [--seed N] [--sizes 16,32,64] [--layers N] [--epochs N] [--adapt N | --scale 20,60 | --export DIR [--units N] | --refusals 20,200 | --teacher UNITS [--rounds N --limit N]]   the controlled comparison: the baby against a matched attention transformer, in joules
 //!   baby cost                               what LEARNING costs: time and memory to teach it, a new lesson, a new kind, and to tidy up
 //!   baby scale  [--units N --entities N --facts N --noise F --typos F --seed N --grade N --no-reorg | --sweep 20,60,200]   does learning stay light as the world grows?
@@ -55,6 +55,7 @@ mod rules;
 mod scale;
 mod transformer;
 mod school;
+mod selector;
 mod store;
 
 use data::{Dataset, Example, Family};
@@ -487,6 +488,11 @@ fn cmd_bridge(a: &Args) {
     let seed: u64 = a.get("seed", 1);
     let (train, test) = bridge::split(&kept, how, a.get("test", 0.3f32), seed);
     println!("units: {:?}, split: {:?}, seed {seed}\n", units, how);
+    if a.flag("select") {
+        let r = bridge::run_select(&train, &test, seed);
+        bridge::print_select(&r);
+        return;
+    }
     let mut report = bridge::run(&train, &test, units, seed);
     report.dropped = dropped;
     bridge::print(&report, total);

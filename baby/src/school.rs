@@ -379,6 +379,11 @@ pub struct School {
     /// Units whose repair (`repair_regime`) was tried and failed, with the contradicting lessons it failed on. Finding nothing for some lessons means
     /// finding nothing for those lessons and more, so the search is not repeated until the contradictions themselves change. (Not saved: a search.)
     repair_failed: Vec<(String, Vec<(String, String)>)>,
+    /// Which numbers of a question matter, when it holds more than the rules use (see `selector`); learned from lessons where the numbers used are known.
+    selector: Option<crate::selector::Selector>,
+    /// What its stated hit rates are multiplied by after it has checked itself against answers it was given and not taught from (`calibrate_guesses`): for a question
+    /// it read as it was written, and for one it had to cut down to the numbers that matter. 1 until it has checked.
+    guess_scale: [f32; 2],
     /// For each unit, of the held-back lessons that were routed to it, the share that really belonged there (measured only when some unit is a
     /// partial program, whose guesses would otherwise state a rate that ignores how often the question is sent to the wrong unit).
     route_precision: Vec<f32>,
@@ -574,7 +579,7 @@ impl School {
         weights.lib = library;
         let routing = Routing::build(&units, &line);
         let library_seen = weights.lib.to_lines();
-        let mut school = School { units, weights, routing, line, route_floor: f32::NEG_INFINITY, route_base: f32::NEG_INFINITY, route_ratio: 0.0, calibrated_lessons: 0, seed, library_seen, bar, careful: true, skeptical: true, disputed: Vec::new(), guess_record: [(0, 0); 5], repair_failed: Vec::new(), route_precision: Vec::new(), pen: Vec::new() };
+        let mut school = School { units, weights, routing, line, route_floor: f32::NEG_INFINITY, route_base: f32::NEG_INFINITY, route_ratio: 0.0, calibrated_lessons: 0, seed, library_seen, bar, careful: true, skeptical: true, disputed: Vec::new(), guess_record: [(0, 0); 5], repair_failed: Vec::new(), selector: None, guess_scale: [1.0, 1.0], route_precision: Vec::new(), pen: Vec::new() };
         // How decisive must a question be to count as a recognisable kind? Learned from rewordings of lessons it was taught.
         let own: Vec<&Item> = train.iter().collect();
         let (queries, safety): (Vec<&str>, f32) = match calibration {
@@ -992,6 +997,36 @@ impl School {
         NaiveRouter { shapes, weights }
     }
 
+    /// Give the baby a way to tell which numbers of a question matter (see `selector`).
+    pub fn guess_scales(&self) -> [f32; 2] {
+        self.guess_scale
+    }
+
+    pub fn set_guess_scales(&mut self, scale: [f32; 2]) {
+        self.guess_scale = scale;
+    }
+
+    pub fn set_selector(&mut self, selector: crate::selector::Selector) {
+        self.selector = Some(selector);
+    }
+
+    /// The question as the baby reads it: with a selector, a question holding more than two numbers keeps the two that matter and blanks the rest.
+    pub fn focus(&self, q: &str) -> String {
+        self.selector.as_ref().and_then(|s| s.focus(q, &self.line, 2)).unwrap_or_else(|| q.to_string())
+    }
+
+    /// (for the real-text bridge) the expression of a unit that is a program, and whether it only fits most of its lessons.
+    pub fn unit_expression(&self, name: &str) -> Option<crate::program::Expr> {
+        match &self.units.iter().find(|u| u.name == name)?.state {
+            Fitted::Program(Some(p)) => Some(p.expr.clone()),
+            _ => None,
+        }
+    }
+
+    pub fn number_line(&self) -> &NumberLine {
+        &self.line
+    }
+
     pub fn ask(&self, q: &str) -> Reply {
         self.ask_with(q, &mut Ledger::default(), None)
     }
@@ -1010,14 +1045,49 @@ impl School {
     }
 
     fn ask_in(&self, q: &str, ledger: &mut Ledger, naive: Option<&NaiveRouter>, forced: Option<usize>) -> Reply {
-        let tokens = tokenize(q);
-        ledger.int_ops += tokens.len() as u64;
-        ledger.words_read += tokens.len() as u64;
+        let mut reply = self.ask_core(q, ledger, naive, forced);
+        if let Some(g) = reply.guess.as_mut() {
+            g.rate *= self.guess_scale[usize::from(self.focus(q) != q)];
+        }
+        reply
+    }
+
+    /// Check its stated hit rates against questions whose answers it was given but not taught from: ask each, and where it offers a guess note whether it was right.
+    /// Afterwards every guess states the rate it really achieved (never above what it stated before), separately for questions it read as written and for
+    /// ones it had to cut down to the numbers that matter. Needs at least ten guesses in a class to change that class's scale.
+    pub fn calibrate_guesses(&mut self, held_back: &[(String, String)]) {
+        self.guess_scale = [1.0, 1.0];
+        let (mut stated, mut hits, mut n) = ([0.0f32; 2], [0u32; 2], [0u32; 2]);
+        for (q, truth) in held_back {
+            let class = usize::from(self.focus(q) != *q);
+            if let Some(g) = self.ask(q).guess {
+                stated[class] += g.rate;
+                n[class] += 1;
+                if g.answer == *truth {
+                    hits[class] += 1;
+                }
+            }
+        }
+        for c in 0..2 {
+            if n[c] >= 10 && stated[c] > 0.0 {
+                let realised = (hits[c] as f32 + 1.0) / (n[c] as f32 + 2.0);
+                self.guess_scale[c] = (realised / (stated[c] / n[c] as f32)).min(1.0);
+            }
+        }
+    }
+
+    fn ask_core(&self, q: &str, ledger: &mut Ledger, naive: Option<&NaiveRouter>, forced: Option<usize>) -> Reply {
         // Numbers are plain whole numbers. A sign, a decimal point, a fraction slash, a thousands comma or a percent attached to a digit
         // would be silently dropped by reading words ("-3" would become 3), so such a question is refused rather than misread.
         if let Some(bad) = unreadable_number(q) {
             return Reply { guess: None, answer: None, unit: None, how: format!("I only read plain whole numbers, not '{bad}' (signs, decimals, fractions, percentages)") };
         }
+        // A question with more numbers than a rule uses: keep the ones that matter, blank the rest (see `selector`).
+        let focused = self.focus(q);
+        let q: &str = &focused;
+        let tokens = tokenize(q);
+        ledger.int_ops += tokens.len() as u64;
+        ledger.words_read += tokens.len() as u64;
         // A word it has never met cannot be part of something it knows how to answer.
         // (Only a partial program, whose answers are guesses anyway, may go on with a word it has never met: it was never required to know every word.)
         let unmet: Vec<String> = tokens.iter().filter(|w| !self.knows(w)).cloned().collect();
@@ -2385,6 +2455,12 @@ impl School {
                 writeln!(out, "x {unit}\t{answer}\t{query}").unwrap();
             }
         }
+        if let Some(sel) = &self.selector {
+            out.push_str(&sel.to_lines());
+        }
+        if self.guess_scale != [1.0, 1.0] {
+            writeln!(out, "guessscale {} {}", self.guess_scale[0], self.guess_scale[1]).unwrap();
+        }
         writeln!(out, "pen {}", self.pen.len()).unwrap();
         for (q, a) in &self.pen {
             writeln!(out, "p {a}\t{q}").unwrap();
@@ -2464,6 +2540,15 @@ impl School {
                 let (unit, answer, query) = (p.next().unwrap_or("").to_string(), p.next().unwrap_or("").to_string(), p.next().unwrap_or("").to_string());
                 disputed.push((unit, query, answer));
             }
+        }
+        let selector = crate::selector::Selector::from_lines(&mut it);
+        let mut guess_scale = [1.0f32, 1.0];
+        if let Some(line) = it.peek().and_then(|l| l.strip_prefix("guessscale ")) {
+            let v: Vec<f32> = line.split_whitespace().filter_map(|x| x.parse().ok()).collect();
+            if v.len() == 2 {
+                guess_scale = [v[0], v[1]];
+            }
+            it.next();
         }
         let pen_n: usize = field(it.next(), "pen")?.parse().map_err(|e| format!("{e}"))?;
         let mut pen = Vec::new();
@@ -2558,7 +2643,7 @@ impl School {
         weights.lib = library;
         let routing = Routing::build(&units, &line);
         let library_seen = weights.lib.to_lines();
-        let mut school = School { units, weights, routing, line, route_floor, route_base, route_ratio, calibrated_lessons: 0, seed, library_seen, bar, careful, skeptical: true, disputed, guess_record, repair_failed: Vec::new(), route_precision: Vec::new(), pen };
+        let mut school = School { units, weights, routing, line, route_floor, route_base, route_ratio, calibrated_lessons: 0, seed, library_seen, bar, careful, skeptical: true, disputed, guess_record, repair_failed: Vec::new(), selector, guess_scale, route_precision: Vec::new(), pen };
         school.calibrated_lessons = school.total_lessons();
         school.settle_all_reach();
         Ok(school)
@@ -3078,6 +3163,27 @@ mod tests {
         b.sort_by(|x, y| x.0.cmp(y.0));
         assert_eq!(a, b);
         let _ = &line;
+    }
+
+    #[test]
+    fn a_selector_and_the_scales_of_its_stated_rates_survive_saving_and_cut_the_question_down_when_asked() {
+        let mut s = sums_school(|a, b| a + b);
+        let l = s.number_line().clone();
+        let ex: Vec<(String, Vec<usize>)> = (0..40usize).map(|i| (format!("what is {} zork {} and also {} zorf", 1 + i % 9, 2 + i % 7, 3 + i % 5), vec![0, 1])).collect();
+        s.set_selector(crate::selector::Selector::train(&ex, &l));
+        s.set_guess_scales([0.8, 0.4]);
+        let before = s.focus("what is 7 zork 5 and also 9 zorf");
+        assert!(before.contains(crate::selector::BLANK), "{before}");
+        let dir = std::env::temp_dir().join(format!("selector_school_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("s.school").to_string_lossy().to_string();
+        s.save(&path).unwrap();
+        let back = School::load(&path).unwrap();
+        assert_eq!(back.focus("what is 7 zork 5 and also 9 zorf"), before);
+        assert_eq!(back.guess_scales(), [0.8, 0.4]);
+        // a question with two numbers is read as written
+        assert_eq!(back.focus("what is 7 zork 5"), "what is 7 zork 5");
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

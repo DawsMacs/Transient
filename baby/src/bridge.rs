@@ -480,6 +480,152 @@ fn kind_entry<'a>(v: &'a mut Vec<(String, Tally)>, kind: &str) -> &'a mut Tally 
     &mut v.last_mut().unwrap().1
 }
 
+/// What the baby makes of problems that hold more numbers than its rules use, when it also learns which numbers matter.
+pub struct SelectReport {
+    pub taught_two: usize,
+    pub taught_many: usize,
+    /// of the many-number lessons, how many a unit's own program explains with exactly one pair (the labels the selector learned from)
+    pub labelled: usize,
+    pub two: Tally,
+    pub many: Tally,
+    /// of the many-number test problems whose program-consistent pair is unique: how often the selector kept exactly that pair (and how many there were)
+    pub kept_right: (usize, usize),
+    pub oracle_routing: (usize, usize),
+    /// what its stated hit rates were multiplied by after checking itself on held-back answers: [read as written, cut down to the numbers that matter]
+    pub scale: [f32; 2],
+}
+
+fn tally_reply(t: &mut Tally, r: &crate::school::Reply, truth: &str) {
+    t.n += 1;
+    match (&r.answer, &r.guess) {
+        (Some(a), _) if a == truth => t.right += 1,
+        (Some(_), _) => t.wrong += 1,
+        (None, g) => {
+            t.refused += 1;
+            if let Some(g) = g {
+                t.stated += g.rate as f64;
+                if g.answer == truth { t.guess_right += 1 } else { t.guess_wrong += 1 }
+            }
+        }
+    }
+}
+
+/// Teach in two steps and grade on all test problems: (1) on the lessons with at most two numbers only, as before; (2) from the programs that gives, find in
+/// each many-number lesson the one pair of numbers a unit's program turns into the answer, learn from those which numbers matter (`selector`), blank
+/// the others in the lessons that have such a pair, and teach again on everything. The kinds are the file's; the labels come from the baby's own programs,
+/// never from the corpus's equations.
+pub fn run_select(train: &[Problem], test: &[Problem], seed: u64) -> SelectReport {
+    use crate::school::School;
+    let line = crate::quantity::NumberLine::from_counting(&crate::quantity::counting_lessons());
+    // every fourth lesson is held back from teaching: the baby checks its stated hit rates against those answers, then is taught everything
+    let held: Vec<&Problem> = train.iter().enumerate().filter(|(i, _)| i % 4 == 3).map(|(_, p)| p).collect();
+    let fit: Vec<Problem> = train.iter().enumerate().filter(|(i, _)| i % 4 != 3).map(|(_, p)| p.clone()).collect();
+    let (mut checked, _, _) = teach_selecting(&fit, seed, &line);
+    checked.calibrate_guesses(&held.iter().map(|p| (p.query.clone(), p.answer.clone())).collect::<Vec<_>>());
+    let scale = checked.guess_scales();
+    let (mut school, school_a, labelled) = teach_selecting(train, seed, &line);
+    school.set_guess_scales(scale);
+    let used = |p: &Problem| -> Option<Vec<usize>> {
+        let e = school_a.unit_expression(&p.kind)?;
+        let truth: f32 = p.answer.parse().ok()?;
+        crate::selector::used_pair(&p.query, truth, &line, &|a, b| e.eval(a, b))
+    };
+    let (taught_two, taught_many) = (train.iter().filter(|p| numbers_in_text(&p.query) <= 2).count(), train.iter().filter(|p| numbers_in_text(&p.query) > 2).count());
+    let mut rep = SelectReport { taught_two, taught_many, labelled, two: Tally::default(), many: Tally::default(), kept_right: (0, 0), oracle_routing: (0, 0), scale };
+    for p in test {
+        let r = school.ask(&p.query);
+        let t = if numbers_in_text(&p.query) <= 2 { &mut rep.two } else { &mut rep.many };
+        tally_reply(t, &r, &p.answer);
+        if numbers_in_text(&p.query) > 2 {
+            if let Some(pair) = used(p) {
+                rep.kept_right.1 += 1;
+                if school.focus(&p.query) == keep_only(&p.query, &pair, &line) {
+                    rep.kept_right.0 += 1;
+                }
+            }
+            let (routed, _) = school.route(&school.focus(&p.query), &mut crate::ledger::Ledger::default());
+            rep.oracle_routing.1 += 1;
+            if school.units[routed].name == p.kind {
+                rep.oracle_routing.0 += 1;
+            }
+        }
+    }
+    rep
+}
+
+/// The two-step teaching: units from the lessons with at most two numbers; from their programs, the one pair of numbers that turns each many-number lesson
+/// into its answer (where there is exactly one); a selector learned from those; and the baby taught again with the unused numbers of those lessons blanked.
+/// Returns the school, the first-step school (whose programs gave the labels) and how many lessons were labelled.
+fn teach_selecting(train: &[Problem], seed: u64, line: &crate::quantity::NumberLine) -> (crate::school::School, crate::school::School, usize) {
+    use crate::school::School;
+    let (few, many): (Vec<&Problem>, Vec<&Problem>) = train.iter().partition(|p| numbers_in_text(&p.query) <= 2);
+    let mut names: Vec<String> = Vec::new();
+    for p in train {
+        if !names.contains(&p.kind) {
+            names.push(p.kind.clone());
+        }
+    }
+    let item = |i: usize, p: &Problem, query: String| Item { unit: names.iter().position(|n| *n == p.kind).unwrap(), fact: i, template: 0, query, answer: p.answer.clone() };
+    let first: Vec<Item> = few.iter().enumerate().map(|(i, p)| item(i, p, p.query.clone())).collect();
+    let school_a = School::from_items(&first, names.clone(), None, seed, true);
+    let mut examples: Vec<(String, Vec<usize>)> = Vec::new();
+    let mut labelled: Vec<(&Problem, Vec<usize>)> = Vec::new();
+    for p in &many {
+        let Some(e) = school_a.unit_expression(&p.kind) else { continue };
+        let Some(truth) = p.answer.parse::<f32>().ok() else { continue };
+        if let Some(pair) = crate::selector::used_pair(&p.query, truth, line, &|a, b| e.eval(a, b)) {
+            examples.push((p.query.clone(), pair.clone()));
+            labelled.push((p, pair));
+        }
+    }
+    let selector = crate::selector::Selector::train(&examples, line);
+    let mut second = first.clone();
+    let mut fact = first.len();
+    for (p, pair) in &labelled {
+        second.push(item(fact, p, keep_only(&p.query, pair, line)));
+        fact += 1;
+    }
+    let mut school = School::from_items(&second, names, None, seed, true);
+    school.set_selector(selector);
+    (school, school_a, labelled.len())
+}
+
+/// The text (as the baby reads it) with every number blanked except those at the given positions among its numbers.
+fn keep_only(text: &str, keep: &[usize], line: &crate::quantity::NumberLine) -> String {
+    let tokens = crate::data::tokenize(text);
+    let mut k = 0usize;
+    tokens
+        .iter()
+        .map(|t| {
+            if line.value(t).is_some() {
+                let here = keep.contains(&k);
+                k += 1;
+                if here { t.clone() } else { crate::selector::BLANK.to_string() }
+            } else {
+                t.clone()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+pub fn print_select(r: &SelectReport) {
+    let pct = |a: usize, b: usize| if b == 0 { 0.0 } else { 100.0 * a as f64 / b as f64 };
+    println!("taught on {} lessons with at most two numbers, then {} lessons with more numbers ({} of them with exactly one pair of numbers that a unit's program turns into the answer: the labels the selector learned from)\n", r.taught_two, r.taught_many, r.labelled);
+    println!("  {:<28} {:>5} {:>8} {:>8} {:>8} {:>13} {:>13}", "tested on", "n", "fact", "WRONG", "refused", "guess right", "guess wrong");
+    for (name, t) in [("two numbers or fewer", &r.two), ("more than two numbers", &r.many)] {
+        println!("  {:<28} {:>5} {:>7.1}% {:>7.1}% {:>7.1}% {:>12.1}% {:>12.1}%", name, t.n, pct(t.right, t.n), pct(t.wrong, t.n), pct(t.refused, t.n), pct(t.guess_right, t.n), pct(t.guess_wrong, t.n));
+    }
+    println!("\nself-check on held-back lessons scaled its stated hit rates by {:.2} (questions as written) and {:.2} (questions cut down to two numbers)", r.scale[0], r.scale[1]);
+    println!("of the more-than-two-number test problems with a unique program-consistent pair ({}), the selector kept exactly that pair in {:.1}%", r.kept_right.1, pct(r.kept_right.0, r.kept_right.1));
+    println!("of all more-than-two-number test problems, {:.1}% were routed to the unit of their own kind (after blanking)", pct(r.oracle_routing.0, r.oracle_routing.1));
+    for (name, t) in [("two or fewer", &r.two), ("more than two", &r.many)] {
+        if t.guess_right + t.guess_wrong > 0 {
+            println!("  {name}: stated hit rate of its guesses averaged {:.1}%, {:.1}% were right", 100.0 * t.stated / (t.guess_right + t.guess_wrong) as f64, pct(t.guess_right, t.guess_right + t.guess_wrong));
+        }
+    }
+}
+
 pub fn print(report: &Report, total: usize) {
     let dropped_total: usize = report.dropped.iter().map(|d| d.1).sum();
     println!("read {total} problems; the baby can be given {} of them (set aside {dropped_total}):", report.kept);
