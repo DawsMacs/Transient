@@ -495,6 +495,29 @@ impl ProgramRule {
         Some(rule)
     }
 
+    /// Mark an exact program as provisional: it is the best explanation the lessons give, but the baby has seen it fail too often on facts it held back to
+    /// state anything as fact, so its answers are guesses only (the same flag as a program that fits most lessons). `partial` becomes the share of lessons it explains.
+    pub fn make_provisional(&mut self, items: &[Item]) {
+        if self.partial.is_some() {
+            return;
+        }
+        let line = NumberLine::from_counting(&counting_lessons());
+        let (mut explained, mut total) = (0usize, 0usize);
+        for it in items {
+            total += 1;
+            let (nums, _) = ProgramRule::read(&line, &it.query);
+            let Some(y) = line.value(&it.answer) else { continue };
+            if nums.len() != self.arity {
+                continue;
+            }
+            let v = self.expr.eval(nums[0], *nums.get(1).unwrap_or(&0.0));
+            if v.is_finite() && (v - y).abs() < 0.01 {
+                explained += 1;
+            }
+        }
+        self.partial = Some((explained as f32 / total.max(1) as f32).min(0.999));
+    }
+
     pub fn fit_unique_with(items: &[Item], lib: &Library) -> Option<ProgramRule> {
         let own = items.first().map_or(NO_ORIGIN, |i| i.unit);
         let (found, hits, _) = ProgramRule::search(items, &OPS, true, &lib.without(own), 0.0);

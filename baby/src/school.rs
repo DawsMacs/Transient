@@ -1370,7 +1370,7 @@ impl School {
         let ev = evidence_thrifty(&items, &self.weights, self.seed);
         let facts = self.units[u].facts();
         let chosen = choose_for_unit(&ev, facts, &items, &self.weights, self.seed);
-        let state = fit(chosen, &items, &self.weights, self.seed);
+        let state = mechanisms::fit_for(chosen, &items, &self.weights, self.seed, ev[Mech::ALL.iter().position(|m| *m == chosen).unwrap()]);
         // An established exact program is not thrown away for a few contradicting lessons: one lesson against dozens that agree is an outlier,
         // not a new law (a rule already tolerates up to one in twenty, see `refit_in_place`). It keeps stating facts only where the lessons it
         // explains reach, and a contradiction outside that reach still withholds its guesses there (`settle_reach`), so a genuine change of regime
@@ -3195,6 +3195,29 @@ mod tests {
         // a question with two numbers is read as written
         assert_eq!(back.focus("what is 7 zork 5"), "what is 7 zork 5");
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_program_right_on_most_inputs_but_not_reliable_enough_to_state_facts_may_only_guess() {
+        // sums with a third of the answers wrong (a deterministic pattern): the plurality of each input's lessons is still the sum, but nothing here is reliable
+        let mut items = Vec::new();
+        for a in 0..=9i64 {
+            for b in 0..=9i64 {
+                for copy in 0..3usize {
+                    let truth = a + b;
+                    let wrong = (a * 7 + b * 3 + copy as i64) % 3 == 0 && copy == 0;
+                    items.push(Item { unit: 0, fact: items.len(), template: copy, query: format!("what is {a} zork {b} please{copy}"), answer: if wrong { (truth + 3).to_string() } else { truth.to_string() } });
+                }
+            }
+        }
+        let mut s = School::from_items(&items, vec!["zork".into()], None, 1, true);
+        s.set_careful(false);
+        let r = s.ask("what is 4 zork 5 please0");
+        let Fitted::Program(Some(p)) = &s.units[0].state else { panic!("expected a program: {}", s.describe_unit_open(0)) };
+        assert!(s.units[0].best_evidence() < mechanisms::reliable(), "not reliable: {}", s.units[0].best_evidence());
+        assert!(p.partial.is_some(), "below the bar it is flagged as guess-only");
+        assert!(r.answer.is_none(), "a provisional program never states a fact: {:?}", r.answer);
+        assert_eq!(r.guess.as_ref().map(|g| g.answer.as_str()), Some("9"), "and it guesses the plurality's answer");
     }
 
     #[test]

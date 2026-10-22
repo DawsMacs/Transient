@@ -463,6 +463,17 @@ pub fn fit(mech: Mech, items: &[Item], weights: &Weights, seed: u64) -> Fitted {
     }
 }
 
+/// `fit`, then: a program whose held-back score is below the reliability bar is provisional, a source of labelled guesses only.
+pub fn fit_for(mech: Mech, items: &[Item], weights: &Weights, seed: u64, held_back: f64) -> Fitted {
+    let mut state = fit(mech, items, weights, seed);
+    if let (Mech::Program, Fitted::Program(Some(p))) = (mech, &mut state) {
+        if held_back < reliable() {
+            p.make_provisional(items);
+        }
+    }
+    state
+}
+
 pub fn predict(f: &Fitted, q: &str, w: &Weights) -> Option<String> {
     match f {
         Fitted::Remember(r) => r.recall(q, w),
@@ -713,10 +724,9 @@ pub fn choose_for_unit(ev: &[f64; 5], facts: usize, items: &[Item], weights: &We
         let pi = Mech::ALL.iter().position(|x| *x == Mech::Program).unwrap();
         let best = ev.iter().cloned().fold(0.0, f64::max);
         if ev[pi] >= GUESS_BAR && ev[pi] >= best - 0.02 {
-            if let Fitted::Program(Some(p)) = fit(Mech::Program, items, weights, seed) {
-                if p.partial.is_some() {
-                    return Mech::Program;
-                }
+            // a program that fits most lessons, or one that fits the plurality of each input's lessons but is not reliable enough to state facts: either can guess
+            if let Fitted::Program(Some(_)) = fit(Mech::Program, items, weights, seed) {
+                return Mech::Program;
             }
         }
     }
@@ -766,7 +776,7 @@ pub fn learn_items(train: &[Item], n_units: usize, seed: u64, thrifty: bool) -> 
         let chosen = choose_for_unit(&ev, n_facts, &items, &weights, seed);
         let fitted: Vec<Fitted> = Mech::ALL
             .iter()
-            .map(|m| if !thrifty || *m == chosen || *m == Mech::Remember { fit(*m, &items, &weights, seed) } else { Fitted::Program(None) })
+            .map(|m| if !thrifty || *m == chosen || *m == Mech::Remember { fit_for(*m, &items, &weights, seed, ev[Mech::ALL.iter().position(|x| x == m).unwrap()]) } else { Fitted::Program(None) })
             .collect();
         let program = fitted.iter().find_map(|f| if let Fitted::Program(Some(p)) = f { Some(p.expr.show()) } else { None });
         // What a reliable unit worked out becomes something later units can build with.
