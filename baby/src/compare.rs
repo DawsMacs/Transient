@@ -508,3 +508,75 @@ pub fn export(seed: u64, units: usize, dir: &str) -> std::io::Result<()> {
     println!("wrote {} / {} / {} / {} lessons and questions to {dir}/{{train,reworded,never,beyond}}.tsv", world.train.len(), world.reworded.len(), world.new_items.len(), world.beyond.len());
     Ok(())
 }
+
+/// Why does the baby refuse more as the world grows? Every refusal on the never-taught questions of a scale world, tallied by the reason it
+/// gave and by the kind of unit the question belongs to, at several sizes.
+pub fn run_refusals(seed: u64, counts: &[usize]) {
+    use crate::scale::{generate, Config};
+    fn reason(how: &str) -> &'static str {
+        if how.contains("only taught (or have checked) numbers from") {
+            "a number outside the range taught (box)"
+        } else if how.contains("never together like this") {
+            "numbers each inside the range but not together (corner)"
+        } else if how.contains("I haven't met the word") {
+            "a word it has never met"
+        } else if how.contains("no kind of lesson I was taught is like") {
+            "no kind of lesson is like it (routing)"
+        } else if how.contains("I only memorise this kind") {
+            "memorise-only unit, nothing close enough"
+        } else if how.contains("couldn't work it out") {
+            "the unit could not work it out (declined)"
+        } else if how.contains("they disagree") {
+            "rule and memory disagree"
+        } else if how.contains("already shown my rule wrong") {
+            "rule refuted by a correction"
+        } else {
+            "other"
+        }
+    }
+    println!("never-taught questions the baby refused, by the reason it gave (percent of ALL never-taught questions)\n");
+    for &units in counts {
+        let sw = generate(&Config { units, entities: (units * 20).clamp(1000, 10_000), facts_per_unit: 12, noise: 0.0, typos: 0.0, digits: false, seed });
+        let w = &sw.world;
+        let school = School::from_items(&w.train, sw.names.clone(), Some(&w.reworded), seed, true);
+        let n = w.new_items.len();
+        let mut by_reason: Vec<(&'static str, usize)> = Vec::new();
+        let mut by_kind: std::collections::BTreeMap<&str, (usize, usize)> = std::collections::BTreeMap::new();
+        let (mut refused, mut guess_right, mut routed_wrong) = (0usize, 0usize, 0usize);
+        let mut stretches = [0usize; 5];
+        for it in &w.new_items {
+            let r = school.ask(&it.query);
+            let kind = sw.expect.get(it.unit).copied().unwrap_or("?");
+            let e = by_kind.entry(kind).or_default();
+            e.1 += 1;
+            if r.answer.is_none() {
+                refused += 1;
+                e.0 += 1;
+                if let Some(g) = &r.guess {
+                    if g.answer == it.answer {
+                        guess_right += 1;
+                    }
+                    stretches[crate::school::stretch_bucket(g.stretch)] += 1;
+                }
+                if r.unit.map_or(false, |u| u != it.unit) {
+                    routed_wrong += 1;
+                }
+                let why = reason(&r.how);
+                match by_reason.iter_mut().find(|(k, _)| *k == why) {
+                    Some(x) => x.1 += 1,
+                    None => by_reason.push((why, 1)),
+                }
+            }
+        }
+        by_reason.sort_by(|a, b| b.1.cmp(&a.1));
+        println!("{units} units, {n} never-taught questions: refused {refused} ({:.1}%); of those a right labelled guess {guess_right}, sent to a different unit {routed_wrong}", 100.0 * refused as f64 / n as f64);
+        for (why, c) in &by_reason {
+            println!("    {:>5.1}%  {why}", 100.0 * *c as f64 / n as f64);
+        }
+        println!("    how far past the taught range the refused questions are (stretch, in widths of the range): under 0.25: {}, to 0.5: {}, to 1: {}, to 2: {}, over 2: {}", stretches[0], stretches[1], stretches[2], stretches[3], stretches[4]);
+        for (kind, (r, t)) in &by_kind {
+            println!("    units that should be '{kind}': {r} of {t} refused ({:.1}%)", 100.0 * *r as f64 / (*t).max(1) as f64);
+        }
+        println!();
+    }
+}
