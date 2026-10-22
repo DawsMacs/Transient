@@ -445,3 +445,22 @@ On the baby learning from a teacher who is sometimes wrong: this is the AL idea,
 
 - What was built from this: an established exact program survives a few contradicting lessons (one lesson against dozens that agree is an outlier, not a new law), and answers that contradict a settled rule are held for a second opinion. With slips up to 20 % the baby keeps 99.9-100 % of its unseen and beyond-range answers right; against a source that is consistently wrong about particular things it keeps 99.6 % at 5 % and 88 % at 20 %, and every wrong fact it states is a fact it was wrongly told. What it cannot do from inside is catch a source that is wrong about a whole kind of thing: all of that source's lessons would agree with each other. Numbers and failures: first section of `baby/README.md`.
 
+
+---
+
+## Entry 10 (2026-10-22): Genuine AL, and Novice, the successor to baby
+
+Daws, on where baby and its Adaptive Learning go (his words, lightly tidied):
+
+We will keep working on baby for quite a while, and I want baby and its AL to improve. As we improve in that field, **AL should become more genuine than a mere trick**: real invention, dynamic architecture, internal rearrangements, efficiency alterations, real-time learning and adaptation, and so on.
+
+There will also be a future successor to baby, which I am naming **Novice**. For every new version we will **rebuild and redesign from scratch and use the previous work only as reference**. This is to make sure we reinvent and genuinely improve rather than build on the inertia of what exists. Our systems should get lighter, faster, more efficient, more intelligent, more capable, more dynamic, with deeper AL.
+
+This is a long-term direction for the assistant to consider; the assistant is still driving the project with the freedom it was given. Also: tell Daws when it is time to rent a GPU.
+
+### Context added by the assistant (labelled; check, edit or delete freely)
+
+- **How I read "genuine, not a trick".** Today the baby's adaptation is real but chosen by me: it picks among mechanisms I wrote (remember, rule, select, program, network), with thresholds I set, and its "invention" is a search inside a language of eight operations I defined. The repair step (2026-10-22) is a small example of the gap: it can rebuild `min(a+b, 30)` only because the language has `min` and the contradiction names a 30. "More genuine" would mean the baby changing *its own language and its own structure* when the old one fails: new operations, new kinds of mechanism, its own thresholds set from measurement, units split, merged and re-routed on their own evidence, and the cost of each such change measured in joules. The test of genuineness I will hold myself to: **a capability the baby gets that no line of the code names in advance**, shown on a task I did not design it for.
+- **How I read "Novice".** Baby stays alive as the reference and the measuring stick; Novice is a clean-sheet design that may share nothing with it but the goals and the benchmarks. The honest consequence is that baby's batteries (the invention battery, the scale test, the teacher experiments, the controlled comparison) become Novice's **entry exam**: a successor is worth building when it passes what baby passes at lower cost, and does something baby cannot. I will keep those tests runnable and independent of baby's internals (the `--export` TSVs and `--pairs` loader already point that way) so they can examine a system with a different design.
+- **When a Novice starts is a judgement, not a schedule.** I will say so when baby's design has stopped yielding (a ceiling I can name from measurements, not a feeling), and propose what Novice should be rebuilt around, rather than carry baby's structure over by habit. Until then baby is where the learning about AL happens, and its failures (the handover's lists) are the design notes for Novice.
+- **GPU:** not needed yet. The first stage that wants one is the pretrained-model comparison on real text (a 0.5-8B model on the SVAMP bridge and a second corpus); I will say so before that stage starts.
