@@ -49,6 +49,7 @@ class Meter:
     def __init__(self):
         self.ok = False
         self.worst_other = 0.0
+        self.invalid = 0
         try:
             self.max_uj = int(open(f"{RAPL}/max_energy_range_uj").read())
             self.read()
@@ -82,12 +83,22 @@ class Meter:
         d = self.read() - mark[1]
         if d < 0:
             d += self.max_uj
-        return secs, max(d / 1e6 - mark[3] * secs, 0.0)
+        # the baseline is the lower of the draw just before and just after the run: a baseline from before alone is too high if the
+        # background gets quieter during the run, and the reading collapses to zero
+        base = min(mark[3], self.idle_w())
+        net = d / 1e6 - base * secs
+        if net <= 0:
+            self.invalid += 1
+            return secs, None
+        return secs, net
 
     def warning(self):
+        parts = []
         if self.ok and self.worst_other > 0.25:
-            return f"WARNING: other processes used up to {100 * self.worst_other:.0f}% of the busy CPU time during some measurements, so the energies include their share (an upper bound); for clean figures rerun with the machine quiet."
-        return None
+            parts.append(f"other processes used up to {100 * self.worst_other:.0f}% of the busy CPU time during some measurements, so those energies include their share (an upper bound)")
+        if self.invalid:
+            parts.append(f"{self.invalid} energy reading(s) came out at or below the idle baseline and are shown as not measured")
+        return ("WARNING: " + "; ".join(parts) + "; for clean figures rerun with the machine quiet.") if parts else None
 
 
 def load(dirname, name):

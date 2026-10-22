@@ -45,6 +45,8 @@ impl Grade {
 pub struct Meter {
     rapl: Option<Rapl>,
     worst_other: std::cell::Cell<f64>,
+    /// readings that came out at or below the idle baseline (the machine got quieter during the run): shown as n/a, never as 0.00 J
+    invalid: std::cell::Cell<usize>,
 }
 
 /// (busy CPU seconds of the whole machine, this process's CPU seconds); a jiffy is 1/100 s.
@@ -64,7 +66,7 @@ fn cpu_seconds() -> Option<(f64, f64)> {
 
 impl Meter {
     pub fn new() -> Meter {
-        Meter { rapl: Rapl::open(), worst_other: std::cell::Cell::new(0.0) }
+        Meter { rapl: Rapl::open(), worst_other: std::cell::Cell::new(0.0), invalid: std::cell::Cell::new(0) }
     }
 
     pub fn available(&self) -> bool {
@@ -106,12 +108,22 @@ impl Meter {
                 }
             }
         }
+        // the baseline is the lower of the machine's draw just before and just after the run: if the background gets quieter DURING the run
+        // (a browser closed), a baseline from before alone is too high and the reading collapses to zero
+        let idle_after = if self.rapl.is_some() { self.idle_w() } else { 0.0 };
+        let idle = idle_w.min(idle_after);
         let above = match (&self.rapl, e0, e1) {
             (Some(r), Some(a), Some(b)) => {
                 if std::env::var("METER_DEBUG").is_ok() {
-                    eprintln!("METER secs {secs:.2} package {:.3} J ({:.2} W)  idle {idle_w:.2} W", r.delta_j(a, b), r.delta_j(a, b) / secs);
+                    eprintln!("METER secs {secs:.2} package {:.3} J ({:.2} W)  idle before {idle_w:.2} W after {idle_after:.2} W", r.delta_j(a, b), r.delta_j(a, b) / secs);
                 }
-                Some((r.delta_j(a, b) - idle_w * secs).max(0.0))
+                let net = r.delta_j(a, b) - idle * secs;
+                if net > 0.0 {
+                    Some(net)
+                } else {
+                    self.invalid.set(self.invalid.get() + 1);
+                    None
+                }
             }
             _ => None,
         };
@@ -121,7 +133,14 @@ impl Meter {
     /// A line to print at the end of an experiment if other work on the machine may have inflated the energy readings.
     pub fn warning(&self) -> Option<String> {
         let w = self.worst_other_share();
-        (self.available() && w > 0.25).then(|| format!("WARNING: other processes used up to {:.0}% of the busy CPU time during some measurements, so the energies include their share (an upper bound); for clean figures rerun with the machine quiet.", 100.0 * w))
+        let mut parts = Vec::new();
+        if self.available() && w > 0.25 {
+            parts.push(format!("other processes used up to {:.0}% of the busy CPU time during some measurements, so those energies include their share (an upper bound)", 100.0 * w));
+        }
+        if self.invalid.get() > 0 {
+            parts.push(format!("{} energy reading(s) came out at or below the idle baseline (the machine got quieter during the run) and are shown as n/a", self.invalid.get()));
+        }
+        (!parts.is_empty()).then(|| format!("WARNING: {}; for clean figures rerun with the machine quiet.", parts.join("; ")))
     }
 }
 
@@ -463,6 +482,9 @@ pub fn run_scale(seed: u64, counts: &[usize], sizes: &[usize], layers: usize, ep
                 cell(&g(&w.reworded)), cell(&g(&w.new_items)), cell(&g(&w.beyond))
             );
         }
+    }
+    if let Some(w) = meter.warning() {
+        println!("\n{w}");
     }
 }
 
