@@ -344,6 +344,10 @@ pub struct ProgramRule {
     /// None: the program reproduces every lesson. Some(share): it reproduces only that share of them and the rest are exceptions; such a rule
     /// is fitted only when no exact program exists, and its answers are guesses, never facts.
     pub partial: Option<f32>,
+    /// The questions whose lessons this program was repaired to fit (see `fit_repair_with`): a program built around a contradiction is
+    /// only as good as one point, and the point is consistent with many laws (a cap at 24 explains 24 + 12 = 24 as well as one at 30 would
+    /// explain 30), so those lessons are told facts but never vouch for the questions below them.
+    pub repaired: Vec<String>,
     arity: usize,
     line: NumberLine,
     vocab: HashSet<String>,
@@ -362,7 +366,7 @@ impl ProgramRule {
 
     /// Rebuild a program that was saved as text.
     pub fn rebuild(expr: Expr, arity: usize, vocab: Vec<String>) -> ProgramRule {
-        ProgramRule { expr, alts: Vec::new(), partial: None, work: 0, arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.into_iter().collect() }
+        ProgramRule { expr, alts: Vec::new(), partial: None, repaired: Vec::new(), work: 0, arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.into_iter().collect() }
     }
 
     fn read(line: &NumberLine, q: &str) -> (Vec<f32>, Vec<String>) {
@@ -395,6 +399,33 @@ impl ProgramRule {
         let (found, hits, exprs) = ProgramRule::search(items, &OPS, true, &lib.without(own), 0.0);
         // no program fits every lesson: real data is a majority that follows one relation and a minority that does not
         let Some(mut rule) = found else { return ProgramRule::fit_partial_with(items, lib) };
+        if hits == 0 || hits > MAX_AMBIGUITY {
+            return None;
+        }
+        let mut seen: HashSet<Vec<i32>> = HashSet::new();
+        seen.insert(ProgramRule::grid_signature(&rule.expr, rule.arity));
+        for e in exprs {
+            if seen.insert(ProgramRule::grid_signature(&e, rule.arity)) {
+                rule.alts.push(e);
+            }
+        }
+        rule.is_believable(items).then_some(rule)
+    }
+
+    /// An exact program for lessons a rule has been shown wrong on, allowed the numbers that the contradicting lessons themselves point to
+    /// (`extra`: the answer they gave, and how far the old rule was from it: a cap of 30 or a wrap at 40 is not made of 1 and 2). The extra
+    /// numbers are terminals for this one search only and are never added to the library. It has to fit EVERY lesson and clear the same
+    /// believability and ambiguity bars as any program; otherwise None, and nothing changes.
+    pub fn fit_repair_with(items: &[Item], lib: &Library, extra: &[i32]) -> Option<ProgramRule> {
+        let own = items.first().map_or(NO_ORIGIN, |i| i.unit);
+        let mut lib = lib.without(own);
+        for &c in extra {
+            if !lib.consts.contains(&c) {
+                lib.consts.push(c);
+            }
+        }
+        let (found, hits, exprs) = ProgramRule::search(items, &OPS, true, &lib, 0.0);
+        let mut rule = found?;
         if hits == 0 || hits > MAX_AMBIGUITY {
             return None;
         }
@@ -585,7 +616,7 @@ impl ProgramRule {
                 hits_n += 1;
                 hit_exprs.push(c.expr.clone());
                 if first.is_none() {
-                    first = Some(ProgramRule { expr: c.expr.clone(), arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work, alts: Vec::new(), partial: None });
+                    first = Some(ProgramRule { expr: c.expr.clone(), arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work, alts: Vec::new(), partial: None, repaired: Vec::new() });
                 }
                 if !count_all {
                     return (first, behaviours(&hit_exprs), hit_exprs);
@@ -607,7 +638,7 @@ impl ProgramRule {
                     hits_n += 1;
                     hit_exprs.push(Expr::Half(Box::new(c.expr.clone())));
                     if first.is_none() {
-                        first = Some(ProgramRule { expr: Expr::Half(Box::new(c.expr.clone())), arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work, alts: Vec::new(), partial: None });
+                        first = Some(ProgramRule { expr: Expr::Half(Box::new(c.expr.clone())), arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work, alts: Vec::new(), partial: None, repaired: Vec::new() });
                     }
                     if !count_all {
                         return (first, behaviours(&hit_exprs), hit_exprs);
@@ -639,7 +670,7 @@ impl ProgramRule {
                                 hit_exprs.push(Expr::Bin(op, Box::new(l.expr.clone()), Box::new(r.expr.clone())));
                                 if first.is_none() {
                                     let expr = Expr::Bin(op, Box::new(l.expr.clone()), Box::new(r.expr.clone()));
-                                    first = Some(ProgramRule { expr, arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work, alts: Vec::new(), partial: None });
+                                    first = Some(ProgramRule { expr, arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work, alts: Vec::new(), partial: None, repaired: Vec::new() });
                                 }
                                 if !count_all {
                                     return (first, behaviours(&hit_exprs), hit_exprs);
@@ -676,7 +707,7 @@ impl ProgramRule {
                                 hits_n += 1;
                                 hit_exprs.push(expr.clone());
                                 if first.is_none() {
-                                    first = Some(ProgramRule { expr: expr.clone(), arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work, alts: Vec::new(), partial: None });
+                                    first = Some(ProgramRule { expr: expr.clone(), arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work, alts: Vec::new(), partial: None, repaired: Vec::new() });
                                 }
                                 if !count_all {
                                     return (first, behaviours(&hit_exprs), hit_exprs);
@@ -803,7 +834,7 @@ mod tests {
     fn a_long_fit_found_late_over_thin_data_is_not_believed_but_a_short_one_found_early_is() {
         let thin: Vec<Item> = (0..13).map(|a: i64| Item { unit: 0, fact: a as usize, template: 0, query: format!("zork {a}"), answer: ((a % 3 == 0) as i64).to_string() }).collect();
         let rich: Vec<Item> = (0..12).flat_map(|a: i64| (0..4).map(move |b: i64| (a, b))).map(|(a, b)| Item { unit: 0, fact: (a * 4 + b) as usize, template: 0, query: format!("zork {a} {b}"), answer: (a * a + b * b).to_string() }).collect();
-        let rule = |work| ProgramRule { expr: Expr::A, alts: Vec::new(), partial: None, work, arity: 1, line: NumberLine::from_counting(&counting_lessons()), vocab: HashSet::new(), };
+        let rule = |work| ProgramRule { expr: Expr::A, alts: Vec::new(), partial: None, repaired: Vec::new(), work, arity: 1, line: NumberLine::from_counting(&counting_lessons()), vocab: HashSet::new(), };
         assert!(!rule(100_000).is_believable(&thin), "13 bits of 0/1 against 17 bits of searching: luck explains it");
         assert!(rule(500).is_believable(&thin), "9 bits of searching against 13 bits of data");
         assert!(rule(3_000_000).is_believable(&rich), "48 facts with many answers carry far more than 22 bits");
