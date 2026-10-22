@@ -37,6 +37,9 @@ pub struct SchoolUnit {
     /// An unexplained lesson lies outside what the explained lessons span: the rule has been shown wrong out there (a teacher's correction of a
     /// guess, say), so it may not even guess beyond its explained range.
     refuted: bool,
+    /// For a rule or a selection: the total weight of each lesson's non-number words, i.e. the FUNCTION that lesson asks for (a rule predicts with
+    /// the sum of its words' weight vectors, so every phrasing of one operation has about the same total). Empty for other mechanisms.
+    signatures: Vec<[f32; 3]>,
 }
 
 impl SchoolUnit {
@@ -400,6 +403,7 @@ impl School {
                 state,
                 exceptions: Vec::new(),
                 refuted: false,
+                signatures: Vec::new(),
             });
         }
         let line = NumberLine::from_counting(&counting_lessons());
@@ -457,12 +461,58 @@ impl School {
         self.careful = careful;
     }
 
+    /// The total weight of a question's non-number words under the unit's rule or selection: the function the question asks for. None for
+    /// other mechanisms (a program has one function, so every lesson shows where its question lies).
+    fn signature(state: &Fitted, line: &NumberLine, query: &str) -> Option<[f32; 3]> {
+        let words: Vec<String> = tokenize(query).into_iter().filter(|t| line.value(t).is_none()).collect();
+        match state {
+            Fitted::Rule(r) => {
+                let mut s = [0.0f32; 3];
+                for w in &words {
+                    if let Some(o) = r.op_of(w) {
+                        for k in 0..3 {
+                            s[k] += o[k];
+                        }
+                    }
+                }
+                Some(s)
+            }
+            Fitted::Select(sel) => Some([words.iter().filter_map(|w| sel.score_of(w)).sum(), 0.0, 0.0]),
+            _ => None,
+        }
+    }
+
+    /// Do two signatures ask for the same function? (A rule: the same total weights within the rule's own engagement margin; a selection: both
+    /// want the bigger or both the smaller.)
+    fn same_function(a: &[f32; 3], b: &[f32; 3], select: bool) -> bool {
+        if select {
+            (a[0] > 0.0) == (b[0] > 0.0)
+        } else {
+            (0..3).all(|k| (a[k] - b[k]).abs() <= 0.25)
+        }
+    }
+
+    /// The lessons of unit `u` that ask for the same function as this question (indices; empty means all of them). This is what decides which
+    /// lessons show where the question lies in the range taught. It used to be "lessons sharing a word that is not template glue", and what counts
+    /// as glue moves as facts are added: a template word like "equals" stopped being glue at the 32nd fact and the check answers, phrased without it,
+    /// stopped counting, so coverage FELL as the baby learned.
+    fn reach_lessons(&self, u: usize, tokens: &[String]) -> Vec<usize> {
+        let unit = &self.units[u];
+        let Some(q) = School::signature(&unit.state, &self.line, &tokens.join(" ")) else { return Vec::new() };
+        let select = matches!(unit.state, Fitted::Select(_));
+        let hits: Vec<usize> = (0..unit.signatures.len()).filter(|&i| School::same_function(&unit.signatures[i], &q, select)).collect();
+        if hits.len() == unit.lessons.len() { Vec::new() } else { hits }
+    }
+
     /// Work out which lessons of unit `u` its current rule does not explain, and whether one of them lies outside what the others span (the rule
     /// has been shown wrong out there). Called whenever a unit is (re)fitted. The tolerance for a few unexplained lessons is right for wrong
     /// labels inside the taught range, and wrong for a correction of a guess outside it: such a lesson must not widen where the rule may speak.
     fn settle_reach(&mut self, u: usize) {
         let unit = &self.units[u];
         let numeric = matches!(unit.state, Fitted::Rule(_) | Fitted::Select(_) | Fitted::Program(Some(_)));
+        let signatures: Vec<[f32; 3]> = unit.lessons.iter().map(|l| School::signature(&unit.state, &self.line, &l.query).unwrap_or([0.0; 3])).collect();
+        let has_signatures = matches!(unit.state, Fitted::Rule(_) | Fitted::Select(_));
+        let select = matches!(unit.state, Fitted::Select(_));
         let mut exceptions: Vec<usize> = Vec::new();
         if numeric {
             for (i, l) in unit.lessons.iter().enumerate() {
@@ -474,13 +524,20 @@ impl School {
         let value = |w: &str| self.line.value(w);
         let refuted = exceptions.iter().any(|&i| {
             let tokens = tokenize(&unit.lessons[i].query);
-            let hull = unit.remember.operand_hull(&tokens, &value, &exceptions);
+            let candidates: Vec<usize> = if has_signatures {
+                let hits: Vec<usize> = (0..signatures.len()).filter(|&k| School::same_function(&signatures[k], &signatures[i], select)).collect();
+                if hits.len() == signatures.len() { Vec::new() } else { hits }
+            } else {
+                Vec::new()
+            };
+            let hull = unit.remember.operand_hull(&candidates, &value, &exceptions);
             let asked: Vec<f32> = tokens.iter().filter_map(|t| value(t)).collect();
             asked.iter().enumerate().any(|(k, v)| hull.get(k).map_or(false, |&(lo, hi)| *v < lo || *v > hi))
         });
         let unit = &mut self.units[u];
         unit.exceptions = exceptions;
         unit.refuted = refuted;
+        unit.signatures = if has_signatures { signatures } else { Vec::new() };
     }
 
     /// Measure how often a question routed to each unit really belongs there, by routing every lesson with the table built from the others.
@@ -526,11 +583,24 @@ impl School {
         self.units.iter().map(|u| (u.exceptions.clone(), u.refuted)).collect()
     }
 
+    /// (for diagnosis) a unit's lessons, its exceptions, whether it is refuted, and the reach it computes for a question
+    pub fn debug_reach(&self, u: usize, q: &str) -> String {
+        let unit = &self.units[u];
+        let value = |w: &str| self.line.value(w);
+        let tokens = tokenize(q);
+        let cands = self.reach_lessons(u, &tokens);
+        let hull = unit.remember.operand_hull(&cands, &value, &unit.exceptions);
+        let unskipped = unit.remember.operand_hull(&cands, &value, &[]);
+        let ex: Vec<&str> = unit.exceptions.iter().take(3).map(|&i| unit.lessons[i].query.as_str()).collect();
+        format!("{} lessons, {} exceptions {:?}, refuted {}, hull {:?} (without skipping exceptions {:?})", unit.lessons.len(), unit.exceptions.len(), ex, unit.refuted, hull, unskipped)
+    }
+
     /// Is any operand of this question outside the range unit `u` was taught (or has had confirmed) for the operation it names? Then why.
     fn beyond_reach(&self, u: usize, tokens: &[String]) -> Option<(String, f32)> {
         let unit = &self.units[u];
         let value = |w: &str| self.line.value(w);
-        let hull = unit.remember.operand_hull(tokens, &value, &unit.exceptions);
+        let words = self.reach_lessons(u, tokens);
+        let hull = unit.remember.operand_hull(&words, &value, &unit.exceptions);
         let asked: Vec<f32> = tokens.iter().filter_map(|t| value(t)).collect();
         let mut found: Option<(String, f32)> = None;
         for (i, v) in asked.iter().enumerate() {
@@ -548,7 +618,7 @@ impl School {
         }
         if found.is_none() && !asked.is_empty() {
             // inside every operand's range, but is the corner it names anywhere near something taught or checked?
-            if let Some(short) = unit.remember.uncovered_by(tokens, &value, &unit.exceptions, &asked) {
+            if let Some(short) = unit.remember.uncovered_by(&words, &value, &unit.exceptions, &asked) {
                 let width = hull.iter().map(|(lo, hi)| hi - lo + 1.0).fold(1.0f32, f32::max);
                 found = Some((
                     format!("each number is within what I was taught (or have checked), but never together like this (nothing taught is as large in every place at once): I won't state it as fact unchecked (see: baby wonder --check)"),
@@ -1036,20 +1106,69 @@ impl School {
                 _ => "I explain this unit with a rule I fitted".to_string(),
             };
             let mut asked = 0;
-            for &(a, b, where_) in candidates.iter() {
+            for &(a0, b0, where_) in candidates.iter() {
                 if asked >= limit {
                     break;
                 }
-                let Some(question) = self.numeric_question(&template.query, a as f32, b as f32) else { continue };
-                // Never ask for an answer it could not read back: if what it expects is not a number it can represent (more than four digits),
-                // the teacher's answer would be one it cannot learn from, and the question would only damage what it knows.
-                match self.unit_predicts(ui, &question) {
-                    Some(expected) if expected.parse::<f64>().map_or(true, |v| v <= 9999.0) => {}
-                    // no prediction (it cannot say that number: over four digits) or an unreadable one: nothing to check
-                    _ => continue,
+                // A probe pushed past the edge is asked as far out as it can be asked: if the far one cannot be put in words or its answer cannot be
+                // said (10 + 5 on a number line that ends at ten), step back toward the edge (5 + 5, 6 + 0) instead of giving up on the edge.
+                let (push_a, push_b) = match where_ {
+                    "past the largest number I was taught" | "past the largest first number I was taught" => (true, false),
+                    "past the largest second number I was taught" => (false, true),
+                    "past the largest of both numbers I was taught, at once" => (true, true),
+                    _ => (false, false),
+                };
+                let back = if push_a || push_b { ((a0 - hi_a).max(b0 - hi_b)).max(1) } else { 1 };
+                let mut found: Option<String> = None;
+                for k in 0..back {
+                    let a = if push_a { (a0 - k).max(hi_a + 1) } else { a0 };
+                    let b = if push_b { (b0 - k).max(hi_b + 1) } else { b0 };
+                    let Some(question) = self.numeric_question(&template.query, a as f32, b as f32) else { continue };
+                    // Never ask for an answer it could not read back: if what it expects is not a number it can represent (more than four digits),
+                    // the teacher's answer would be one it cannot learn from, and the question would only damage what it knows.
+                    match self.unit_predicts(ui, &question) {
+                        Some(expected) if expected.parse::<f64>().map_or(true, |v| v <= 9999.0) => {}
+                        // no prediction (it cannot say that number) or an unreadable one: try a nearer probe
+                        _ => continue,
+                    }
+                    found = Some(question);
+                    break;
                 }
+                let Some(question) = found else { continue };
                 asked += 1;
                 out.push(Wonder { unit: unit.name.clone(), question, why: format!("{by}, and it fits everything I was taught, but nobody has told me about a number {where_}") });
+            }
+            // Where the probes above run out (the number line ends, so the far ones cannot be said), probe the frontier of what CAN be asked: the
+            // farthest askable numbers that would still be refused as fact (outside the range, or not covered by anything confirmed), none of them
+            // below another. Careful mode only: that is where "not covered" means something.
+            // (it always gets at least two places: a program unit's in-range "gap" questions would otherwise use up the whole budget every round)
+            let frontier_places = limit.saturating_sub(asked).max(2);
+            if self.careful {
+                let top = hi_a.max(hi_b);
+                let m = (2 * top).max(top + 3).min(30);
+                let mut pts: Vec<(i64, i64, String)> = Vec::new();
+                for a in 0..=m {
+                    for b in 0..=(if arity == 2 { m } else { 0 }) {
+                        let Some(q) = self.numeric_question(&template.query, a as f32, b as f32) else { continue };
+                        match self.unit_predicts(ui, &q) {
+                            Some(expected) if expected.parse::<f64>().map_or(true, |v| v <= 9999.0) => {}
+                            _ => continue,
+                        }
+                        if self.beyond_reach(ui, &tokenize(&q)).is_some() && !out.iter().any(|w: &Wonder| w.unit == unit.name && w.question == q) {
+                            pts.push((a, b, q));
+                        }
+                    }
+                }
+                let mut maximal: Vec<&(i64, i64, String)> =
+                    pts.iter().filter(|p| !pts.iter().any(|q| (q.0, q.1) != (p.0, p.1) && q.0 >= p.0 && q.1 >= p.1)).collect();
+                maximal.sort_by_key(|p| std::cmp::Reverse((p.0 + p.1, p.0)));
+                for p in maximal.into_iter().take(frontier_places) {
+                    out.push(Wonder {
+                        unit: unit.name.clone(),
+                        question: p.2.clone(),
+                        why: format!("{by}, and it fits everything I was taught, but nobody has told me about the farthest number I can be asked about that I have not checked"),
+                    });
+                }
             }
         }
         out
@@ -1103,6 +1222,7 @@ impl School {
                         state: Fitted::Remember(Remembered::from_items(&[])),
                         exceptions: Vec::new(),
                         refuted: false,
+                        signatures: Vec::new(),
                     });
                     (self.units.len() - 1, true)
                 }
@@ -1270,6 +1390,7 @@ impl School {
                             state: Fitted::Remember(Remembered::from_items(&[])),
                             exceptions: Vec::new(),
                             refuted: false,
+                            signatures: Vec::new(),
                         });
                         self.units.len() - 1
                     }
@@ -1496,6 +1617,7 @@ impl School {
                             state: Fitted::Remember(Remembered::from_items(&[])),
                             exceptions: Vec::new(),
                             refuted: false,
+                            signatures: Vec::new(),
                         });
                         self.units.len() - 1
                     }
@@ -1874,7 +1996,7 @@ impl School {
                 ["state", "network", file] => Fitted::Network(Box::new(Model::load(file)?)),
                 other => return Err(format!("{path}: bad state line {other:?}")),
             };
-            units.push(SchoolUnit { name: head[2].to_string(), chosen, evidence, lessons, remember, state, exceptions: Vec::new(), refuted: false });
+            units.push(SchoolUnit { name: head[2].to_string(), chosen, evidence, lessons, remember, state, exceptions: Vec::new(), refuted: false, signatures: Vec::new() });
         }
         let line = NumberLine::from_counting(&counting_lessons());
         let mut weights = Weights::from(&all_items(&units));
@@ -2459,6 +2581,112 @@ mod tests {
         let s = School::from_items(&items, vec!["zork".into()], None, 1, true);
         assert_ne!(s.units[0].chosen, Mech::Program, "a constant is not an explanation of primality");
         assert!(s.ask("what is zork 61").guess.is_none() && s.ask("what is zork 61").answer.is_none());
+    }
+
+    /// A unit of sums taught on 0..=5 in number WORDS: the number line ends at ten, so a sum past ten cannot be said.
+    fn word_sums_school() -> School {
+        let w = crate::data::NUM;
+        let mut items = Vec::new();
+        for a in 0..=5usize {
+            for b in 0..=5usize {
+                items.push(Item { unit: 0, fact: items.len(), template: 0, query: format!("what is {} zork {}", w[a], w[b]), answer: w[a + b].to_string() });
+            }
+        }
+        School::from_items(&items, vec!["zork".into()], None, 1, true)
+    }
+
+    #[test]
+    fn when_the_far_probe_cannot_be_said_it_probes_the_farthest_that_can() {
+        let s = word_sums_school();
+        assert_eq!(s.ask("what is zero zork six").answer, None, "beyond what was taught: not a fact yet");
+        let checks = s.check_myself(4);
+        assert!(!checks.is_empty(), "a number line that ends at ten must not leave it with nothing to check");
+        let w = crate::data::NUM;
+        for c in &checks {
+            let nums: Vec<usize> = crate::data::tokenize(&c.question).iter().filter_map(|t| w.iter().position(|n| n == t)).collect();
+            assert!(nums.iter().sum::<usize>() <= 10, "{:?}: a probe whose answer has no number word cannot be answered", c.question);
+        }
+        assert!(checks.iter().any(|c| crate::data::tokenize(&c.question).iter().any(|t| ["six", "seven", "eight", "nine", "ten"].contains(&t.as_str()))), "{:?}", checks.iter().map(|c| &c.question).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn answering_its_own_checks_clears_the_refusals_it_can_clear_and_never_states_a_wrong_fact() {
+        let mut s = word_sums_school();
+        let w = crate::data::NUM;
+        let truth = |q: &str| -> Option<usize> {
+            let n: Vec<usize> = crate::data::tokenize(q).iter().filter_map(|t| w.iter().position(|x| x == t)).collect();
+            (n.len() == 2 && n[0] + n[1] <= 10).then(|| n[0] + n[1])
+        };
+        let probes = |s: &School| -> Vec<String> { (0..=10usize).flat_map(|a| (0..=10usize).map(move |b| format!("what is {} zork {}", w[a], w[b]))).filter(|q| truth(q).is_some()).collect::<Vec<_>>().into_iter().filter(|_| true).map(|q| { let _ = s; q }).collect() };
+        let before = probes(&s).iter().filter(|q| s.ask(q).answer.is_some()).count();
+        for _ in 0..6 {
+            for c in s.check_myself(4) {
+                if let Some(a) = truth(&c.question) {
+                    s.learn_wondered(&c.question, w[a], "zork").unwrap();
+                }
+            }
+        }
+        let mut wrong = 0;
+        let all = probes(&s);
+        let after = all.iter().filter(|q| s.ask(q).answer.is_some()).count();
+        for q in &all {
+            if let Some(a) = s.ask(q).answer {
+                if Some(a.as_str()) != truth(q).map(|t| w[t]) {
+                    wrong += 1;
+                }
+            }
+        }
+        assert_eq!(wrong, 0);
+        assert!(after > before + 20, "answered as fact: {before} before the checks, {after} after, of {}", all.len());
+        assert_eq!(after, all.len(), "every question the number line can express is covered after a few rounds");
+    }
+
+    #[test]
+    fn teaching_more_never_shrinks_what_a_unit_may_state_as_fact() {
+        // a template word ("equals") is glue while it is in a large share of the facts and stops being glue as other facts are added; the
+        // reach used to depend on that, so the check answers (phrased without it) stopped counting and coverage FELL as it learned
+        let mut items = Vec::new();
+        for a in 0..=5i64 {
+            for b in 0..=5i64 {
+                items.push(Item { unit: 0, fact: items.len(), template: 0, query: format!("what is {a} zork {b}"), answer: (a + b).to_string() });
+                items.push(Item { unit: 0, fact: items.len(), template: 2, query: format!("{a} zork {b} equals"), answer: (a + b).to_string() });
+            }
+        }
+        let mut s = School::from_items(&items, vec!["zork".into()], None, 1, true);
+        assert!(s.ask("7 zork 4 equals").answer.is_none(), "beyond what was taught");
+        // teach many facts phrased without the template word, as the checks do, covering up to 12 + 12
+        for a in 6..=12i64 {
+            for b in 0..=12i64 {
+                s.learn(&format!("what is {a} zork {b}"), &(a + b).to_string(), Some("zork")).unwrap();
+            }
+        }
+        s.learn("what is 12 zork 12", "24", Some("zork")).unwrap();
+        assert_eq!(s.ask("7 zork 4 equals").answer.as_deref(), Some("11"), "covered by what was learned, whatever the phrasing");
+        assert_eq!(s.ask("what is 7 zork 4").answer.as_deref(), Some("11"));
+        assert_eq!(s.ask("3 zork 2 equals").answer.as_deref(), Some("5"));
+    }
+
+    #[test]
+    fn in_a_merged_family_one_operation_is_not_vouched_for_by_the_lessons_of_another() {
+        // plus taught on 0..=5, minus only on 0..=3: asking about minus beyond 3 must not be covered by the plus lessons
+        let mut items = Vec::new();
+        for a in 0..=5i64 {
+            for b in 0..=5i64 {
+                items.push(Item { unit: 0, fact: items.len(), template: 0, query: format!("what is {a} plus {b}"), answer: (a + b).to_string() });
+            }
+        }
+        for a in 0..=3i64 {
+            for b in 0..=a {
+                items.push(Item { unit: 0, fact: items.len(), template: 1, query: format!("what is {a} minus {b}"), answer: (a - b).to_string() });
+            }
+        }
+        let s = School::from_items(&items, vec!["arith".into()], None, 1, true);
+        assert_eq!(s.units[0].chosen, Mech::Rule, "one rule with an operator per word");
+        assert_eq!(s.ask("what is 4 plus 5").answer.as_deref(), Some("9"), "plus was taught that far");
+        let r = s.ask("what is 5 minus 1");
+        assert!(r.answer.is_none(), "minus was only taught to 3: {:?}", r.answer);
+        assert_eq!(r.guess.map(|g| g.answer).as_deref(), Some("4"), "a labelled guess instead");
+        assert_eq!(s.ask("what is 3 minus 2").answer.as_deref(), Some("1"));
     }
 
     #[test]

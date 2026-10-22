@@ -625,6 +625,21 @@ pub fn run_teacher(seed: u64, units: usize, rounds: usize, per_unit: usize) {
                 None => unanswerable += 1,
             }
         }
+        if std::env::var("UNIT_DEBUG").is_ok() {
+            let mut shown = 0;
+            for (u, sem) in sw.sems.iter().enumerate() {
+                if matches!(sem, Some(crate::scale::Sem::Apart)) && shown < 2 {
+                    shown += 1;
+                    println!("  [round {round}] {}  program {:?}", school.describe_unit_open(u), school.units[u].program());
+                    if shown == 1 {
+                        if let Some(it) = w.beyond.iter().filter(|i| i.unit == u).find(|i| school.ask(&i.query).answer.is_none()) {
+                            println!("      refused beyond: {:?} -> {}", it.query, school.ask(&it.query).how.chars().take(120).collect::<String>());
+                            println!("      {}", school.debug_reach(u, &it.query));
+                        }
+                    }
+                }
+            }
+        }
         wrong_ever += report(&school, &format!("after round {round}"), asked, answered);
         if checks.is_empty() || learned_this_round == 0 {
             println!("  (nothing left to ask or answer after round {round})");
@@ -678,5 +693,52 @@ pub fn run_teacher(seed: u64, units: usize, rounds: usize, per_unit: usize) {
     for (why, c) in &reasons {
         println!("    {c:>5}  {why}");
     }
+    if std::env::var("UNIT_DEBUG").is_ok() {
+        for (u, sem) in sw.sems.iter().enumerate() {
+            if matches!(sem, Some(crate::scale::Sem::Apart)) {
+                let items: Vec<&Item> = w.beyond.iter().filter(|i| i.unit == u).collect();
+                let refused = items.iter().filter(|i| school.ask(&i.query).answer.is_none()).count();
+                println!("  Apart unit {u}: {refused} of {} beyond refused; {}", items.len(), school.describe_unit_open(u));
+            }
+        }
+    }
+    // the beyond-range questions that are still refused: why, and which operations
+    {
+        let mut by_reason: Vec<(&'static str, usize)> = Vec::new();
+        let mut by_sem: std::collections::BTreeMap<String, (usize, usize)> = std::collections::BTreeMap::new();
+        let mut shown = 0;
+        let total = w.beyond.len();
+        let mut left = 0usize;
+        for it in &w.beyond {
+            let r = school.ask(&it.query);
+            let sem = sw.sems.get(it.unit).copied().flatten().map_or("facts".to_string(), |s| format!("{s:?}"));
+            let e = by_sem.entry(sem.clone()).or_default();
+            e.1 += 1;
+            if r.answer.is_none() {
+                left += 1;
+                e.0 += 1;
+                let why = refusal_reason(&r.how);
+                match by_reason.iter_mut().find(|(k, _)| *k == why) {
+                    Some(x) => x.1 += 1,
+                    None => by_reason.push((why, 1)),
+                }
+                if shown < 10 && std::env::var("BEYOND_DEBUG").is_ok() {
+                    shown += 1;
+                    println!("    e.g. {:?} ({sem}) -> {}", it.query, r.how.chars().take(150).collect::<String>());
+                }
+            }
+        }
+        by_reason.sort_by(|a, b| b.1.cmp(&a.1));
+        println!("\nstill refused among the {total} beyond-range questions: {left}");
+        for (why, c) in &by_reason {
+            println!("    {c:>5}  {why}");
+        }
+        for (sem, (r, t)) in &by_sem {
+            println!("    {sem:<8} {r:>4} of {t:>4} refused");
+        }
+    }
+    // the traps: questions that must never be answered (a negative result, a result with no number word, two attributes at once, ...)
+    let traps = sw.must_refuse.iter().filter(|(q, _)| school.ask(q).answer.is_some()).count();
+    println!("\nmust-refuse traps answered after all that learning: {traps} of {}", sw.must_refuse.len());
     println!("\n{unanswerable} check questions had no answer a teacher could give in number words (a result past ten, a negative result); wrong answers stated as fact, summed over every report: {wrong_ever}");
 }

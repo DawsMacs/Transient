@@ -154,6 +154,10 @@ pub struct SelectRule {
 }
 
 impl SelectRule {
+    pub fn score_of(&self, w: &str) -> Option<f32> {
+        self.s.get(w).copied()
+    }
+
     pub fn scores(&self) -> Vec<(String, f32)> {
         let mut v: Vec<(String, f32)> = self.s.iter().map(|(w, x)| (w.clone(), *x)).collect();
         v.sort_by(|a, b| a.0.cmp(&b.0));
@@ -274,22 +278,19 @@ impl Remembered {
         tokens.iter().filter(|t| !self.glue.contains(*t)).map(|t| t.as_str()).collect()
     }
 
-    /// The range of each operand over the lessons that share an operation word with `q_words` (every lesson if it has none): for each operand
+    /// The range of each operand over the `candidates` lessons (indices; every lesson if none are given): for each operand
     /// position, the smallest and largest number the unit was taught there. `value` says whether a word is a number. Lessons listed in `skip`
     /// (sorted indices) are ignored: those are the ones the unit's rule does not explain, and they do not show where it can be trusted.
-    pub fn operand_hull(&self, q_words: &[String], value: &dyn Fn(&str) -> Option<f32>, skip: &[usize]) -> Vec<(f32, f32)> {
-        let mut candidates: Vec<usize> = q_words
-            .iter()
-            .filter(|w| value(w).is_none() && !self.glue.contains(*w))
-            .flat_map(|w| self.index.get(w).into_iter().flatten().copied())
-            .collect();
-        if candidates.is_empty() {
-            candidates = (0..self.order.len()).collect();
-        }
-        candidates.sort_unstable();
-        candidates.dedup();
+    pub fn operand_hull(&self, candidates: &[usize], value: &dyn Fn(&str) -> Option<f32>, skip: &[usize]) -> Vec<(f32, f32)> {
+        let all: Vec<usize>;
+        let candidates = if candidates.is_empty() {
+            all = (0..self.order.len()).collect();
+            &all[..]
+        } else {
+            candidates
+        };
         let mut hull: Vec<(f32, f32)> = Vec::new();
-        for i in candidates {
+        for &i in candidates {
             if skip.binary_search(&i).is_ok() {
                 continue;
             }
@@ -314,19 +315,16 @@ impl Remembered {
     /// not in `skip`, has every operand at least as large? A box of per-operand ranges alone vouches for corners nobody looked at (two confirmed
     /// edges, (20, 2) and (2, 20), would stretch it to (18, 18)). None if covered; else how far it is from the nearest taught point, in number units
     /// (the largest shortfall among the operands, for the lesson where that is smallest).
-    pub fn uncovered_by(&self, q_words: &[String], value: &dyn Fn(&str) -> Option<f32>, skip: &[usize], asked: &[f32]) -> Option<f32> {
-        let mut candidates: Vec<usize> = q_words
-            .iter()
-            .filter(|w| value(w).is_none() && !self.glue.contains(*w))
-            .flat_map(|w| self.index.get(w).into_iter().flatten().copied())
-            .collect();
-        if candidates.is_empty() {
-            candidates = (0..self.order.len()).collect();
-        }
-        candidates.sort_unstable();
-        candidates.dedup();
+    pub fn uncovered_by(&self, candidates: &[usize], value: &dyn Fn(&str) -> Option<f32>, skip: &[usize], asked: &[f32]) -> Option<f32> {
+        let all: Vec<usize>;
+        let candidates = if candidates.is_empty() {
+            all = (0..self.order.len()).collect();
+            &all[..]
+        } else {
+            candidates
+        };
         let mut nearest: Option<f32> = None;
-        for i in candidates {
+        for &i in candidates {
             if skip.binary_search(&i).is_ok() {
                 continue;
             }

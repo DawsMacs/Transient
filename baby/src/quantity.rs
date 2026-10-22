@@ -272,6 +272,11 @@ impl Quantity {
         Quantity { line: NumberLine::from_counting(&counting_lessons()), op: ops.into_iter().collect() }
     }
 
+    /// The weights of one word, if the rule has met it.
+    pub fn op_of(&self, w: &str) -> Option<[f32; 3]> {
+        self.op.get(w).copied()
+    }
+
     /// Every word the rule has met in a solved question, with its weights (zeros included: knowing a word is harmless matters).
     pub fn all_ops(&self) -> Vec<(String, [f32; 3])> {
         let mut v: Vec<(String, [f32; 3])> = self.op.iter().map(|(w, o)| (w.clone(), *o)).collect();
