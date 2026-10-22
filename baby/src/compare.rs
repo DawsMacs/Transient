@@ -37,12 +37,13 @@ impl Grade {
 }
 
 /// Real energy, if the counter is readable: joules above idle for a closure, and its wall time. The counter is the whole CPU package, so
-/// anything else running on the machine is counted too: the energy above idle is therefore SHARED BY CPU TIME (this process's CPU seconds over
-/// the machine's busy CPU seconds during the run, which is about 1 on a quiet machine), and `run` also notes how much CPU time OTHER processes used meanwhile
-/// (from /proc/stat against this process's own CPU time) and `worst_other_share` reports the worst case, so a contaminated reading can be seen.
+/// whatever else the machine does is counted too. Two defences, both learned from mistakes (see `baby/README.md`): the idle baseline is
+/// **re-measured right before every measurement** (the lowest of three one-second readings; a baseline taken once at the start goes stale
+/// when the background changes, and clamped later readings to 0.00 J), and every run records how much of the busy CPU time went to OTHER
+/// processes, so a reading taken on a busy machine is flagged (`warning`). The energy is NOT scaled by CPU share: that was tried and it
+/// under-counted even on a quiet machine.
 pub struct Meter {
     rapl: Option<Rapl>,
-    idle_w: f64,
     worst_other: std::cell::Cell<f64>,
 }
 
@@ -63,25 +64,23 @@ fn cpu_seconds() -> Option<(f64, f64)> {
 
 impl Meter {
     pub fn new() -> Meter {
-        let rapl = Rapl::open();
-        let idle_w = match &rapl {
-            Some(r) => {
-                // five 1-second readings, the lowest: the idle baseline is what the machine draws when nothing else is going on
-                let mut best = f64::MAX;
-                for _ in 0..5 {
-                    let i0 = r.read_uj().unwrap_or(0);
-                    std::thread::sleep(std::time::Duration::from_secs(1));
-                    best = best.min(r.delta_j(i0, r.read_uj().unwrap_or(0)));
-                }
-                best
-            }
-            None => 0.0,
-        };
-        Meter { rapl, idle_w, worst_other: std::cell::Cell::new(0.0) }
+        Meter { rapl: Rapl::open(), worst_other: std::cell::Cell::new(0.0) }
     }
 
     pub fn available(&self) -> bool {
         self.rapl.is_some()
+    }
+
+    /// What the machine draws right now with nothing of ours running: the lowest of three one-second readings, in watts.
+    fn idle_w(&self) -> f64 {
+        let Some(r) = &self.rapl else { return 0.0 };
+        let mut best = f64::MAX;
+        for _ in 0..3 {
+            let i0 = r.read_uj().unwrap_or(0);
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            best = best.min(r.delta_j(i0, r.read_uj().unwrap_or(0)));
+        }
+        best
     }
 
     /// The largest share of the machine's busy CPU time that went to OTHER processes during any measurement so far (0 to 1).
@@ -91,6 +90,7 @@ impl Meter {
 
     /// Run `f`; return its value, the seconds it took, and the joules above idle (None if the counter cannot be read).
     pub fn run<R>(&self, f: impl FnOnce() -> R) -> (R, f64, Option<f64>) {
+        let idle_w = self.idle_w();
         let e0 = self.rapl.as_ref().and_then(|r| r.read_uj());
         let c0 = cpu_seconds();
         let t = Instant::now();
@@ -99,20 +99,20 @@ impl Meter {
         let e1 = self.rapl.as_ref().and_then(|r| r.read_uj());
         if let (Some((b0, m0)), Some((b1, m1))) = (c0, cpu_seconds()) {
             let busy = b1 - b0;
-            if busy > 0.05 {
+            if busy > 0.05 && secs > 0.1 {
                 let other = ((busy - (m1 - m0)) / busy).clamp(0.0, 1.0);
-                if secs > 0.1 && other > self.worst_other.get() {
+                if other > self.worst_other.get() {
                     self.worst_other.set(other);
                 }
             }
         }
-        // the package counter includes whatever else was running: share the energy above idle by CPU time (this process's share of the busy time)
-        let share = match (c0, cpu_seconds()) {
-            (Some((b0, m0)), Some((b1, m1))) if b1 - b0 > 0.05 => ((m1 - m0) / (b1 - b0)).clamp(0.0, 1.0),
-            _ => 1.0,
-        };
         let above = match (&self.rapl, e0, e1) {
-            (Some(r), Some(a), Some(b)) => Some((r.delta_j(a, b) - self.idle_w * secs).max(0.0) * share),
+            (Some(r), Some(a), Some(b)) => {
+                if std::env::var("METER_DEBUG").is_ok() {
+                    eprintln!("METER secs {secs:.2} package {:.3} J ({:.2} W)  idle {idle_w:.2} W", r.delta_j(a, b), r.delta_j(a, b) / secs);
+                }
+                Some((r.delta_j(a, b) - idle_w * secs).max(0.0))
+            }
             _ => None,
         };
         (out, secs, above)
@@ -121,7 +121,7 @@ impl Meter {
     /// A line to print at the end of an experiment if other work on the machine may have inflated the energy readings.
     pub fn warning(&self) -> Option<String> {
         let w = self.worst_other_share();
-        (self.available() && w > 0.15).then(|| format!("WARNING: other processes used up to {:.0}% of the busy CPU time during some measurements, so those energies are attributed by CPU-time share (an approximation); for exact figures rerun on a quiet machine.", 100.0 * w))
+        (self.available() && w > 0.25).then(|| format!("WARNING: other processes used up to {:.0}% of the busy CPU time during some measurements, so the energies include their share (an upper bound); for clean figures rerun with the machine quiet.", 100.0 * w))
     }
 }
 

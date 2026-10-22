@@ -41,29 +41,35 @@ def cpu_seconds():
 
 
 class Meter:
-    """CPU package energy above idle, if the kernel lets this user read the counter. It is the whole package, so anything else running on the
-    machine is counted too: every reading also records how much of the busy CPU time went to OTHER processes, and the worst share is reported."""
+    """CPU package energy above idle, if the kernel lets this user read the counter. It is the whole package, so whatever else the machine does
+    is counted too. The idle baseline is re-measured right before every measurement (the lowest of three one-second readings; a baseline taken
+    once goes stale when the background changes, and clamped later readings to 0.00 J), and every reading records how much of the busy CPU time
+    went to OTHER processes, so a reading on a busy machine is flagged. The energy is not scaled by CPU share (that under-counted)."""
 
     def __init__(self):
         self.ok = False
         self.worst_other = 0.0
         try:
             self.max_uj = int(open(f"{RAPL}/max_energy_range_uj").read())
-            lows = []
-            for _ in range(5):  # five 1-second readings, the lowest: what the machine draws when nothing else is going on
-                e0 = self.read()
-                time.sleep(1)
-                lows.append((self.read() - e0) / 1e6)
-            self.idle_w = min(lows)
+            self.read()
             self.ok = True
         except Exception:
-            self.idle_w = 0.0
+            pass
 
     def read(self):
         return int(open(f"{RAPL}/energy_uj").read())
 
+    def idle_w(self):
+        lows = []
+        for _ in range(3):
+            e0 = self.read()
+            time.sleep(1)
+            lows.append((self.read() - e0) / 1e6)
+        return min(lows)
+
     def start(self):
-        return (time.time(), self.read() if self.ok else 0, cpu_seconds())
+        idle = self.idle_w() if self.ok else 0.0
+        return (time.time(), self.read() if self.ok else 0, cpu_seconds(), idle)
 
     def stop(self, mark):
         secs = time.time() - mark[0]
@@ -76,13 +82,11 @@ class Meter:
         d = self.read() - mark[1]
         if d < 0:
             d += self.max_uj
-        # the package counter includes whatever else was running: share the energy above idle by CPU time (this process's share of the busy time)
-        share = min(max((m1 - mark[2][1]) / busy, 0.0), 1.0) if busy > 0.05 else 1.0
-        return secs, max(d / 1e6 - self.idle_w * secs, 0.0) * share
+        return secs, max(d / 1e6 - mark[3] * secs, 0.0)
 
     def warning(self):
-        if self.ok and self.worst_other > 0.15:
-            return f"WARNING: other processes used up to {100 * self.worst_other:.0f}% of the busy CPU time during some measurements, so those energies are attributed by CPU-time share (an approximation); for exact figures rerun on a quiet machine."
+        if self.ok and self.worst_other > 0.25:
+            return f"WARNING: other processes used up to {100 * self.worst_other:.0f}% of the busy CPU time during some measurements, so the energies include their share (an upper bound); for clean figures rerun with the machine quiet."
         return None
 
 
