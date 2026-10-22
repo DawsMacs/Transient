@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 DawsMacs
 //! Can the baby invent a way to learn something nobody gave it a mechanism for?
 //!

@@ -20,7 +20,7 @@ Order of reading: this file, then `TransientVision.md` (Daws's own words: never 
 ## 2. Where the work stands (2026-10-21)
 
 Everything is in `~/Transient/baby/` (pure Rust, **zero dependencies**, builds offline, **102 tests pass**, ~11k lines). Git repo, `origin` = `git@github.com:DawsMacs/Transient.git` (**public**, Daws's global account `DawsMacs`, SSH),
-branch `main`, **CI green** (`.github/workflows/ci.yml`: build, tests, and the scorecard's WRONG column must be 0.0 %). Licence `AGPL-3.0-or-later` (SPDX headers, `REUSE.toml`, `LICENSE`, `LICENSES/`), DCO not CLA (`CONTRIBUTING.md`).
+branch `main`, **CI green** (`.github/workflows/ci.yml`: build, tests, and the scorecard's WRONG column must be 0.0 %). Licence `AGPL-3.0-only` (changed from `-or-later` on 2026-10-21, Vision Entry 8) (SPDX headers, `REUSE.toml`, `LICENSE`, `LICENSES/`), DCO not CLA (`CONTRIBUTING.md`).
 All work from this session is committed and pushed (last code commit: "It keeps and states a record of its own guessing; reach is a staircase, not a box").
 
 **The baby** (`baby school` / `baby ask`) is a unified system:
@@ -120,7 +120,7 @@ Does learning stay light...; then the older ones), `LEARNING.md` (research notes
 3. **GPU**: Daws will **rent one** for the controlled comparison (small transformer vs the baby) and will say when it is set up; the iMac (macOS, AMD 4 GB, 40 GB RAM) was set aside. Nothing may be uploaded that is private; code and synthetic data are fine. Write the comparison model in pure Rust (or Burn) so operations and joules count the same way.
 4. **"Frontier"** = an ambition, not a destined goal: general-purpose intelligence you would trust in work and school at the range of trillion-parameter models, on ordinary hardware. **The measure that matters is capability per joule as the machine measures it**; benchmarks and chat quality are trend-based, optional, later. **The name "Transient" stays a mystery** ("lore"): never guess in docs.
 5. **GitHub UI** (social preview, topics): done by Daws. **The repo was renamed to `DawsMacs/Transient`** by another agent (commit `ecae36a`, `origin` updated); "TransientAI" is now the creator's name. Old-name mentions in Vision entries are historical on purpose.
-6. **Licence** stays `AGPL-3.0-or-later` (he accepts the trust; `-only` is his option for new releases later; it narrows once outside contributors arrive). **Git**: commits and pushes to `origin main` authorised; be careful, precise, plan, ask before anything risky (force-push, new remotes, repo settings).
+6. **Licence** is `AGPL-3.0-only` (Vision Entry 8, 2026-10-21; was `-or-later`). To let future AGPL versions in again, name a proxy (AGPLv3 §14) rather than restoring "or later"; revisit when outside contributors arrive. **Git**: commits and pushes to `origin main` authorised; be careful, precise, plan, ask before anything risky (force-push, new remotes, repo settings).
 
 ## 8. Options for the next session (my recommendation first)
 

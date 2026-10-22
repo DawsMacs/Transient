@@ -2,7 +2,7 @@
 name = "baby"
 version = "0.1.0"
 edition = "2021"
-license = "AGPL-3.0-or-later"
+license = "AGPL-3.0-only"
 repository = "https://github.com/DawsMacs/Transient"
 readme = "../README.md"
 publish = false

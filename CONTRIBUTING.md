@@ -1,6 +1,6 @@
 # Contributing
 
-Transient is open research and is licensed `AGPL-3.0-or-later`. Contributions are welcome under the same licence.
+Transient is open research and is licensed `AGPL-3.0-only`. Contributions are welcome under the same licence.
 
 ## Licence and sign-off (DCO, no CLA)
 
@@ -12,13 +12,13 @@ git commit -s -m "your message"
 ```
 
 This adds a `Signed-off-by:` line stating you have the right to submit the work under the project's licence. Contributions stay
-under `AGPL-3.0-or-later`; nobody, including the maintainer, gets a special right to relicense them into a closed product. That is
+under `AGPL-3.0-only`; nobody, including the maintainer, gets a special right to relicense them into a closed product. That is
 deliberate: the point of the licence is that this work stays open.
 
 New source files start with:
 
 ```rust
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) <year> <your name or handle>
 ```
 

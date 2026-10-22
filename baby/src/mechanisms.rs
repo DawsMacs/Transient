@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 DawsMacs
 //! A library of ways to learn, and a baby that picks among them by evidence.
 //!

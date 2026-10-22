@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 DawsMacs
 //! A trained (or training) baby: the network plus the two word lists it needs to talk. Saved as a small plain-text file you can read.
 

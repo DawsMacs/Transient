@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 DawsMacs
 //! One baby. It is taught a curriculum of *units* of lessons; for each unit it works out, from evidence, how to learn it (see
 //! `mechanisms.rs`); a question is sent to the unit it resembles, answered with that unit's mechanism, and refused when the

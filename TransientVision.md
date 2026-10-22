@@ -414,3 +414,17 @@ He trusts the GNU foundation: Stallman went through a lot to invent copyleft. On
 ### Context added by the assistant (labelled): the rename (2026-10-21)
 
 Daws renamed the GitHub repository from `DawsMacs/TransientAI` to `DawsMacs/Transient`. **TransientAI is now the name of the creator of the Transient project** (Daws is its owner and founder); the project, the repo, the README and the banners are called **Transient**. The copyright and licence holder is unchanged: DawsMacs, AGPL-3.0-or-later. Earlier entries above that say `DawsMacs/TransientAI` record the name at the time and are left as written; GitHub redirects the old URL.
+
+
+---
+
+## Entry 8 (2026-10-21): The licence becomes AGPL-3.0-only
+
+Daws decided to move from `AGPL-3.0-or-later` to **`AGPL-3.0-only`**, to rely less on the FSF or any institution: "or later" means every future version the FSF publishes is automatically available to every recipient, which fails open if something goes wrong there. He noted that nobody had yet viewed the repository, so it was an easy moment to change it.
+
+### Context added by the assistant (labelled; check, edit or delete freely)
+
+- **What "or later" does and does not do.** The licence text never changes; AGPLv3 stays AGPLv3 and any copy can always be used under it. "Or later" is an *option each recipient may take*, and it attaches to old releases too: a recipient of 2026 code could choose a weaker "AGPLv4" in the future for their own copy and derivatives. That was the exposure.
+- **Why `-only` rather than a proxy now.** AGPLv3 §14 lets a notice name a *proxy* whose public acceptance of a version permanently authorises it. That fails closed (no proxy statement means v3 stays), but its benefit is adopting a future legal fix without contacting every contributor, which matters only once there are outside contributors. As sole copyright holder, Daws can add a proxy or "or later" for *new* releases at any time; tightening the other way cannot be undone for copies already distributed. So `-only` is the reversible choice.
+- **Honest caveat.** Commits published before this change carried `AGPL-3.0-or-later`; anyone who already pulled them keeps that option on those copies. The change applies from this commit onward.
+- **Mechanics.** SPDX headers, `Cargo.toml`, `REUSE.toml`, README, CONTRIBUTING, CLAUDE.md and the handover now say `AGPL-3.0-only`; `LICENSES/AGPL-3.0-or-later.txt` was renamed `AGPL-3.0-only.txt`. The `LICENSE` file is the unmodified AGPLv3 text, whose generic "any later version" wording is part of the licence text itself and is left as is. Earlier entries above that say `-or-later` record the decision at the time and are left as written. The website text was updated to match.

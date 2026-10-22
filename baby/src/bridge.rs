@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 DawsMacs
 //! The bridge to real text. Everything before this file was taught tidy synthetic lessons (made-up words, small numbers, a handful of
 //! templates). `baby bridge` takes question/answer pairs somebody else wrote (a TSV, or the SVAMP word-problem file) and asks what survives:

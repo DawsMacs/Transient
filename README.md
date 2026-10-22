@@ -4,7 +4,7 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img alt="License: AGPL-3.0-or-later" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-blue"></a>
+  <a href="LICENSE"><img alt="License: AGPL-3.0-only" src="https://img.shields.io/badge/license-AGPL--3.0--only-blue"></a>
   <a href="https://github.com/DawsMacs/Transient/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/DawsMacs/Transient/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Rust, zero dependencies" src="https://img.shields.io/badge/rust-zero%20dependencies-orange">
 </p>
@@ -175,8 +175,8 @@ The website, [transientai.org](https://transientai.org), is a separate repositor
 
 ## Licence
 
-Copyright (C) 2026 DawsMacs. Licensed under the **GNU Affero General Public License, version 3 or (at your option) any later
-version** (`AGPL-3.0-or-later`). The aim is that this work stays open: anyone may use, study, change and share it, and anyone who
+Copyright (C) 2026 DawsMacs. Licensed under the **GNU Affero General Public License, version 3 only**
+(`AGPL-3.0-only`). The aim is that this work stays open: anyone may use, study, change and share it, and anyone who
 distributes it, or lets others use a modified version over a network, must offer their users the corresponding source under the
 same terms. See [`LICENSE`](LICENSE); per-file licensing is declared in [`REUSE.toml`](REUSE.toml) and SPDX headers.
 

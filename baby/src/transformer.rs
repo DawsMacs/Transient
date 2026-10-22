@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 DawsMacs
 //! A small attention transformer, written from scratch (no dependencies, hand-written backward pass), as the *matched* counterpart for the
 //! controlled comparison of Vision Entry 2: the thing the industry actually builds, at a size that fits the same lessons.

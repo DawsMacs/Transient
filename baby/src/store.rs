@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 DawsMacs
 //! The fastest way to learn: write it down. A fact store holds (query, answer) pairs and finds the closest stored query by
 //! comparing *sets of words*, weighted by how rare each word is in what the baby has heard (common words like "what", "is",

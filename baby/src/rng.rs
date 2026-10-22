@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 DawsMacs
 //! A tiny deterministic random number generator (xorshift64*), so every run is reproducible
 //! from its seed and the crate needs no dependencies.
