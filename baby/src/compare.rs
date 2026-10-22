@@ -36,10 +36,29 @@ impl Grade {
     }
 }
 
-/// Real energy, if the counter is readable: joules above idle for a closure, and its wall time.
+/// Real energy, if the counter is readable: joules above idle for a closure, and its wall time. The counter is the whole CPU package, so
+/// anything else running on the machine is counted too: the energy above idle is therefore SHARED BY CPU TIME (this process's CPU seconds over
+/// the machine's busy CPU seconds during the run, which is about 1 on a quiet machine), and `run` also notes how much CPU time OTHER processes used meanwhile
+/// (from /proc/stat against this process's own CPU time) and `worst_other_share` reports the worst case, so a contaminated reading can be seen.
 pub struct Meter {
     rapl: Option<Rapl>,
     idle_w: f64,
+    worst_other: std::cell::Cell<f64>,
+}
+
+/// (busy CPU seconds of the whole machine, this process's CPU seconds); a jiffy is 1/100 s.
+fn cpu_seconds() -> Option<(f64, f64)> {
+    let stat = std::fs::read_to_string("/proc/stat").ok()?;
+    let nums: Vec<f64> = stat.lines().next()?.split_whitespace().skip(1).filter_map(|x| x.parse().ok()).collect();
+    if nums.len() < 8 {
+        return None;
+    }
+    let busy = nums.iter().sum::<f64>() - nums[3] - nums[4]; // all but idle and iowait
+    let me = std::fs::read_to_string("/proc/self/stat").ok()?;
+    let after = me.rsplit(')').next()?;
+    let f: Vec<&str> = after.split_whitespace().collect();
+    let (ut, st): (f64, f64) = (f.get(11)?.parse().ok()?, f.get(12)?.parse().ok()?);
+    Some((busy / 100.0, (ut + st) / 100.0))
 }
 
 impl Meter {
@@ -47,31 +66,62 @@ impl Meter {
         let rapl = Rapl::open();
         let idle_w = match &rapl {
             Some(r) => {
-                let i0 = r.read_uj().unwrap_or(0);
-                std::thread::sleep(std::time::Duration::from_secs(2));
-                r.delta_j(i0, r.read_uj().unwrap_or(0)) / 2.0
+                // five 1-second readings, the lowest: the idle baseline is what the machine draws when nothing else is going on
+                let mut best = f64::MAX;
+                for _ in 0..5 {
+                    let i0 = r.read_uj().unwrap_or(0);
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+                    best = best.min(r.delta_j(i0, r.read_uj().unwrap_or(0)));
+                }
+                best
             }
             None => 0.0,
         };
-        Meter { rapl, idle_w }
+        Meter { rapl, idle_w, worst_other: std::cell::Cell::new(0.0) }
     }
 
     pub fn available(&self) -> bool {
         self.rapl.is_some()
     }
 
+    /// The largest share of the machine's busy CPU time that went to OTHER processes during any measurement so far (0 to 1).
+    pub fn worst_other_share(&self) -> f64 {
+        self.worst_other.get()
+    }
+
     /// Run `f`; return its value, the seconds it took, and the joules above idle (None if the counter cannot be read).
     pub fn run<R>(&self, f: impl FnOnce() -> R) -> (R, f64, Option<f64>) {
         let e0 = self.rapl.as_ref().and_then(|r| r.read_uj());
+        let c0 = cpu_seconds();
         let t = Instant::now();
         let out = f();
         let secs = t.elapsed().as_secs_f64();
         let e1 = self.rapl.as_ref().and_then(|r| r.read_uj());
+        if let (Some((b0, m0)), Some((b1, m1))) = (c0, cpu_seconds()) {
+            let busy = b1 - b0;
+            if busy > 0.05 {
+                let other = ((busy - (m1 - m0)) / busy).clamp(0.0, 1.0);
+                if secs > 0.1 && other > self.worst_other.get() {
+                    self.worst_other.set(other);
+                }
+            }
+        }
+        // the package counter includes whatever else was running: share the energy above idle by CPU time (this process's share of the busy time)
+        let share = match (c0, cpu_seconds()) {
+            (Some((b0, m0)), Some((b1, m1))) if b1 - b0 > 0.05 => ((m1 - m0) / (b1 - b0)).clamp(0.0, 1.0),
+            _ => 1.0,
+        };
         let above = match (&self.rapl, e0, e1) {
-            (Some(r), Some(a), Some(b)) => Some((r.delta_j(a, b) - self.idle_w * secs).max(0.0)),
+            (Some(r), Some(a), Some(b)) => Some((r.delta_j(a, b) - self.idle_w * secs).max(0.0) * share),
             _ => None,
         };
         (out, secs, above)
+    }
+
+    /// A line to print at the end of an experiment if other work on the machine may have inflated the energy readings.
+    pub fn warning(&self) -> Option<String> {
+        let w = self.worst_other_share();
+        (self.available() && w > 0.15).then(|| format!("WARNING: other processes used up to {:.0}% of the busy CPU time during some measurements, so those energies are attributed by CPU-time share (an approximation); for exact figures rerun on a quiet machine.", 100.0 * w))
     }
 }
 
@@ -279,6 +329,9 @@ pub fn run(seed: u64, sizes: &[usize], layers: usize, epochs: usize) {
         let careful: Vec<Grade> = sets(&world).iter().map(|s| grade_transformer(&t.model, &lex, s, 0.9)).collect();
         row(&format!("{} (answers if p >= 0.9)", t.name), &careful);
     }
+    if let Some(w) = meter.warning() {
+        println!("\n{w}");
+    }
 }
 
 fn fmt_row_grades(label: &str, new: Option<&Grade>, old: &[Grade]) {
@@ -368,6 +421,9 @@ pub fn run_adapt(seed: u64, sizes: &[usize], layers: usize, epochs: usize, n_new
         print!(" {:>20}", s);
     }
     println!();
+    if let Some(w) = meter.warning() {
+        println!("{w}\n");
+    }
     fmt_row_grades("baby before", None, &before);
     fmt_row_grades("baby after learning", Some(&new_grade), &after);
     for (label, gn, go) in &rows {
@@ -408,4 +464,25 @@ pub fn run_scale(seed: u64, counts: &[usize], sizes: &[usize], layers: usize, ep
             );
         }
     }
+}
+
+/// Write the four sets of a world as TSV (query, answer, unit, fact) so another implementation can be trained and graded on exactly the same
+/// lessons and questions: `train.tsv`, `reworded.tsv`, `never.tsv`, `beyond.tsv`. With `units > 0` the world is the scale generator's.
+pub fn export(seed: u64, units: usize, dir: &str) -> std::io::Result<()> {
+    let world = if units > 0 {
+        let c = crate::scale::Config { units, entities: (units * 20).clamp(1000, 10_000), facts_per_unit: 12, noise: 0.0, typos: 0.0, digits: false, seed };
+        crate::scale::generate(&c).world
+    } else {
+        crate::kinds::world(seed)
+    };
+    std::fs::create_dir_all(dir)?;
+    for (name, items) in [("train", &world.train), ("reworded", &world.reworded), ("never", &world.new_items), ("beyond", &world.beyond)] {
+        let mut out = String::new();
+        for it in items.iter() {
+            out.push_str(&format!("{}\t{}\t{}\t{}\n", it.query, it.answer, it.unit, it.fact));
+        }
+        std::fs::write(format!("{dir}/{name}.tsv"), out)?;
+    }
+    println!("wrote {} / {} / {} / {} lessons and questions to {dir}/{{train,reworded,never,beyond}}.tsv", world.train.len(), world.reworded.len(), world.new_items.len(), world.beyond.len());
+    Ok(())
 }

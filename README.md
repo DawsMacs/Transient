@@ -105,12 +105,13 @@ All under `baby/src/`.
 | `program.rs` | expression search and ambiguity detection (by behaviour, not by taught examples) |
 | `quantity.rs` | number line, per-word operator weights, exact ridge fit |
 | `bridge.rs` | `baby bridge`: real-text corpora (SVAMP JSON or question/answer TSV) taught, graded and explained; a minimal JSON reader |
-| `transformer.rs`, `compare.rs` | `baby compare`: a from-scratch attention transformer (hand-written backward pass) and the controlled comparison against the baby, with measured energy |
+| `transformer.rs`, `compare.rs` | `baby compare`: a from-scratch attention transformer (hand-written backward pass) and the controlled comparison against the baby, with measured energy; `compare --export DIR` writes the lessons for other tools |
 | `kinds.rs` | the synthetic curriculum |
 | `ledger.rs` | counted operations and words moved, priced with published 45 nm figures; optional RAPL reader |
 | `memory.rs`, `store.rs` | user-taught open-vocabulary facts and the weighted-Jaccard fact store |
 | `net.rs`, `model.rs`, `data.rs`, `know.rs`, `life.rs`, `curious.rs`, `rules.rs`, `rng.rs` | the earlier from-scratch network and its experiments, plumbing |
 | `main.rs` | the CLI (`baby <command>`) |
+| `tools/pytorch_baseline.py` | (outside the Rust build) a tuned PyTorch transformer trained and graded on the exported lessons, with measured energy |
 
 ## How results are judged
 
@@ -121,14 +122,14 @@ All under `baby/src/`.
   meter (RAPL) is wired in but needs a one-time permission change on the host.
 - **Dead ends are written down.** `baby/README.md` records wrong hypotheses and bugs next to the results.
 
-### Against a matched transformer (`baby compare`)
+### Against matched transformers (`baby compare`, `tools/pytorch_baseline.py`)
 
-A small attention transformer is written from scratch in this repo (pure Rust, hand-written backward pass, checked against finite differences), trained on the same lessons and graded on the same questions, with energy **measured** by the CPU's own counter (Intel RAPL, above idle). On the synthetic curriculum (seeds 1-3; full tables and every caveat in `baby/README.md`):
+Two transformers are trained on the same lessons and graded on the same questions: a plain one written from scratch in this repo (pure Rust, hand-written backward pass, checked against finite differences), and a conventional PyTorch one tuned by a 24-setting search whose cost is counted against it. Energy is **measured** with the CPU's own counter (Intel RAPL, above idle, shared by CPU time because the desktop was busy: read energies to within a factor of two). On the synthetic curriculum (seeds 1-3; full tables, the correction to my first energy figures and every caveat in `baby/README.md`):
 
-- teaching from scratch costs the baby 0.2-0.3 J against 2.8-12.6 J for transformers of 6k-49k parameters; adding 20 new facts costs it about 63 mJ with nothing forgotten, against 120-145 mJ for a fine-tune that forgets heavily, 190-250 mJ for one that replays a tenth of the old (and still loses a few points) and 1.3-1.6 J for a full replay;
-- on unseen questions the baby is wrong 0 % of the time against 16-40 % for the small transformers; beyond the taught numbers the baby's labelled guess is right every time where the transformer is 15-28 % right and confidently wrong the rest, at every scale tried (20, 60 and 200 units);
-- **against the simple story:** the baby's energy advantage shrinks as the world grows (45x, 14x, 10x at 20, 60, 200 units), and at 60 and 200 units the transformer is *more* accurate than the baby on unseen questions (98.5 and 99.7 % against 94.9 and 91.0 %), because the baby refuses more as it grows (3 to 9 %);
-- caveats: the lessons are tidy and rule-shaped (the baby's home ground); the transformer is plain Rust with no hyperparameter sweep, so its joules are an upper estimate; energy windows under 200 ms are noisy; and the counted energy estimates used earlier turned out to be 34-116x below the measurements.
+- teaching from scratch costs the baby 0.2-0.3 J, the plain transformers 2-8 J, and the tuned PyTorch route 57-445 J for the final training plus 1.7-2.8 kJ for the search; adding 20 new facts costs it about 62 mJ with nothing forgotten, against 105-171 mJ for a fine-tune that forgets heavily, 142-438 mJ for one that replays a tenth of the old (and still loses a few points) and 0.9-2.9 J for a full replay;
+- on unseen questions the baby is wrong 0 % of the time against 15-40 % for the small transformers, tuned or not; beyond the taught numbers the baby's labelled guess is right every time where the transformers are 14-28 % right and confidently wrong the rest, at every scale tried (20, 60 and 200 units);
+- **against the simple story:** the baby's energy advantage shrinks as the world grows (20x, 13x, 10x at 20, 60, 200 units), and at 60 and 200 units the plain transformer is *more* accurate than the baby on unseen questions (98.5 and 99.7 % against 94.9 and 91.0 %), because the baby refuses more as it grows (3 to 9 %); for a handful of new facts it is not dramatically cheaper than a forgetful fine-tune, it just does not forget;
+- caveats: the lessons are tidy and rule-shaped (the baby's home ground); 24 settings is a small search; energy uncertainty is about 2x; my earlier counted energy estimates were 60-80x below the measurements; for models this small PyTorch on a CPU was slower and costlier than my plain Rust.
 
 ## Limitations
 

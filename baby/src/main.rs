@@ -6,7 +6,7 @@
 //!   baby learn  "what is two multiplied by three" six --unit times    keep learning AFTER school: add a lesson, re-work how that unit is learned
 //!   baby discover [--seed N] [--out PATH]   hand it a heap of UNLABELLED lessons: it finds the units itself, then is scored like the others
 //!   baby bridge (--svamp FILE | --pairs FILE) [--units kind|discover] [--split random|blocks] [--numbers N] [--test F] [--seed N]   REAL TEXT: what does the baby make of problems somebody else wrote?
-//!   baby compare [--seed N] [--sizes 16,32,64] [--layers N] [--epochs N] [--adapt N | --scale 20,60]   the controlled comparison: the baby against a matched attention transformer, in joules
+//!   baby compare [--seed N] [--sizes 16,32,64] [--layers N] [--epochs N] [--adapt N | --scale 20,60 | --export DIR [--units N]]   the controlled comparison: the baby against a matched attention transformer, in joules
 //!   baby cost                               what LEARNING costs: time and memory to teach it, a new lesson, a new kind, and to tidy up
 //!   baby scale  [--units N --entities N --facts N --noise F --typos F --seed N --grade N --no-reorg | --sweep 20,60,200]   does learning stay light as the world grows?
 //!   baby invent [--seed N]                  hidden kinds nobody wrote a mechanism for, and kinds that must stay unexplained: what does it work out?
@@ -1527,6 +1527,13 @@ fn main() {
         Some("bridge") => cmd_bridge(&args),
         Some("compare") => {
             let sizes: Vec<usize> = args.string("sizes", "16,32,64").split(',').filter_map(|x| x.trim().parse().ok()).collect();
+            if let Some(dir) = args.opts.get("export") {
+                if let Err(e) = compare::export(args.get("seed", 1), args.get("units", 0), dir) {
+                    eprintln!("could not export: {e}");
+                    std::process::exit(1);
+                }
+                return;
+            }
             let n_new: usize = args.get("adapt", 0);
             if args.opts.contains_key("scale") {
                 let counts: Vec<usize> = args.string("scale", "20,60").split(',').filter_map(|x| x.trim().parse().ok()).collect();
