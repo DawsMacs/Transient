@@ -104,6 +104,12 @@ struct Routing {
     rows: HashMap<String, Vec<Cell>>,
     lessons: Vec<u32>,
     cells: usize,
+    /// Error-driven corrections to the scores: per word, one number per unit, learned by `refine` from the table's own mistakes on its lessons
+    /// (empty unless routing by counting is measurably poor, see `settle_route_precision`). Counting alone treats every word as independent
+    /// evidence and cannot learn that a word matters only against a particular rival; a correction learned from mistakes can.
+    delta: HashMap<String, Vec<f32>>,
+    /// When set, the corrections ARE the score (learned from zero by `refine`); the counts are not added.
+    pure: bool,
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -117,7 +123,7 @@ struct Cell {
 
 impl Routing {
     fn build(units: &[SchoolUnit], line: &NumberLine) -> Routing {
-        let mut r = Routing { rows: HashMap::new(), lessons: Vec::new(), cells: 0 };
+        let mut r = Routing { rows: HashMap::new(), lessons: Vec::new(), cells: 0, delta: HashMap::new(), pure: false };
         for (u, unit) in units.iter().enumerate() {
             r.ensure_units(u + 1);
             for l in &unit.lessons {
@@ -129,7 +135,7 @@ impl Routing {
 
     /// As `build`, leaving out every fifth lesson from position `fold` (counted across all units): to see how well it routes what it was not shown.
     fn build_without(units: &[SchoolUnit], line: &NumberLine, fold: usize) -> Routing {
-        let mut r = Routing { rows: HashMap::new(), lessons: Vec::new(), cells: 0 };
+        let mut r = Routing { rows: HashMap::new(), lessons: Vec::new(), cells: 0, delta: HashMap::new(), pure: false };
         let mut position = 0usize;
         for (u, unit) in units.iter().enumerate() {
             r.ensure_units(u + 1);
@@ -141,6 +147,73 @@ impl Routing {
             }
         }
         r
+    }
+
+    /// Learn the corrections (`delta`) from the table's mistakes: each sample is (its unit, the shape of its question), scored the way an unseen question
+    /// of that unit would be (itself taken out of the table), and whenever the right unit does not win by a margin the words of the question are moved
+    /// towards the right unit and away from the winner (a perceptron on top of the counts). The corrections are averaged over the epochs.
+    fn refine(&mut self, samples: &[(usize, Vec<String>)], epochs: usize) {
+        self.delta.clear();
+        let units = self.lessons.len();
+        if units < 2 || samples.is_empty() {
+            return;
+        }
+        let base: Vec<Vec<f32>> = if self.pure { vec![vec![0.0; units]; samples.len()] } else { samples.iter().map(|(u, sh)| self.scores_without(sh, *u)).collect() };
+        let mut w: HashMap<String, Vec<f32>> = HashMap::new();
+        let mut total: HashMap<String, Vec<f32>> = HashMap::new();
+        let mut order: Vec<usize> = (0..samples.len()).collect();
+        let mut rng = crate::rng::Rng::new(0x5EED ^ samples.len() as u64);
+        for _ in 0..epochs {
+            // (in unit order a perceptron forgets all but the last unit it saw)
+            rng.shuffle(&mut order);
+            for &i in &order {
+                let (u, sh) = &samples[i];
+                let mut s = base[i].clone();
+                for t in sh {
+                    if let Some(v) = w.get(t) {
+                        for (x, c) in s.iter_mut().zip(v) {
+                            *x += c;
+                        }
+                    }
+                }
+                let (mut rival, mut best) = (usize::MAX, f32::NEG_INFINITY);
+                for (k, x) in s.iter().enumerate() {
+                    if k != *u && *x > best {
+                        best = *x;
+                        rival = k;
+                    }
+                }
+                if rival != usize::MAX && s[*u] - best < 1.0 {
+                    for t in sh {
+                        let v = w.entry(t.clone()).or_insert_with(|| vec![0.0; units]);
+                        v[*u] += 1.0;
+                        v[rival] -= 1.0;
+                    }
+                }
+            }
+            for (t, v) in &w {
+                let a = total.entry(t.clone()).or_insert_with(|| vec![0.0; units]);
+                for (x, c) in a.iter_mut().zip(v) {
+                    *x += c;
+                }
+            }
+        }
+        for (t, mut v) in total {
+            for x in v.iter_mut() {
+                *x /= epochs as f32;
+            }
+            self.delta.insert(t, v);
+        }
+    }
+
+    fn add_delta(&self, shape: &[String], s: &mut [f32]) {
+        for t in shape {
+            if let Some(d) = self.delta.get(t) {
+                for (x, c) in s.iter_mut().zip(d) {
+                    *x += c;
+                }
+            }
+        }
     }
 
     fn ensure_units(&mut self, n: usize) {
@@ -174,6 +247,10 @@ impl Routing {
     fn scores_without(&self, shape: &[String], unit: usize) -> Vec<f32> {
         let units = self.lessons.len();
         let mut s = vec![0.0f32; units];
+        if self.pure {
+            self.add_delta(shape, &mut s);
+            return s;
+        }
         let mut known = 0usize;
         let mut occ: HashMap<&str, u32> = HashMap::new();
         for t in shape {
@@ -195,6 +272,13 @@ impl Routing {
                 }
             }
         }
+        for t in shape {
+            if let Some(d) = self.delta.get(t) {
+                for (x, c) in s.iter_mut().zip(d) {
+                    *x += c;
+                }
+            }
+        }
         let half_vocabulary = 1.0 + self.rows.len() as f32 / 100.0;
         for (u, x) in s.iter_mut().enumerate() {
             let n = if u == unit { self.lessons[u].saturating_sub(1) } else { self.lessons[u] };
@@ -206,6 +290,12 @@ impl Routing {
     fn scores(&self, shape: &[String], ledger: &mut Ledger) -> Vec<f32> {
         let units = self.lessons.len();
         let mut s = vec![0.0f32; units];
+        if self.pure {
+            self.add_delta(shape, &mut s);
+            ledger.words_read += (shape.len() + units) as u64;
+            ledger.macs += (shape.len() * units) as u64;
+            return s;
+        }
         let (mut known, mut touched) = (0usize, 0usize);
         for t in shape {
             if let Some(row) = self.rows.get(t) {
@@ -214,6 +304,14 @@ impl Routing {
                 for c in row {
                     s[c.unit as usize] += c.gain;
                 }
+            }
+        }
+        for t in shape {
+            if let Some(d) = self.delta.get(t) {
+                for (x, c) in s.iter_mut().zip(d) {
+                    *x += c;
+                }
+                touched += d.len();
             }
         }
         let half_vocabulary = 1.0 + self.rows.len() as f32 / 100.0;
@@ -227,7 +325,21 @@ impl Routing {
     }
 }
 
+/// The features the learned router sees: the shape of the question (a bag of its words) plus its last `ROUTE_TAIL` words marked as such. A story
+/// problem asks its question last, and what it asks decides what to do with the numbers; the bag alone cannot say which words were the question.
+fn routing_features(q: &str, line: &NumberLine) -> Vec<String> {
+    let mut out = shape(q, line);
+    let words = tokenize(q);
+    for w in words.iter().rev().take(ROUTE_TAIL) {
+        out.push(if line.value(w).is_some() { "tail:<num>".to_string() } else { format!("tail:{w}") });
+    }
+    out
+}
+
+const ROUTE_TAIL: usize = 8;
 const ROUTE_FOLDS: usize = 5;
+/// Passes over its own lessons when learning the routing corrections (`Routing::refine`).
+const ROUTE_EPOCHS: usize = 12;
 
 /// Units that follow one rule together, and the held-back evidence that says so (mechanism index into `Mech::ALL`, accuracy).
 struct Group {
@@ -488,7 +600,8 @@ impl School {
     /// The unit a question most resembles, and by how much it beats the runner-up. (The margin, not the raw score: a raw score grows
     /// with the number of words, so a short question like "one plus zero" would look less recognisable than a long one.)
     pub fn route(&self, q: &str, ledger: &mut Ledger) -> (usize, f32) {
-        let s = self.routing.scores(&shape(q, &self.line), ledger);
+        let features = if self.routing.pure { routing_features(q, &self.line) } else { shape(q, &self.line) };
+        let s = self.routing.scores(&features, ledger);
         School::best_and_margin(&s)
     }
 
@@ -532,7 +645,7 @@ impl School {
         }
         let stride = (all.len() / 2000).max(1);
         let mut margins: Vec<f32> =
-            all.iter().step_by(stride).map(|(u, q)| School::best_and_margin(&self.routing.scores_without(&shape(q, &self.line), *u)).1).collect();
+            all.iter().step_by(stride).map(|(u, q)| School::best_and_margin(&self.routing.scores_without(&if self.routing.pure { routing_features(q, &self.line) } else { shape(q, &self.line) }, *u)).1).collect();
         margins.sort_by(|a, b| a.partial_cmp(b).unwrap());
         margins
     }
@@ -672,26 +785,56 @@ impl School {
         let any_partial = self.units.iter().any(|u| matches!(&u.state, Fitted::Program(Some(p)) if p.partial.is_some()));
         if !any_partial || self.units.len() < 2 {
             self.route_precision = Vec::new();
+            self.routing.delta.clear();
             return;
         }
         let n = self.units.len();
+        let shapes: Vec<Vec<(usize, Vec<String>)>> = self.units.iter().enumerate().map(|(u, unit)| unit.lessons.iter().map(|l| (u, routing_features(&l.query, &self.line))).collect()).collect();
+        // five-fold routing of its own lessons, by counting alone and with the corrections learned from the training folds' mistakes
         let (mut routed, mut hit) = (vec![0u32; n], vec![0u32; n]);
+        let (mut routed_r, mut hit_r) = (vec![0u32; n], vec![0u32; n]);
         for fold in 0..ROUTE_FOLDS {
-            let table = Routing::build_without(&self.units, &self.line, fold);
+            let mut table = Routing::build_without(&self.units, &self.line, fold);
+            let mut train: Vec<(usize, Vec<String>)> = Vec::new();
+            let mut test: Vec<(usize, Vec<String>)> = Vec::new();
             let mut position = 0usize;
-            for (u, unit) in self.units.iter().enumerate() {
-                for l in &unit.lessons {
-                    if position % ROUTE_FOLDS == fold {
-                        let scores = table.scores(&shape(&l.query, &self.line), &mut Ledger::default());
-                        let best = scores.iter().enumerate().fold(0usize, |b, (i, s)| if *s > scores[b] { i } else { b });
-                        routed[best] += 1;
-                        if best == u {
-                            hit[best] += 1;
-                        }
-                    }
+            for unit_shapes in &shapes {
+                for sample in unit_shapes {
+                    if position % ROUTE_FOLDS == fold { test.push(sample.clone()) } else { train.push(sample.clone()) }
                     position += 1;
                 }
             }
+            let argmax = |scores: &[f32]| scores.iter().enumerate().fold(0usize, |b, (i, s)| if *s > scores[b] { i } else { b });
+            for (u, sh) in &test {
+                let best = argmax(&table.scores(sh, &mut Ledger::default()));
+                routed[best] += 1;
+                if best == *u {
+                    hit[best] += 1;
+                }
+            }
+            table.pure = true;
+            table.refine(&train, ROUTE_EPOCHS);
+            for (u, sh) in &test {
+                let best = argmax(&table.scores(sh, &mut Ledger::default()));
+                routed_r[best] += 1;
+                if best == *u {
+                    hit_r[best] += 1;
+                }
+            }
+        }
+        // Counting is kept unless the corrections route measurably more of the held-out lessons to their own unit.
+        let total = |h: &[u32]| h.iter().sum::<u32>();
+        if std::env::var("ROUTE_DEBUG").is_ok() {
+            eprintln!("ROUTE5 counting {}/{}  with corrections {}/{}", total(&hit), total(&routed), total(&hit_r), total(&routed_r));
+        }
+        let use_corrections = total(&hit_r) > total(&hit) && (total(&hit) as f32) < 0.95 * total(&routed) as f32;
+        let (routed, hit) = if use_corrections { (routed_r, hit_r) } else { (routed, hit) };
+        self.routing.delta.clear();
+        self.routing.pure = false;
+        if use_corrections {
+            let all: Vec<(usize, Vec<String>)> = shapes.into_iter().flatten().collect();
+            self.routing.pure = true;
+            self.routing.refine(&all, ROUTE_EPOCHS);
         }
         self.route_precision = (0..n).map(|u| (hit[u] as f32 + 1.0) / (routed[u] as f32 + 2.0)).collect();
     }
@@ -2896,6 +3039,45 @@ mod tests {
         assert!(s.ask("what is 20 zork 20").answer.is_none(), "only the corner is at least this large in both places");
         assert_eq!(s.ask("what is 24 zork 22").answer.as_deref(), Some("6"), "told");
         assert!(s.ask("what is 23 zork 22").answer.is_none(), "not vouched for by the corner");
+    }
+
+    #[test]
+    fn routing_corrections_learned_from_mistakes_fix_what_counting_gets_wrong_and_are_deterministic() {
+        // three units that share most of their words (a story's furniture) and differ in one cue each; the big unit's furniture swamps the small ones
+        let line = NumberLine::from_counting(&crate::quantity::counting_lessons());
+        let furniture = ["mary", "had", "some", "red", "apples", "and", "then", "gave", "away", "how", "many", "are", "left"];
+        let mut samples: Vec<(usize, Vec<String>)> = Vec::new();
+        for i in 0..90usize {
+            let (u, cue) = match i % 9 {
+                0..=5 => (0usize, ["more", "total", "altogether"][i % 3]),
+                6 | 7 => (1, ["fewer", "left"][i % 2]),
+                _ => (2, "each"),
+            };
+            let mut words: Vec<String> = furniture.iter().enumerate().filter(|(k, _)| (k + i) % 3 != 0).map(|(_, w)| w.to_string()).collect();
+            words.push(cue.to_string());
+            words.sort();
+            samples.push((u, words));
+        }
+        let mut table = Routing { rows: HashMap::new(), lessons: Vec::new(), cells: 0, delta: HashMap::new(), pure: false };
+        for (u, sh) in &samples {
+            table.add_lesson(*u, sh);
+        }
+        let loo_hits = |t: &Routing| samples.iter().filter(|(u, sh)| School::best_and_margin(&t.scores_without(sh, *u)).0 == *u).count();
+        let counting = loo_hits(&table);
+        table.pure = true;
+        table.refine(&samples, ROUTE_EPOCHS);
+        let learned = samples.iter().filter(|(u, sh)| School::best_and_margin(&table.scores(sh, &mut Ledger::default())).0 == *u).count();
+        assert!(learned > counting, "corrections must beat counting here: {learned} vs {counting} of {}", samples.len());
+        assert!(learned * 10 >= samples.len() * 9, "and route nearly all of them: {learned}");
+        // deterministic: the same lessons give the same corrections
+        let mut again = Routing { rows: HashMap::new(), lessons: table.lessons.clone(), cells: 0, delta: HashMap::new(), pure: true };
+        again.refine(&samples, ROUTE_EPOCHS);
+        let mut a: Vec<_> = table.delta.iter().collect();
+        let mut b: Vec<_> = again.delta.iter().collect();
+        a.sort_by(|x, y| x.0.cmp(y.0));
+        b.sort_by(|x, y| x.0.cmp(y.0));
+        assert_eq!(a, b);
+        let _ = &line;
     }
 
     #[test]

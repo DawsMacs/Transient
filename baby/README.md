@@ -43,6 +43,27 @@ cargo test --offline                 # 61 tests, including numerical checks of t
 ./target/release/baby energy         # what one question and one learning step cost, counted
 ```
 
+## Real text: the routing wall was the counting, not the words (2026-10-22; Vision Entry 9/10: learn from its own mistakes)
+
+**A wrong belief, corrected.** The previous section said routing the kind of a SVAMP problem "from the words alone" tops out at 49-62 % because "bag-of-words cannot see the compositional cue", backed by an offline prototype of three naive-Bayes-style classifiers (57-65 %). That was a fact about the **classifier family**, not about the words. Re-measuring offline with an averaged perceptron (learns from its mistakes) on the *same* bag of words: **78 %** (all 1,000 problems, five folds; grouped by story so the same story never sits in train and test: 78 %); adding the **last few words** as separate, marked features (the question of a story problem comes last): 80-82 %. The baby's routing table is a counting table (per word, per unit: ln(1 + 2 x count), minus a penalty for the words it knows), which treats every word as independent evidence, exactly the naive-Bayes weakness.
+
+**What was built** (`Routing::refine`, `routing_features`, `settle_route_precision`). A mistake-driven correction layer over the routing: per word, one number per unit, learned by an averaged perceptron over the baby's own lessons in a fixed-seed shuffle (12 epochs), with the words of the question plus its **last 8 words marked as such** as features. It is **used only when routing is measurably poor and the corrections measurably help**: the five-fold routing of its own lessons is run both by counting and with corrections learned from the training folds only; the corrections are adopted only if they route more held-out lessons to their own unit and counting routes under 95 %. (That test only runs when some unit is a partial program, as before.) So every tidy world is unchanged by construction, and the whole gate confirms it. Adopted, the corrections are the score (learned from zero; on top of the counts they made it *worse*, 41 % vs 48 % in the folds: the counts are on a much larger scale than a +-1 nudge). Nothing is stored: `load` retrains them from the lessons, deterministically.
+
+**Numbers** (`baby bridge --svamp ... --units kind --numbers 2`, 340 two-number problems, seeds 1-3, mean of three; random split / blocks split):
+
+| | routing to the right kind (before -> after) | labelled guesses right | wrong as a labelled guess | stated as fact |
+|---|---|---|---|---|
+| random | 56.7 % -> **76.4 %** | 49.8 % -> **67.8 %** | 29.8 % -> 27.5 % | 0 wrong, 0 stated |
+| blocks | 50.1 % -> **72.5 %** | 37.8 % -> **58.7 %** | 29.7 % -> 25.4 % | 0 wrong, 0 stated |
+
+Each of the six splits improves on routing (+15 to +24 points) and on guesses right (+13 to +21). The last-words feature alone, on top of the corrections: +1 to +5 points of routing in all six splits, never worse. The stated hit rate stays at or below the realised rate in five of six splits (e.g. 66.9 vs 69.8 %, 66.2 vs 74.5 %, 70.3 vs 69.0 %, 66.3 vs 73.8 %, 61.1 vs 67.5 %) and is 8 points over in one blocks split (75.3 % stated vs 67.3 % right). Nothing is stated as fact: every answer on real text is still a labelled guess.
+
+**Mistakes (recorded as they happened).**
+- First version: corrections on top of counts, and **the samples fed in unit order**. A perceptron trained in class order forgets all but the last class: the cross-validated routing fell to 39 % (below majority) even for the pure learner. Shuffling each epoch (deterministic) took it from 39 % to 69 % in the folds. The sign of a bug was a result *below the majority class*.
+- Adding the corrections on top of the counts was worse than counting (41 % vs 48 %); the pure learner is what works.
+
+**Honest limits.** One adversarially built corpus; the units are the file's labels; 340 problems with exactly two numbers (the 3-4-number problems still learn nothing); about a quarter of all questions still get a wrong labelled guess (routing errors and the program's own); the epochs, the 8-word tail, the 1.0 margin and the 95 % trigger are mine and were not tuned (the tail length was picked from one offline run: 6, 8, 10 words gave 81.4, 81.6, 79.2 %); routing precision is still one number per unit.
+
 ## After a miss, learn the new regime: repairing a law from the lessons that contradict it (2026-10-22; Vision Entry 7: guess, get it wrong, update)
 
 **The gap.** Until now one correction of a wrong guess only *stopped* the unit guessing beyond its reach (`refuted`): the baby learned "my rule is wrong out there", not what is true there. In `baby invent --corrections --seeds 3` (one correction per deceptive kind) all 157 other wrong guesses became refusals and 64 of the 137 right guesses were refused too. The cause was in the language, not the search: `min(first + second, 30)` is five pieces, but the base language has only the constants 1 and 2 (the library learns a ten from rules it has fitted, never a 30 it has just been told).
@@ -223,7 +244,7 @@ Everything before this was tidy synthetic lessons. `baby bridge` (`bridge.rs`) t
 | **answers stated as fact** | **0 right, 0 wrong** (every answer is a guess) |
 | the whole file (three and four numbers included) | still nothing learned: more than 20 % of the lessons hold more than two numbers, so the tolerant search refuses; 0 wrong |
 
-**Reading it honestly.** The way of learning is sound (oracle 67-90 %, and 50 of 51 right in the first trial). The loss is routing: a prototype of three bag-of-words classifiers (naive Bayes with and without class prior, counts of one to five) tops out at 57-65 % on the same split, so this is not a bug in the baby's routing: bag-of-words cannot see the compositional cue that SVAMP is built around. The stated rates are honest in aggregate (within 1-7 points on four of five splits) and over-confident by 9 points on one blocks split. Nothing is stated as a fact, so the WRONG column the project cares about stays at 0, but **20-35 % of all questions get a wrong labelled guess**: that is what it costs to guess at all when you cannot tell which kind a question is.
+**Reading it honestly.** The way of learning is sound (oracle 67-90 %, and 50 of 51 right in the first trial). The loss is routing. (*Corrected later the same day, see the section above: the "bag-of-words ceiling" I concluded here came from the naive-Bayes-style classifiers I had prototyped; a perceptron on the same words reaches 78 %.*) A prototype of three bag-of-words classifiers (naive Bayes with and without class prior, counts of one to five) topped out at 57-65 % on the same split. The stated rates are honest in aggregate (within 1-7 points on four of five splits) and over-confident by 9 points on one blocks split. Nothing is stated as a fact, so the WRONG column the project cares about stays at 0, but **20-35 % of all questions get a wrong labelled guess**: that is what it costs to guess at all when you cannot tell which kind a question is.
 
 **Mistakes and surprises (recorded as they happened).**
 - My first idea was that number words in the stories ("one", "two") broke the operand count. Measured: 1 of 351 two-number problems. Not it.
