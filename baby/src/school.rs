@@ -168,6 +168,41 @@ impl Routing {
         }
     }
 
+    /// The scores `shape` would get if one lesson of unit `unit` with exactly this shape had never been added to the table: what an unseen
+    /// question of a known unit looks like to the table. (Mirrors `add_lesson` and `scores`: counts go down by the number of occurrences of
+    /// each word, a word nobody else has used becomes unknown, and the unit has one lesson fewer.)
+    fn scores_without(&self, shape: &[String], unit: usize) -> Vec<f32> {
+        let units = self.lessons.len();
+        let mut s = vec![0.0f32; units];
+        let mut known = 0usize;
+        let mut occ: HashMap<&str, u32> = HashMap::new();
+        for t in shape {
+            *occ.entry(t.as_str()).or_default() += 1;
+        }
+        for t in shape {
+            if let Some(row) = self.rows.get(t) {
+                let o = occ[t.as_str()];
+                let mut left = false;
+                for c in row {
+                    let count = if c.unit as usize == unit { c.count.saturating_sub(o) } else { c.count };
+                    if count > 0 {
+                        left = true;
+                        s[c.unit as usize] += (1.0 + 2.0 * count as f32).ln();
+                    }
+                }
+                if left {
+                    known += 1;
+                }
+            }
+        }
+        let half_vocabulary = 1.0 + self.rows.len() as f32 / 100.0;
+        for (u, x) in s.iter_mut().enumerate() {
+            let n = if u == unit { self.lessons[u].saturating_sub(1) } else { self.lessons[u] };
+            *x -= known as f32 * (n as f32 + half_vocabulary).ln();
+        }
+        s
+    }
+
     fn scores(&self, shape: &[String], ledger: &mut Ledger) -> Vec<f32> {
         let units = self.lessons.len();
         let mut s = vec![0.0f32; units];
@@ -207,6 +242,11 @@ pub struct School {
     line: NumberLine,
     /// How clearly one unit must beat the next for a question to count as a recognisable kind: learned from rewordings.
     pub route_floor: f32,
+    /// The floor as it was when the baby was taught, the ratio of that floor to the leave-one-out margin measured then (0: unknown), and how many
+    /// lessons there were when the floor was last set. See `recalibrate_route`.
+    route_base: f32,
+    route_ratio: f32,
+    calibrated_lessons: usize,
     pub seed: u64,
     /// The library as it was when the units were last fitted or reconsidered.
     library_seen: String,
@@ -411,7 +451,7 @@ impl School {
         weights.lib = library;
         let routing = Routing::build(&units, &line);
         let library_seen = weights.lib.to_lines();
-        let mut school = School { units, weights, routing, line, route_floor: f32::NEG_INFINITY, seed, library_seen, bar, careful: true, guess_record: [(0, 0); 5], route_precision: Vec::new(), pen: Vec::new() };
+        let mut school = School { units, weights, routing, line, route_floor: f32::NEG_INFINITY, route_base: f32::NEG_INFINITY, route_ratio: 0.0, calibrated_lessons: 0, seed, library_seen, bar, careful: true, guess_record: [(0, 0); 5], route_precision: Vec::new(), pen: Vec::new() };
         // How decisive must a question be to count as a recognisable kind? Learned from rewordings of lessons it was taught.
         let own: Vec<&Item> = train.iter().collect();
         let (queries, safety): (Vec<&str>, f32) = match calibration {
@@ -423,6 +463,10 @@ impl School {
         // Keep 99% recognisable (the floor is a dial: lower recognises more, risks more).
         let p1 = best[(best.len() as f32 * 0.01) as usize];
         school.route_floor = if calibration.is_some() { p1 - safety * p1.abs() } else { p1 * safety };
+        school.route_base = school.route_floor;
+        let loo = school.loo_margin_p1();
+        school.route_ratio = if loo > 0.0 && school.route_floor > 0.0 { school.route_floor / loo } else { 0.0 };
+        school.calibrated_lessons = school.total_lessons();
         // Now that every unit has been learned, and with it the vocabulary the later ones added, look again at the program units.
         school.library_seen = String::new();
         school.review_programs();
@@ -434,7 +478,11 @@ impl School {
     /// with the number of words, so a short question like "one plus zero" would look less recognisable than a long one.)
     pub fn route(&self, q: &str, ledger: &mut Ledger) -> (usize, f32) {
         let s = self.routing.scores(&shape(q, &self.line), ledger);
-        // best and runner-up in one pass (the earlier unit wins a tie)
+        School::best_and_margin(&s)
+    }
+
+    /// The best unit and its margin over the runner-up, in one pass (the earlier unit wins a tie).
+    fn best_and_margin(s: &[f32]) -> (usize, f32) {
         let (mut best, mut second) = (0usize, None::<usize>);
         for u in 1..s.len() {
             if s[u] > s[best] {
@@ -449,6 +497,57 @@ impl School {
             None => s[best],
         };
         (best, margin)
+    }
+
+    fn total_lessons(&self) -> usize {
+        self.units.iter().map(|u| u.lessons.len()).sum()
+    }
+
+    /// How clearly the baby recognises a question it was NOT taught, estimated on its own lessons: the 1st-percentile margin of best unit over
+    /// runner-up, each lesson routed with itself taken out of the table (a sample of at most 2,000, at an even stride, so the cost is bounded).
+    fn loo_margin_p1(&self) -> f32 {
+        let margins = self.loo_margins();
+        if margins.is_empty() {
+            return 0.0;
+        }
+        margins[((margins.len() as f32) * 0.01) as usize]
+    }
+
+    /// (for diagnosis) the sorted leave-one-out margins of a sample of the baby's own lessons
+    pub fn loo_margins(&self) -> Vec<f32> {
+        let all: Vec<(usize, &str)> = self.units.iter().enumerate().flat_map(|(u, unit)| unit.lessons.iter().map(move |l| (u, l.query.as_str()))).collect();
+        if all.is_empty() {
+            return Vec::new();
+        }
+        let stride = (all.len() / 2000).max(1);
+        let mut margins: Vec<f32> =
+            all.iter().step_by(stride).map(|(u, q)| School::best_and_margin(&self.routing.scores_without(&shape(q, &self.line), *u)).1).collect();
+        margins.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        margins
+    }
+
+    /// Keep the recognition floor where it was relative to how clearly the baby recognises what it was not taught. Learning in one unit lowers
+    /// the margin of small units that share words with it (the right unit still wins, by less), and a floor fixed at teaching time then turns
+    /// recognised questions into "no kind of lesson is like this". The floor is the ratio measured at teaching time times the leave-one-out
+    /// margin now, and never above what it was at teaching time. Runs by itself after enough new lessons (see `maybe_recalibrate_route`), and in `reorganise`.
+    pub fn recalibrate_route(&mut self) {
+        if self.route_ratio > 0.0 {
+            let now = self.loo_margin_p1();
+            if now > 0.0 {
+                self.route_floor = (self.route_ratio * now).min(self.route_base);
+            }
+        }
+        self.calibrated_lessons = self.total_lessons();
+    }
+
+    /// After enough new lessons: 200, or 2 % of what it knew when the floor was last set, whichever is more. (The margins that shrink belong to
+    /// small units whose neighbours grew, so the total can grow by only a few percent while they lose most of their margin: a threshold on total
+    /// growth of a fifth never fired.)
+    fn maybe_recalibrate_route(&mut self) {
+        let added = self.total_lessons().saturating_sub(self.calibrated_lessons);
+        if self.route_ratio > 0.0 && added >= 200.max(self.calibrated_lessons / 50) {
+            self.recalibrate_route();
+        }
     }
 
     /// (for diagnosis) one unit's competing explanations
@@ -1194,6 +1293,7 @@ impl School {
         }
         // a change in vocabulary can give a settled-looking program a rival: ask each one, cheaply, whether it is still the only explanation
         self.review_programs();
+        self.maybe_recalibrate_route();
         Ok(learned)
     }
 
@@ -1279,7 +1379,9 @@ impl School {
             self.relearn_unit(u);
         }
         let unit = &self.units[u];
-        Ok(Learned { unit: unit.name.clone(), opened, corrected, was, now: unit.chosen, held_back: unit.best_evidence(), facts: unit.facts(), surprised: true })
+        let learned = Learned { unit: unit.name.clone(), opened, corrected, was, now: unit.chosen, held_back: unit.best_evidence(), facts: unit.facts(), surprised: true };
+        self.maybe_recalibrate_route();
+        Ok(learned)
     }
 
     fn renumber(&mut self) {
@@ -1310,6 +1412,7 @@ impl School {
     pub fn reorganise(&mut self) -> Reorg {
         let report = self.reorganise_inner();
         self.settle_all_reach();
+        self.recalibrate_route();
         report
     }
 
@@ -1847,6 +1950,9 @@ impl School {
         writeln!(out, "route_floor {}", self.route_floor).unwrap();
         out.push_str(&self.weights.lib.to_lines());
         writeln!(out, "bar {}", self.bar).unwrap();
+        if self.route_ratio > 0.0 {
+            writeln!(out, "route_calibration {} {}", self.route_base, self.route_ratio).unwrap();
+        }
         // careful is the default, so only its absence is written (a file from before careful mode loads as careful)
         if !self.careful {
             writeln!(out, "careful 0").unwrap();
@@ -1893,6 +1999,14 @@ impl School {
                 b
             }
             None => 0.9,
+        };
+        let (route_base, route_ratio) = match it.peek().and_then(|l| l.strip_prefix("route_calibration ")) {
+            Some(rest) => {
+                let v: Vec<f32> = rest.split_whitespace().filter_map(|x| x.parse().ok()).collect();
+                it.next();
+                if v.len() == 2 { (v[0], v[1]) } else { (route_floor, 0.0) }
+            }
+            None => (route_floor, 0.0),
         };
         // "careful 1" was written by files made when permissive was the default; both it and a missing line mean careful
         let careful = match it.peek().map(|l| l.trim()) {
@@ -2003,7 +2117,8 @@ impl School {
         weights.lib = library;
         let routing = Routing::build(&units, &line);
         let library_seen = weights.lib.to_lines();
-        let mut school = School { units, weights, routing, line, route_floor, seed, library_seen, bar, careful, guess_record, route_precision: Vec::new(), pen };
+        let mut school = School { units, weights, routing, line, route_floor, route_base, route_ratio, calibrated_lessons: 0, seed, library_seen, bar, careful, guess_record, route_precision: Vec::new(), pen };
+        school.calibrated_lessons = school.total_lessons();
         school.settle_all_reach();
         Ok(school)
     }
@@ -2687,6 +2802,52 @@ mod tests {
         assert!(r.answer.is_none(), "minus was only taught to 3: {:?}", r.answer);
         assert_eq!(r.guess.map(|g| g.answer).as_deref(), Some("4"), "a labelled guess instead");
         assert_eq!(s.ask("what is 3 minus 2").answer.as_deref(), Some("1"));
+    }
+
+    #[test]
+    fn the_recognition_floor_follows_the_margins_as_it_learns_and_never_rises_above_where_it_was_taught() {
+        let mut s = capped_units(8);
+        assert!(s.route_ratio > 0.0 && s.route_base.is_finite(), "calibrated when taught");
+        let base = s.route_floor;
+        assert_eq!(base, s.route_base);
+        let lessons_before = s.calibrated_lessons;
+        // teach one unit a few hundred more lessons, as the baby's own checks do
+        // (lessons that fit the rule: 327 sums up to 30 that were not taught; ones that break it would force a slow full re-fit each time)
+        for a in 0..=30i64 {
+            for b in 0..=(30 - a) {
+                if a > 12 || b > 12 {
+                    s.learn(&format!("what is {a} zork0 {b}"), &(a + b).to_string(), Some("zork0")).unwrap();
+                }
+            }
+        }
+        assert!(s.calibrated_lessons > lessons_before, "it recalibrated by itself after enough new lessons");
+        assert!(s.route_floor <= base + 1e-6, "never above the floor it was taught with: {} vs {base}", s.route_floor);
+        // what it must still refuse, it refuses: nothing like any unit it knows
+        for q in ["what is blorp quux", "tell me a story about dragons", "what is zork0 zork5 zork6"] {
+            let r = s.ask(q);
+            assert!(r.answer.is_none() && r.guess.is_none(), "{q:?} must stay refused: {:?} {:?}", r.answer, r.guess);
+        }
+        // and what it knows is recognised
+        assert_eq!(s.ask("what is 7 zork3 4").answer.as_deref(), Some("11"));
+        // the calibration survives saving and loading
+        let dir = std::env::temp_dir().join(format!("route_calibration_{}", std::process::id()));
+        let path = dir.join("a.school").to_string_lossy().to_string();
+        s.save(&path).unwrap();
+        let back = School::load(&path).unwrap();
+        assert!((back.route_ratio - s.route_ratio).abs() < 1e-6 && (back.route_base - s.route_base).abs() < 1e-6);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn leaving_a_lesson_out_can_only_make_it_harder_to_recognise() {
+        let s = capped_units(8);
+        let m = s.loo_margins();
+        assert!(!m.is_empty());
+        // the same lessons routed normally (each is in the table, so it is recognised at least as well)
+        let mut plain: Vec<f32> = s.units.iter().flat_map(|u| u.lessons.iter().map(|l| s.route(&l.query, &mut Ledger::default()).1)).collect();
+        plain.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let median = |v: &[f32]| v[v.len() / 2];
+        assert!(median(&m) <= median(&plain) + 1e-4, "leave-one-out median {} vs plain {}", median(&m), median(&plain));
     }
 
     #[test]

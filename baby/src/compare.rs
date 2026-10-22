@@ -602,6 +602,7 @@ pub fn run_teacher(seed: u64, units: usize, rounds: usize, per_unit: usize) {
         println!("{label:<22} {asked:>9} {answered:>9}   {:>26} {:>26}   {:>12}", cell(&gn), cell(&gb), format!("{:.0}%", 100.0 * gn.guess_right as f64 / gn.refused.max(1) as f64));
         gn.wrong + gb.wrong
     };
+    let floor_start = school.route_floor;
     let mut wrong_ever = report(&school, "before any checks", 0, 0);
     // how well each never-taught question was recognised before any learning: the margin of its best unit over the runner-up, and who won
     let before_route: Vec<(usize, f32)> = w.new_items.iter().map(|it| school.route(&it.query, &mut Ledger::default())).collect();
@@ -639,6 +640,9 @@ pub fn run_teacher(seed: u64, units: usize, rounds: usize, per_unit: usize) {
                     }
                 }
             }
+        }
+        if std::env::var("RECAL_EACH_ROUND").is_ok() {
+            school.recalibrate_route();
         }
         wrong_ever += report(&school, &format!("after round {round}"), asked, answered);
         if checks.is_empty() || learned_this_round == 0 {
@@ -736,6 +740,16 @@ pub fn run_teacher(seed: u64, units: usize, rounds: usize, per_unit: usize) {
         for (sem, (r, t)) in &by_sem {
             println!("    {sem:<8} {r:>4} of {t:>4} refused");
         }
+    }
+    println!("\nrecognition floor: {floor_start:.3} when taught, {:.3} after all the learning", school.route_floor);
+    if std::env::var("ROUTE_DEBUG").is_ok() {
+        let m = school.loo_margins();
+        let at = |q: f32| m[((m.len() as f32 * q) as usize).min(m.len() - 1)];
+        println!("leave-one-out margins of its own lessons ({} sampled): min {:.2}, 1% {:.2}, 2% {:.2}, 5% {:.2}, 10% {:.2}, median {:.2}", m.len(), m[0], at(0.01), at(0.02), at(0.05), at(0.10), at(0.5));
+        let mut unseen: Vec<f32> = w.new_items.iter().map(|it| school.route(&it.query, &mut Ledger::default()).1).collect();
+        unseen.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let u = |q: f32| unseen[((unseen.len() as f32 * q) as usize).min(unseen.len() - 1)];
+        println!("margins of the never-taught questions ({}): min {:.2}, 1% {:.2}, 2% {:.2}, 5% {:.2}, 10% {:.2}, median {:.2}", unseen.len(), unseen[0], u(0.01), u(0.02), u(0.05), u(0.10), u(0.5));
     }
     // the traps: questions that must never be answered (a negative result, a result with no number word, two attributes at once, ...)
     let traps = sw.must_refuse.iter().filter(|(q, _)| school.ask(q).answer.is_some()).count();
