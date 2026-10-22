@@ -257,6 +257,10 @@ pub struct School {
     /// that changes regime outside it (a sum that saturates, one that wraps) is then confidently wrong, and nothing in the lessons can say so.
     /// `set_careful(false)` is the permissive showcase.
     careful: bool,
+    /// Skeptical of a teacher whose answer contradicts a settled rule: hold it, ask again, believe it only when it is repeated. Off by default.
+    skeptical: bool,
+    /// Answers held back for a second opinion: (unit, question, the answer that contradicted its rule).
+    disputed: Vec<(String, String, String)>,
     /// Its own record as a guesser: for each distance bucket, (guesses that turned out right, wrong). Learned from the answers it is given.
     guess_record: [(u32, u32); 5],
     /// For each unit, of the held-back lessons that were routed to it, the share that really belonged there (measured only when some unit is a
@@ -314,6 +318,9 @@ pub struct Learned {
     pub facts: usize,
     /// False when the unit could already work this lesson out: nothing was learned, nothing was stored.
     pub surprised: bool,
+    /// The answer contradicts a rule the unit has good evidence for, and the baby is not sure the teacher is right: it was NOT learned, it is held
+    /// until the same question is answered again (see `set_skeptical`).
+    pub disputed: bool,
 }
 
 /// What the pen did with the lessons waiting in it.
@@ -451,7 +458,7 @@ impl School {
         weights.lib = library;
         let routing = Routing::build(&units, &line);
         let library_seen = weights.lib.to_lines();
-        let mut school = School { units, weights, routing, line, route_floor: f32::NEG_INFINITY, route_base: f32::NEG_INFINITY, route_ratio: 0.0, calibrated_lessons: 0, seed, library_seen, bar, careful: true, guess_record: [(0, 0); 5], route_precision: Vec::new(), pen: Vec::new() };
+        let mut school = School { units, weights, routing, line, route_floor: f32::NEG_INFINITY, route_base: f32::NEG_INFINITY, route_ratio: 0.0, calibrated_lessons: 0, seed, library_seen, bar, careful: true, skeptical: false, disputed: Vec::new(), guess_record: [(0, 0); 5], route_precision: Vec::new(), pen: Vec::new() };
         // How decisive must a question be to count as a recognisable kind? Learned from rewordings of lessons it was taught.
         let own: Vec<&Item> = train.iter().collect();
         let (queries, safety): (Vec<&str>, f32) = match calibration {
@@ -692,6 +699,61 @@ impl School {
         let unskipped = unit.remember.operand_hull(&cands, &value, &[]);
         let ex: Vec<&str> = unit.exceptions.iter().take(3).map(|&i| unit.lessons[i].query.as_str()).collect();
         format!("{} lessons, {} exceptions {:?}, refuted {}, hull {:?} (without skipping exceptions {:?})", unit.lessons.len(), unit.exceptions.len(), ex, unit.refuted, hull, unskipped)
+    }
+
+    /// Be skeptical of the teacher: an answer to one of its own checks that contradicts a rule it has good evidence for is held, not learned, until
+    /// the same question is answered again with the same answer (then it is believed, and the rule is refuted properly) or with the rule's answer
+    /// (then the first one was a slip). Off by default; costs one more question per contradiction.
+    pub fn set_skeptical(&mut self, skeptical: bool) {
+        self.skeptical = skeptical;
+        if !skeptical {
+            self.disputed.clear();
+        }
+    }
+
+    /// Answers currently held for a second opinion.
+    pub fn disputed_count(&self) -> usize {
+        self.disputed.len()
+    }
+
+    /// How many units have been shown wrong by a lesson outside what their rule explains (they no longer guess there).
+    pub fn refuted_units(&self) -> usize {
+        self.units.iter().filter(|u| u.refuted).count()
+    }
+
+    /// The skeptic's weighing of an answer against the unit's own rule. None: nothing to doubt, learn it as usual. Some: it was held.
+    fn weigh_against_rule(&mut self, u: usize, query: &str, answer: &str) -> Option<Learned> {
+        let unit = &self.units[u];
+        let settled = matches!(unit.chosen, Mech::Rule | Mech::Select | Mech::Program)
+            && !matches!(&unit.state, Fitted::Program(Some(p)) if p.partial.is_some())
+            && unit.best_evidence() >= mechanisms::reliable()
+            && unit.facts() >= 8
+            && !unit.refuted;
+        if !settled {
+            return None;
+        }
+        let predicted = self.unit_predicts(u, query)?;
+        let name = self.units[u].name.clone();
+        let key = lesson_key(query);
+        let pos = self.disputed.iter().position(|d| d.0 == name && lesson_key(&d.1) == key);
+        if predicted == answer {
+            // it agrees with the rule: any doubt held about this question was a slip
+            if let Some(p) = pos {
+                self.disputed.remove(p);
+            }
+            return None;
+        }
+        match pos {
+            Some(p) if self.disputed[p].2 == answer => {
+                // said twice: believed
+                self.disputed.remove(p);
+                return None;
+            }
+            Some(p) => self.disputed[p].2 = answer.to_string(),
+            None => self.disputed.push((name, query.to_string(), answer.to_string())),
+        }
+        let unit = &self.units[u];
+        Some(Learned { unit: unit.name.clone(), opened: false, corrected: false, was: Some(unit.chosen), now: unit.chosen, held_back: unit.best_evidence(), facts: unit.facts(), surprised: false, disputed: true })
     }
 
     /// Is any operand of this question outside the range unit `u` was taught (or has had confirmed) for the operation it names? Then why.
@@ -971,6 +1033,30 @@ impl School {
         let facts = self.units[u].facts();
         let chosen = choose_for_unit(&ev, facts, &items, &self.weights, self.seed);
         let state = fit(chosen, &items, &self.weights, self.seed);
+        // An established exact program is not thrown away for a few contradicting lessons: one lesson against dozens that agree is an outlier,
+        // not a new law (a rule already tolerates up to one in twenty, see `refit_in_place`). It keeps stating facts only where the lessons it
+        // explains reach, and a contradiction outside that reach still withholds its guesses there (`settle_reach`), so a genuine change of regime
+        // stays safe. More than three, or more than one in twenty, and it is re-decided as before.
+        let keep_old = {
+            let unit = &self.units[u];
+            match (&unit.state, unit.chosen) {
+                (Fitted::Program(Some(old)), Mech::Program) if old.partial.is_none() && old.alts.is_empty() && unit.best_evidence() >= mechanisms::reliable() && unit.facts() >= 12 => {
+                    let new_is_exact = matches!(&state, Fitted::Program(Some(p)) if p.partial.is_none());
+                    if new_is_exact {
+                        false
+                    } else {
+                        let unexplained = items.iter().filter(|l| predict(&unit.state, &l.query, &self.weights).as_deref() != Some(l.answer.as_str())).count();
+                        unexplained <= 3 && unexplained * 20 <= items.len()
+                    }
+                }
+                _ => false,
+            }
+        };
+        if keep_old {
+            self.units[u].remember = Remembered::from_items(&items);
+            self.settle_reach(u);
+            return;
+        }
         let unit = &mut self.units[u];
         unit.evidence = ev;
         unit.chosen = chosen;
@@ -1004,9 +1090,25 @@ impl School {
                 return false;
             }
         }
+        // An established EXACT program is kept when the refit can only offer a partial one because of a few contradicting lessons: one lesson against
+        // dozens that agree is an outlier, not a new law. (Without this, a single wrong answer from a teacher turned an exact program into one that
+        // only guesses.) It states facts only where the lessons it explains reach, and a contradiction outside that reach still withholds its guesses
+        // there (`settle_reach`). More than three contradictions, or one in twenty, and `relearn_unit` re-decides.
+        let keep_old = {
+            let unit = &self.units[u];
+            match (&unit.state, &state) {
+                (Fitted::Program(Some(old)), Fitted::Program(Some(new))) if old.partial.is_none() && old.alts.is_empty() && new.partial.is_some() && unit.facts() >= 12 => {
+                    let unexplained = items.iter().filter(|l| predict(&unit.state, &l.query, &self.weights).as_deref() != Some(l.answer.as_str())).count();
+                    unexplained <= 3 && unexplained * 20 <= items.len()
+                }
+                _ => false,
+            }
+        };
         let unit = &mut self.units[u];
         unit.remember = Remembered::from_items(&items);
-        unit.state = if chosen == Mech::Remember { Fitted::Remember(unit.remember.clone()) } else { state };
+        if !keep_old {
+            unit.state = if chosen == Mech::Remember { Fitted::Remember(unit.remember.clone()) } else { state };
+        }
         self.settle_reach(u);
         true
     }
@@ -1277,6 +1379,13 @@ impl School {
     /// otherwise looked at again only every tenth new fact.
     pub fn learn_wondered(&mut self, query: &str, answer: &str, unit: &str) -> Result<Learned, String> {
         mechanisms::set_reliable(self.bar);
+        if self.skeptical {
+            if let Some(u) = self.units.iter().position(|x| x.name == unit) {
+                if let Some(held) = self.weigh_against_rule(u, query, answer) {
+                    return Ok(held);
+                }
+            }
+        }
         let learned = self.learn(query, answer, Some(unit))?;
         if let Some(u) = self.units.iter().position(|x| x.name == unit) {
             // An answer it asked for is kept even if it already predicted it: a confirmed check is what extends the range it may answer in.
@@ -1360,7 +1469,7 @@ impl School {
             && self.unit_predicts(u, query).as_deref() == Some(answer)
         {
             let unit = &self.units[u];
-            return Ok(Learned { unit: unit.name.clone(), opened: false, corrected: false, was, now: unit.chosen, held_back: unit.best_evidence(), facts: unit.facts(), surprised: false });
+            return Ok(Learned { unit: unit.name.clone(), opened: false, corrected: false, was, now: unit.chosen, held_back: unit.best_evidence(), facts: unit.facts(), surprised: false, disputed: false });
         }
         let key = lesson_key(query);
         let corrected;
@@ -1379,7 +1488,7 @@ impl School {
             self.relearn_unit(u);
         }
         let unit = &self.units[u];
-        let learned = Learned { unit: unit.name.clone(), opened, corrected, was, now: unit.chosen, held_back: unit.best_evidence(), facts: unit.facts(), surprised: true };
+        let learned = Learned { unit: unit.name.clone(), opened, corrected, was, now: unit.chosen, held_back: unit.best_evidence(), facts: unit.facts(), surprised: true, disputed: false };
         self.maybe_recalibrate_route();
         Ok(learned)
     }
@@ -2117,7 +2226,7 @@ impl School {
         weights.lib = library;
         let routing = Routing::build(&units, &line);
         let library_seen = weights.lib.to_lines();
-        let mut school = School { units, weights, routing, line, route_floor, route_base, route_ratio, calibrated_lessons: 0, seed, library_seen, bar, careful, guess_record, route_precision: Vec::new(), pen };
+        let mut school = School { units, weights, routing, line, route_floor, route_base, route_ratio, calibrated_lessons: 0, seed, library_seen, bar, careful, skeptical: false, disputed: Vec::new(), guess_record, route_precision: Vec::new(), pen };
         school.calibrated_lessons = school.total_lessons();
         school.settle_all_reach();
         Ok(school)
@@ -2848,6 +2957,67 @@ mod tests {
         plain.sort_by(|a, b| a.partial_cmp(b).unwrap());
         let median = |v: &[f32]| v[v.len() / 2];
         assert!(median(&m) <= median(&plain) + 1e-4, "leave-one-out median {} vs plain {}", median(&m), median(&plain));
+    }
+
+    #[test]
+    fn a_skeptical_baby_holds_an_answer_that_contradicts_a_settled_rule_until_it_is_repeated() {
+        let mut s = sums_school(|a, b| a + b);
+        s.set_careful(true);
+        s.set_skeptical(true);
+        // a slip: the teacher says 19 for 8 + 9 once, then the right answer (17) when asked again
+        let l = s.learn_wondered("what is 8 zork 9", "19", "zork").unwrap();
+        assert!(l.disputed, "a contradiction of a settled rule is held, not learned");
+        assert_eq!(s.disputed_count(), 1);
+        assert!(s.ask("what is 8 zork 9").answer.as_deref() != Some("19"), "nothing was learned from the held answer");
+        let l = s.learn_wondered("what is 8 zork 9", "17", "zork").unwrap();
+        assert!(!l.disputed, "the second answer agrees with the rule: the first was a slip");
+        assert_eq!(s.disputed_count(), 0);
+        // a real change: the same surprising answer twice is believed
+        let l = s.learn_wondered("what is 11 zork 9", "30", "zork").unwrap();
+        assert!(l.disputed);
+        let l = s.learn_wondered("what is 11 zork 9", "30", "zork").unwrap();
+        assert!(!l.disputed, "said twice: believed");
+        assert_eq!(s.disputed_count(), 0);
+        // a third version is still unsettled
+        let l = s.learn_wondered("what is 12 zork 9", "40", "zork").unwrap();
+        assert!(l.disputed);
+        let l = s.learn_wondered("what is 12 zork 9", "41", "zork").unwrap();
+        assert!(l.disputed, "a different answer the second time: still unsettled");
+        // off by default: the answer is simply learned
+        let mut t = sums_school(|a, b| a + b);
+        t.set_careful(true);
+        assert!(!t.learn_wondered("what is 8 zork 9", "19", "zork").unwrap().disputed);
+    }
+
+    #[test]
+    fn a_settled_program_survives_a_few_contradicting_lessons_but_not_a_change_of_regime() {
+        // "how far apart" taught on 0..=12: an exact program
+        let apart = |a: i64, b: i64| (a - b).abs();
+        let mut items = Vec::new();
+        for a in 0..=12i64 {
+            for b in 0..=12i64 {
+                items.push(Item { unit: 0, fact: items.len(), template: 0, query: format!("what is {a} zork {b}"), answer: apart(a, b).to_string() });
+            }
+        }
+        let mut s = School::from_items(&items, vec!["zork".into()], None, 1, true);
+        s.set_careful(true);
+        let exact = |s: &School| matches!(&s.units[0].state, Fitted::Program(Some(p)) if p.partial.is_none());
+        assert!(exact(&s) && s.units[0].chosen == Mech::Program);
+        // one wrong lesson inside the taught range: an outlier, not a new law
+        s.learn("what is 7 zork 3", "9", Some("zork")).unwrap();
+        assert!(exact(&s), "one lesson against 169 that agree must not turn an exact program into a guessing one");
+        assert_eq!(s.ask("what is 10 zork 4").answer.as_deref(), Some("6"), "facts elsewhere are untouched");
+        // a contradiction outside the taught range: still no guess beyond it
+        s.learn("what is 20 zork 3", "99", Some("zork")).unwrap();
+        assert!(exact(&s));
+        let r = s.ask("what is 25 zork 3");
+        assert!(r.answer.is_none() && r.guess.is_none(), "a lesson out there has shown the program wrong: {:?} {:?}", r.answer, r.guess);
+        assert_eq!(s.ask("what is 12 zork 5").answer.as_deref(), Some("7"), "inside what it explains it still speaks as fact");
+        // many contradictions are a change of regime, not outliers: it re-decides
+        for k in 0..8i64 {
+            s.learn(&format!("what is {} zork 1", 14 + k), "0", Some("zork")).unwrap();
+        }
+        assert!(!exact(&s) || s.units[0].chosen != Mech::Program, "eight contradictions are not outliers");
     }
 
     #[test]

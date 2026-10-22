@@ -585,11 +585,37 @@ pub fn run_refusals(seed: u64, counts: &[usize]) {
 /// Teacher checks, automatic. The baby asks its own check questions (`check_myself`: the edges and corner of what each rule was taught, a few
 /// per unit per round); a simulated teacher who knows each unit's operation answers the ones that have an answer; the baby learns the answers.
 /// How many questions does it take to clear the refusals, and does anything it states as a fact ever turn out wrong?
-pub fn run_teacher(seed: u64, units: usize, rounds: usize, per_unit: usize) {
+pub fn run_teacher(seed: u64, units: usize, rounds: usize, per_unit: usize, wrong_rate: f32, skeptical: bool, persistent: bool) {
     use crate::scale::{generate, teacher_truth, Config};
     let sw = generate(&Config { units, entities: (units * 20).clamp(1000, 10_000), facts_per_unit: 12, noise: 0.0, typos: 0.0, digits: false, seed });
     let w = &sw.world;
     let mut school = School::from_items(&w.train, sw.names.clone(), Some(&w.reworded), seed, true);
+    school.set_skeptical(skeptical);
+    let mut teacher_rng = crate::rng::Rng::new(seed ^ 0x7EAC4E5);
+    // a teacher who is sometimes wrong: with this probability the answer is some other number word
+    // persistent: consistently wrong about particular questions (the same wrong answer every time it is asked), which a second opinion cannot catch
+    let mut say = |truth: usize, rng: &mut crate::rng::Rng, question: &str| -> (usize, bool) {
+        let mut r = if persistent {
+            let h = question.bytes().fold(0xcbf29ce484222325u64 ^ seed, |h, b| (h ^ b as u64).wrapping_mul(0x100000001b3));
+            crate::rng::Rng::new(h)
+        } else {
+            crate::rng::Rng::new(rng.next_u64())
+        };
+        if wrong_rate > 0.0 && r.uniform() < wrong_rate {
+            let mut other = r.below(11);
+            if other == truth {
+                other = (other + 1) % 11;
+            }
+            (other, true)
+        } else {
+            (truth, false)
+        }
+    };
+    let (mut wrong_given, mut wrong_learned, mut second_opinions) = (0usize, 0usize, 0usize);
+    let mut poisoned: std::collections::HashSet<String> = std::collections::HashSet::new();
+    // the same facts regardless of phrasing: (unit, the numbers in the order they appear)
+    let mut poisoned_facts: std::collections::HashSet<(String, Vec<usize>)> = std::collections::HashSet::new();
+    let numbers_of = |q: &str| -> Vec<usize> { crate::data::tokenize(q).iter().filter_map(|t| crate::data::NUM.iter().position(|n| n == t)).collect() };
     let numeric = sw.sems.iter().filter(|s| s.is_some()).count();
     println!("{units} units ({numeric} numeric), {} lessons; per round the baby asks up to {per_unit} check questions per unit, a simulated teacher answers those the number words can express\n", w.train.len());
     println!(
@@ -618,7 +644,30 @@ pub fn run_teacher(seed: u64, units: usize, rounds: usize, per_unit: usize) {
             let nums: Vec<usize> = crate::data::tokenize(&c.question).iter().filter_map(|t| crate::data::NUM.iter().position(|n| n == t)).collect();
             match teacher_truth(sem, &nums, false) {
                 Some(a) => {
-                    if school.learn_wondered(&c.question, crate::data::NUM[a], &c.unit).is_ok() {
+                    // the teacher answers; if the baby doubts the answer (skeptical mode) it asks the same question again, up to twice more
+                    let mut last = None;
+                    for attempt in 0..3 {
+                        let (given, wrong) = say(a, &mut teacher_rng, &c.question);
+                        if attempt > 0 {
+                            asked += 1;
+                            second_opinions += 1;
+                        }
+                        wrong_given += wrong as usize;
+                        match school.learn_wondered(&c.question, crate::data::NUM[given], &c.unit) {
+                            Ok(l) if l.disputed => last = Some(false),
+                            Ok(_) => {
+                                if wrong {
+                                    wrong_learned += 1;
+                                    poisoned.insert(c.question.clone());
+                                    poisoned_facts.insert((c.unit.clone(), numbers_of(&c.question)));
+                                }
+                                last = Some(true);
+                                break;
+                            }
+                            Err(_) => break,
+                        }
+                    }
+                    if last == Some(true) {
                         answered += 1;
                         learned_this_round += 1;
                     }
@@ -750,6 +799,61 @@ pub fn run_teacher(seed: u64, units: usize, rounds: usize, per_unit: usize) {
         unseen.sort_by(|a, b| a.partial_cmp(b).unwrap());
         let u = |q: f32| unseen[((unseen.len() as f32 * q) as usize).min(unseen.len() - 1)];
         println!("margins of the never-taught questions ({}): min {:.2}, 1% {:.2}, 2% {:.2}, 5% {:.2}, 10% {:.2}, median {:.2}", unseen.len(), unseen[0], u(0.01), u(0.02), u(0.05), u(0.10), u(0.5));
+    }
+    if wrong_rate > 0.0 {
+        // wrong facts: a question it was wrongly told and now repeats, against a question it was never wrongly told
+        let (mut repeats, mut elsewhere, mut refused, mut right, mut total) = (0usize, 0usize, 0usize, 0usize, 0usize);
+        for it in w.new_items.iter().chain(&w.beyond) {
+            total += 1;
+            let r = school.ask(&it.query);
+            match r.answer {
+                Some(a) if a == it.answer => right += 1,
+                Some(_) if poisoned_facts.contains(&(sw.names[it.unit].clone(), numbers_of(&it.query))) => repeats += 1,
+                Some(_) => elsewhere += 1,
+                None => refused += 1,
+            }
+        }
+        println!(
+            "\nthe teacher was wrong {wrong_given} times (learned {wrong_learned}, {second_opinions} second opinions asked, {} answers still held); {} of {} units refuted. Of {total} unseen and beyond-range questions: right {:.2}%, refused {:.2}%, WRONG {} (of which {repeats} repeat a fact it was wrongly told, in any phrasing, and {elsewhere} are damage elsewhere)",
+            school.disputed_count(),
+            school.refuted_units(),
+            school.units.len(),
+            100.0 * right as f64 / total as f64,
+            100.0 * refused as f64 / total as f64,
+            repeats + elsewhere
+        );
+    }
+    if wrong_rate > 0.0 && std::env::var("WRONG_DEBUG").is_ok() {
+        let mut shown = 0;
+        for it in w.new_items.iter().chain(&w.beyond) {
+            let r = school.ask(&it.query);
+            if let Some(a) = &r.answer {
+                if *a != it.answer && !poisoned_facts.contains(&(sw.names[it.unit].clone(), numbers_of(&it.query))) && shown < 6 {
+                    shown += 1;
+                    let sem = sw.sems.get(it.unit).copied().flatten();
+                    let told: Vec<&String> = poisoned.iter().filter(|q| q.contains(sw.names[it.unit].split('-').nth(1).unwrap_or("?"))).collect();
+                    println!("  WRONG {:?} ({sem:?}): truth {}, said {a}: {}", it.query, it.answer, r.how.chars().take(110).collect::<String>());
+                    println!("      unit: {}  |  wrongly told in this unit: {:?}", school.describe_unit_open(it.unit), told);
+                    println!("      {}", school.debug_reach(it.unit, &it.query));
+                }
+            }
+        }
+    }
+    if wrong_rate > 0.0 && std::env::var("POISON_DEBUG").is_ok() {
+        let mut by_unit: std::collections::BTreeMap<usize, Vec<&String>> = std::collections::BTreeMap::new();
+        for q in &poisoned {
+            if let Some(u) = (0..school.units.len()).find(|&u| q.contains(sw.names[u].split('-').nth(1).unwrap_or("?"))) {
+                by_unit.entry(u).or_default().push(q);
+            }
+        }
+        for (u, qs) in by_unit.iter().take(8) {
+            let refused = w.beyond.iter().chain(&w.new_items).filter(|i| i.unit == *u).find(|i| school.ask(&i.query).answer.is_none());
+            println!("  unit {u} ({:?}), told wrongly {:?}: {}", sw.sems[*u], qs, school.describe_unit_open(*u));
+            if let Some(it) = refused {
+                println!("      e.g. refused {:?}: {}", it.query, school.ask(&it.query).how.chars().take(130).collect::<String>());
+                println!("      {}", school.debug_reach(*u, &it.query));
+            }
+        }
     }
     // the traps: questions that must never be answered (a negative result, a result with no number word, two attributes at once, ...)
     let traps = sw.must_refuse.iter().filter(|(q, _)| school.ask(q).answer.is_some()).count();

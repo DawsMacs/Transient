@@ -75,7 +75,7 @@ struct Args {
 
 impl Args {
     fn parse(raw: &[String]) -> Args {
-        const FLAGS: [&str; 20] = ["curriculum", "quiet", "tsv", "verbose", "guess", "piece-keys", "full", "compact", "no-reorg", "row", "digits", "stage2-first", "active", "wondered", "check", "careful", "permissive", "guesses", "corrections", "calibrate"];
+        const FLAGS: [&str; 22] = ["curriculum", "quiet", "tsv", "verbose", "guess", "piece-keys", "full", "compact", "no-reorg", "row", "digits", "stage2-first", "active", "wondered", "check", "careful", "permissive", "guesses", "corrections", "calibrate", "skeptical", "persistent"];
         let mut positional = Vec::new();
         let mut opts = HashMap::new();
         let mut i = 0;
@@ -1536,7 +1536,7 @@ fn main() {
             }
             let n_new: usize = args.get("adapt", 0);
             if args.opts.contains_key("teacher") {
-                compare::run_teacher(args.get("seed", 1), args.get("teacher", 200), args.get("rounds", 4), args.get("limit", 4));
+                compare::run_teacher(args.get("seed", 1), args.get("teacher", 200), args.get("rounds", 4), args.get("limit", 4), args.get("wrong", 0.0f32), args.flag("skeptical"), args.flag("persistent"));
                 return;
             }
             if args.opts.contains_key("refusals") {

@@ -43,6 +43,44 @@ cargo test --offline                 # 61 tests, including numerical checks of t
 ./target/release/baby energy         # what one question and one learning step cost, counted
 ```
 
+## A teacher who is sometimes wrong (2026-10-22; Daws: "reinforcing based on true facts... how a human learns and trusts their new sources")
+
+Every teacher-check result before this used a simulated teacher who is always right. `baby compare --teacher N --wrong P [--persistent] [--skeptical]` makes the teacher wrong with probability P (the wrong answer is a random other number word). Two kinds of error, because they need different defences: **independent** (a slip: asking again gets a fresh, usually right answer) and **persistent** (consistently wrong about particular questions: the same wrong answer every time, which a second question cannot catch). 200 units, seed 1, the baby's own checks as before (4 rounds, up to 4 per unit); the report counts a wrong fact as a **repeat** if it is a fact it was wrongly told (same unit, same numbers in the same order, in any phrasing) and as **damage elsewhere** otherwise.
+
+**What a wrong answer did before any defence.** At 5 % independent errors (15 wrong answers learned), unseen and beyond-range questions went from 100 % to 87.9 % right; at 5 % persistent errors (21 learned) to **80.7 %**. No wrong facts and no refuted units: the loss was coverage. Looking at the damaged units showed why: every one was a Times or Apart program that had become "fits most but not all of what I was taught" (a partial program, which only guesses), with exactly **one exception**. One wrong lesson against dozens turned an exact program into a guess-only one.
+
+**Two defences.**
+1. **A settled program survives a few contradicting lessons** (always on). When the refit can only offer a partial program because of at most three contradicting lessons, and at most one in twenty, the established exact program is kept (`refit_in_place`, and `relearn_unit` for a full re-decision): one lesson against dozens that agree is an outlier, not a new law (a rule already tolerated one in twenty). It states facts only where the lessons it explains reach, and a contradiction outside that reach still withholds its guesses there (the `refuted` logic of the earlier step), so a genuine change of regime stays safe: the deceptive-kinds battery is unchanged (deceptive 520 / 200 / 0, genuine 4,671 / 39 / 0).
+2. **Skepticism** (opt-in: `School::set_skeptical(true)`, `--skeptical`). An answer to one of its own checks that contradicts a rule it has good evidence for (a rule, a selection or an exact program, held-back evidence above the bar, at least 8 facts, not refuted) is **held, not learned** (`Learned.disputed`); the caller asks the same question again. The same answer twice is believed (and the rule refuted properly); the rule's answer the second time means the first was a slip and it is dropped; a third version leaves it unsettled. Costs one more question per contradiction.
+
+**Results** (right = share of the 13,384 unseen and beyond-range questions stated as fact and right; every wrong fact below is a repeat; damage elsewhere is **0 in all 16 runs**; all 467 must-refuse traps stay refused in all of them):
+
+| errors | rate | mode | wrong answers given / learned | extra questions | questions asked | units refuted | right | refused | wrong facts (all repeats) |
+|---|---|---|---|---|---|---|---|---|---|
+| independent | 1 % | trusting | 5 / 5 | 0 | 528 | 0 | 99.99 % | 0.01 % | 0 |
+| independent | 1 % | skeptical | 5 / **0** | 5 | 530 | 0 | **100.00 %** | 0.00 % | 0 |
+| independent | 5 % | trusting | 27 / 27 | 0 | 534 | 0 | 99.01 % | 0.93 % | 8 |
+| independent | 5 % | skeptical | 28 / **3** | 25 | 550 | 0 | **99.93 %** | 0.01 % | 8 |
+| independent | 10 % | trusting | 66 / 66 | 0 | 551 | 0 | 99.60 % | 0.34 % | 8 |
+| independent | 10 % | skeptical | 69 / **4** | 65 | 591 | 0 | **99.91 %** | 0.00 % | 12 |
+| independent | 20 % | trusting | 133 / 133 | 0 | 504 | 2 | **76.77 %** | 23.06 % | 23 |
+| independent | 20 % | skeptical | 165 / **10** | 153 | 685 | 0 | **99.95 %** | 0.02 % | 4 |
+| persistent | 1 % | either | 8 / 8 | 0 (8) | 528 (536) | 0 | 99.85 % | 0.15 % | 0 |
+| persistent | 5 % | either | 27 / 27 | 0 (24) | 536 (560) | 1 | 99.58 % | 0.41 % | 1 |
+| persistent | 10 % | either | 93 / 93 | 0 (67) | 571 (638) | 5 | 97.35 % | 2.58 % | 10 |
+| persistent | 20 % | either | 165 / 165 | 0 (107) | 567 (674) | 11 | **88.01 %** | 11.78 % | 28 |
+
+(For persistent errors skeptical and trusting give identical results apart from the wasted second opinions in brackets: a repeated wrong answer cannot be told from a right one.)
+
+**Reading it.**
+- **Slips are almost free to defend against.** Skeptical learns 0 to 10 of up to 165 wrong answers for 5 to 153 extra questions (at 20 % wrong: +36 % questions) and keeps accuracy at 99.9 to 100 % up to a 20 % error rate, where a trusting baby falls to 76.8 %.
+- **Consistent errors are the real limit, and only partly defensible.** Tolerance takes persistent 5 % from 80.7 to 99.6 %; at 20 % it is 88.0 % right, 11.8 % refused (11 units refuted: a contradiction beyond the reach withholds guesses) and 28 wrong facts. **Every wrong fact is a fact it was told wrongly** (and it recalls it in any phrasing, because a small unit that loses its rule falls back on memory): it is not wrong about anything it was not wrongly told, which is the honest form of the invariant here.
+- **Nothing here protects against a source that is wrong about a whole kind of thing** (every sum, say): all its lessons would agree with each other. That is not tested and cannot be fixed from inside.
+
+**Mistakes and surprises.** (1) My first tolerance change was in `relearn_unit`; the numbers did not move at all, because the new lesson comes in through the cheap refit path, which replaced the exact program by the freshly fitted partial one: I found it by printing the damaged units, not by reasoning. (2) I first counted "damage elsewhere" by the exact question text and got 6 for 5 % errors; they were other phrasings of the same wrongly-told fact (the memory recalls by words), so the accounting now keys a fact by unit and numbers. (3) A cargo test filter written as a regex ran zero tests and reported success. (4) Two tests carried a meaningless `|| true`; removed.
+
+**Limits.** Errors are uniform over the other number words and independent of how hard the question is; one world (200 units), one seed; the 5 % / three-lessons tolerance and the 8-fact bar are mine; re-asking a person gets correlated answers more often than a fresh draw, which is what the persistent column bounds. **Decision for Daws**: skepticism is off by default because turning it on changes what the callers of `learn_wondered` must do (ask again); I recommend turning it on for the baby's own checks.
+
 ## The controlled comparison (Vision Entry 2): the baby against matched attention transformers (2026-10-21)
 
 `baby compare` (`compare.rs`, `transformer.rs`) and `tools/pytorch_baseline.py`. Two kinds of transformer, both trained on the **same lessons** as the baby and graded on the **same four question sets** (vocabulary and answers only from the training lessons, plus spare slots reserved for what is taught later: a fixed network cannot represent a new word otherwise, which favours the network):
