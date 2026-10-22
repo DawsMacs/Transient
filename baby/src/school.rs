@@ -649,7 +649,9 @@ impl School {
             skip.sort_unstable();
             let hull = unit.remember.operand_hull(&candidates, &value, &skip);
             let asked: Vec<f32> = tokens.iter().filter_map(|t| value(t)).collect();
-            asked.iter().enumerate().any(|(k, v)| hull.get(k).map_or(false, |&(lo, hi)| *v < lo || *v > hi))
+            // outside the box of what the other lessons span, or inside it at a corner that no other lesson is at least as large as (a staircase, as
+            // the reach is): a wrap that shows itself only with both numbers large lies inside the box
+            asked.iter().enumerate().any(|(k, v)| hull.get(k).map_or(false, |&(lo, hi)| *v < lo || *v > hi)) || unit.remember.uncovered_by(&candidates, &value, &skip, &asked).is_some()
         });
         // (what is left out of the reach is recorded with the exceptions: both are lessons that do not vouch for their neighbours)
         for &i in &unproven {
@@ -1099,6 +1101,11 @@ impl School {
             let (a_lo, b_lo) = (hull[0].0.max(0.0) as i32, hull.get(1).map_or(0.0, |h| h.0.max(0.0)) as i32);
             for a in a_lo..=a_hi {
                 for b in b_lo..=b_hi {
+                    // (only where the other lessons vouch for the old rule: the staircase under them, not the whole box)
+                    let point: Vec<f32> = if hull.len() > 1 { vec![a as f32, b as f32] } else { vec![a as f32] };
+                    if unit.remember.uncovered_by(&[], &|w: &str| self.line.value(w), &contradicting, &point).is_some() {
+                        continue;
+                    }
                     let Some(q) = self.numeric_question(&template, a as f32, b as f32) else { continue };
                     let Some(old) = predict(&unit.state, &q, &self.weights).and_then(|o| self.line.value(&o)) else { continue };
                     let new = rule.expr.eval(a as f32, b as f32);
@@ -2871,6 +2878,24 @@ mod tests {
         let q = asked[0].question.clone();
         s.learn_wondered_sure(&q, &(2 * q.rsplit(' ').next().unwrap().parse::<i64>().unwrap()).min(30).to_string(), "zork").unwrap();
         assert_eq!(s.ask("what is zork 20").guess.map(|g| g.answer).or(s.ask("what is zork 20").answer).as_deref(), Some("30"), "one answer chose the law");
+    }
+
+    #[test]
+    fn a_wrap_that_shows_itself_only_at_a_corner_is_repaired_even_though_each_operand_was_seen_separately() {
+        // checks at (24, 11) and (12, 22) are still sums; (24, 22) wraps (46 -> 6). Each operand has been seen at 24 and 22, so the per-operand box
+        // contains the corner, but no lesson is at least as large in both: the contradiction is outside what the others vouch for
+        let mut s = sums_school(|a, b| (a + b) % 40);
+        s.set_careful(true);
+        s.learn("what is 24 zork 11", "35", Some("zork")).unwrap();
+        s.learn("what is 12 zork 22", "34", Some("zork")).unwrap();
+        s.learn("what is 24 zork 22", "6", Some("zork")).unwrap();
+        assert_eq!(s.units[0].chosen, Mech::Program, "{}", s.describe_unit_open(0));
+        assert_eq!(s.ask("what is 30 zork 25").guess.map(|g| g.answer).as_deref(), Some("15"));
+        // the two ordinary checks vouch for what lies under them; the corner it was repaired around does not
+        assert_eq!(s.ask("what is 12 zork 20").answer.as_deref(), Some("32"), "under the check at (12, 22)");
+        assert!(s.ask("what is 20 zork 20").answer.is_none(), "only the corner is at least this large in both places");
+        assert_eq!(s.ask("what is 24 zork 22").answer.as_deref(), Some("6"), "told");
+        assert!(s.ask("what is 23 zork 22").answer.is_none(), "not vouched for by the corner");
     }
 
     #[test]
