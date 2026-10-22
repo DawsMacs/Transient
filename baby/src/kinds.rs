@@ -204,6 +204,30 @@ pub fn world(seed: u64) -> World {
     w
 }
 
+/// `n` capitals nobody was taught, invented (made-up country and city names that are not in the curriculum): three phrasings to teach and the
+/// fourth, never taught, to ask. For measuring what it costs to learn something NEW and what happens to the old.
+pub fn new_capital_facts(seed: u64, n: usize) -> (Vec<Item>, Vec<Item>) {
+    let mut rng = Rng::new(seed.wrapping_add(4242));
+    let syl = ["ka", "lo", "mi", "ra", "tu", "ve", "no", "sa", "di", "pe", "zu", "fa", "bo", "gi", "he", "ju"];
+    let known: std::collections::HashSet<String> = data::CAPITALS.iter().flat_map(|(c, a)| [c.to_string(), a.to_string()]).collect();
+    let mut made: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut word = |rng: &mut Rng, made: &mut std::collections::HashSet<String>| loop {
+        let w: String = (0..3).map(|_| syl[rng.below(syl.len())]).collect();
+        if !known.contains(&w) && made.insert(w.clone()) {
+            return w;
+        }
+    };
+    let (mut teach, mut ask) = (Vec::new(), Vec::new());
+    for i in 0..n {
+        let (country, city) = (word(&mut rng, &mut made), word(&mut rng, &mut made));
+        for (t, template) in CAPITAL_T.iter().enumerate() {
+            let item = Item { unit: 0, fact: 100_000 + i, template: t, query: fill(template, &[country.clone()]), answer: city.clone() };
+            if t < 3 { teach.push(item) } else { ask.push(item) }
+        }
+    }
+    (teach, ask)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -238,6 +262,19 @@ mod tests {
             }
         }
         assert!(w.beyond.iter().any(|i| i.unit == 2) && w.new_items.iter().all(|i| !is_fact_unit(i.unit)));
+    }
+
+    #[test]
+    fn invented_capitals_are_new_and_split_into_teaching_and_asking_phrasings() {
+        let (teach, ask) = new_capital_facts(1, 12);
+        assert_eq!((teach.len(), ask.len()), (36, 12));
+        let known: HashSet<String> = data::CAPITALS.iter().flat_map(|(c, a)| [c.to_string(), a.to_string()]).collect();
+        let taught_queries: HashSet<&str> = teach.iter().map(|i| i.query.as_str()).collect();
+        for i in teach.iter().chain(&ask) {
+            assert!(data::tokenize(&i.query).iter().all(|w| !known.contains(w) || ["capital", "of", "the", "what", "is"].contains(&w.as_str())), "{}", i.query);
+            assert!(!known.contains(&i.answer));
+        }
+        assert!(ask.iter().all(|i| !taught_queries.contains(i.query.as_str())));
     }
 
     #[test]

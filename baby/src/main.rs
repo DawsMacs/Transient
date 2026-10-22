@@ -6,6 +6,7 @@
 //!   baby learn  "what is two multiplied by three" six --unit times    keep learning AFTER school: add a lesson, re-work how that unit is learned
 //!   baby discover [--seed N] [--out PATH]   hand it a heap of UNLABELLED lessons: it finds the units itself, then is scored like the others
 //!   baby bridge (--svamp FILE | --pairs FILE) [--units kind|discover] [--split random|blocks] [--numbers N] [--test F] [--seed N]   REAL TEXT: what does the baby make of problems somebody else wrote?
+//!   baby compare [--seed N] [--sizes 16,32,64] [--layers N] [--epochs N] [--adapt N | --scale 20,60]   the controlled comparison: the baby against a matched attention transformer, in joules
 //!   baby cost                               what LEARNING costs: time and memory to teach it, a new lesson, a new kind, and to tidy up
 //!   baby scale  [--units N --entities N --facts N --noise F --typos F --seed N --grade N --no-reorg | --sweep 20,60,200]   does learning stay light as the world grows?
 //!   baby invent [--seed N]                  hidden kinds nobody wrote a mechanism for, and kinds that must stay unexplained: what does it work out?
@@ -34,6 +35,7 @@
 //!                --max-steps N --replay-k N --sleep-every N --sleep-epochs N --threshold F --lr F --optimizer adam|sgd --reader concat|bag|bigram|letters --buckets N --typo-aug K
 
 mod bridge;
+mod compare;
 mod curious;
 mod data;
 mod discover;
@@ -51,6 +53,7 @@ mod quantity;
 mod rng;
 mod rules;
 mod scale;
+mod transformer;
 mod school;
 mod store;
 
@@ -1522,6 +1525,18 @@ fn main() {
         Some("wonder") => cmd_wonder(&args),
         Some("scale") => cmd_scale(&args),
         Some("bridge") => cmd_bridge(&args),
+        Some("compare") => {
+            let sizes: Vec<usize> = args.string("sizes", "16,32,64").split(',').filter_map(|x| x.trim().parse().ok()).collect();
+            let n_new: usize = args.get("adapt", 0);
+            if args.opts.contains_key("scale") {
+                let counts: Vec<usize> = args.string("scale", "20,60").split(',').filter_map(|x| x.trim().parse().ok()).collect();
+                compare::run_scale(args.get("seed", 1), &counts, &sizes, args.get("layers", 1), args.get("epochs", 200));
+            } else if n_new > 0 {
+                compare::run_adapt(args.get("seed", 1), &sizes, args.get("layers", 1), args.get("epochs", 300), n_new);
+            } else {
+                compare::run(args.get("seed", 1), &sizes, args.get("layers", 1), args.get("epochs", 300));
+            }
+        }
         Some("invent") => {
             if args.flag("calibrate") {
                 let seeds: u64 = args.get("seeds", 1);

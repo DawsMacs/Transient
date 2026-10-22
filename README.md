@@ -13,7 +13,7 @@
 *adaptive learning*: a system that keeps learning while it is used, decides for itself *how* to learn each kind of thing, and is
 measured by what it costs (operations, memory, estimated joules) rather than by parameter count alone.
 
-The current artefact is `baby/`: about 11k lines of Rust, **no dependencies**, builds offline, 98 tests. It is a research prototype
+The current artefact is `baby/`: about 11k lines of Rust, **no dependencies**, builds offline, 102 tests. It is a research prototype
 evaluated on a synthetic curriculum. It is not a language model and makes no claim to be one yet.
 
 Transient is made by **[TransientAI](https://transientai.org)**, an independent research effort (currently one person, Daws Macs). Its
@@ -76,7 +76,7 @@ The scorecard reports **WRONG separately from refused**: a refusal is an accepta
 Requires a stable Rust toolchain (edition 2021). No other dependencies, no network.
 
 ```bash
-cargo test --release --offline         # 98 tests (about 13 s)
+cargo test --release --offline         # 102 tests (about 13 s)
 cargo build --release --offline
 ./target/release/baby school           # teach 13 units (~4 s), print how each was learned and the scorecard
 ./target/release/baby ask "how far apart are two and nine"   # answers, and says how it knew
@@ -118,6 +118,15 @@ All under `baby/src/`.
 - **Energy is estimated**, as counted operations times published per-operation costs. Ratios are the trustworthy part. A real
   meter (RAPL) is wired in but needs a one-time permission change on the host.
 - **Dead ends are written down.** `baby/README.md` records wrong hypotheses and bugs next to the results.
+
+### Against a matched transformer (`baby compare`)
+
+A small attention transformer is written from scratch in this repo (pure Rust, hand-written backward pass, checked against finite differences), trained on the same lessons and graded on the same questions, with energy **measured** by the CPU's own counter (Intel RAPL, above idle). On the synthetic curriculum (seeds 1-3; full tables and every caveat in `baby/README.md`):
+
+- teaching from scratch costs the baby 0.2-0.3 J against 2.8-12.6 J for transformers of 6k-49k parameters; adding 20 new facts costs it about 63 mJ with nothing forgotten, against 120-145 mJ for a fine-tune that forgets heavily, 190-250 mJ for one that replays a tenth of the old (and still loses a few points) and 1.3-1.6 J for a full replay;
+- on unseen questions the baby is wrong 0 % of the time against 16-40 % for the small transformers; beyond the taught numbers the baby's labelled guess is right every time where the transformer is 15-28 % right and confidently wrong the rest, at every scale tried (20, 60 and 200 units);
+- **against the simple story:** the baby's energy advantage shrinks as the world grows (45x, 14x, 10x at 20, 60, 200 units), and at 60 and 200 units the transformer is *more* accurate than the baby on unseen questions (98.5 and 99.7 % against 94.9 and 91.0 %), because the baby refuses more as it grows (3 to 9 %);
+- caveats: the lessons are tidy and rule-shaped (the baby's home ground); the transformer is plain Rust with no hyperparameter sweep, so its joules are an upper estimate; energy windows under 200 ms are noisy; and the counted energy estimates used earlier turned out to be 34-116x below the measurements.
 
 ## Limitations
 

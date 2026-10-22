@@ -43,6 +43,45 @@ cargo test --offline                 # 61 tests, including numerical checks of t
 ./target/release/baby energy         # what one question and one learning step cost, counted
 ```
 
+## The controlled comparison (Vision Entry 2): the baby against a matched attention transformer (2026-10-21)
+
+`baby compare` (`compare.rs`, `transformer.rs`). The transformer is written from scratch in this repo (no dependencies): pre-LayerNorm encoder, token and position embeddings, multi-head self-attention, a ReLU feed-forward layer, mean-pool, a linear layer over the answer words, trained with Adam; its backward pass is checked against finite differences (a test). It reads the same word lists as the baby, says one answer word, is trained on the **same lessons**, and is graded on the **same four question sets**; its vocabulary and answers come only from the training lessons, plus spare slots reserved for what it is taught later (a fixed network cannot represent a new word otherwise; this favours the network). Every size is trained until it answers every training lesson (or 300 epochs), with the same settings, **tuned for none**. Energy is **measured** (CPU package counter, above idle; Daws made it readable) and also counted and priced with 45 nm figures.
+
+**1. Same lessons, three transformer sizes (13-unit curriculum, 792 lessons; seeds 1 / 2 / 3).**
+
+| | teaching, measured | never taught: right / **WRONG** | beyond the taught numbers |
+|---|---|---|---|
+| baby | 0.19 / 0.28 / 0.23 J | 90.2 / **0** ; 87.8 / **0** ; 85.4 / **0** | 0 as fact, **100 % right as a labelled guess** (all seeds) |
+| transformer d=16 (6k params) | 4.6 / 3.6 / 2.8 J | 84.1 / **15.9** ; 64.0 / **36.0** ; 70.7 / **29.3** | 15-18 right, **82-85 wrong** |
+| transformer d=32 (16k) | 5.1 / 3.4 / 3.4 J | 81.7 / **18.3** ; 60.4 / **39.6** ; 77.4 / **22.6** | 15-21 right, 79-85 wrong |
+| transformer d=64 (49k) | 12.6 / 10.5 / 10.6 J | 78.7 / **21.3** ; 62.8 / **37.2** ; 72.6 / **27.4** | 17-20 right, 80-83 wrong |
+
+With a 0.9 confidence cut-off the transformers are wrong on 4.9-15 % of never-taught and 24-42 % of beyond-range questions while refusing 20-64 %. Taught and reworded questions: everyone about 100 %. Scaling up from 6k to 49k parameters did **not** help on unseen questions (84.1 to 78.7 on seed 1): no sign of the "tiny nudge, huge gain" jump of Entry 2.
+
+**2. Learning something new** (20 invented capitals, 60 lessons, asked in a fourth phrasing; then the old knowledge re-graded; **median of five runs** because one run of 35 ms varied 31-127 mJ for the same operation).
+
+| | measured energy | new capitals | old knowledge afterwards |
+|---|---|---|---|
+| baby learns the 60 lessons | **63 mJ** | 100 % | **unchanged exactly** (100 / 100 / 90.2) |
+| transformer, fine-tune on the new only | 120-145 mJ | 95-100 % | **forgets**: taught 100 to 49-85 %, never-taught to 37-68 % |
+| transformer, new + a 10 % sample of the old | 190-250 mJ | 90-100 % | loses 3-8 points of taught/reworded, 5 points of never-taught |
+| transformer, new + all the old | 1.3-1.6 J (20-25x the baby) | 100 % | keeps everything |
+
+**3. How the two grow** (the scale generator, trained from scratch at each size; seed 1).
+
+| units (lessons) | baby teaching | transformer d=32 teaching | ratio | never taught right / **WRONG**: baby, transformer | beyond the taught numbers: baby (as a guess), transformer right / **WRONG** |
+|---|---|---|---|---|---|
+| 20 (828) | 0.10 J | 4.3 J | 45x | 96.9 / **0**, 74.2 / **25.8** | 100 % right, 27.5 / **72.5** |
+| 60 (2,520) | 0.51 J | 7.4 J | 14x | 94.9 / **0**, 98.5 / **1.5** | 100 % right, 18.8 / **81.2** |
+| 200 (8,580) | 2.01 J | 19.6 J | 10x | 91.0 / **0**, 99.7 / **0.3** | 100 % right, 22.0 / **78.0** |
+
+**What this supports, and what it does not.**
+- **Supported:** (a) the baby is never wrong where the transformers are wrong 0.3-40 % of the time on unseen questions; (b) the baby extrapolates (a labelled guess, right every time) where an attention model with ten times the lessons stays at 19-28 % right and confidently wrong the rest, so extrapolation does not come from scale here, it comes from the rule-learning mechanism; (c) the baby adds knowledge without forgetting anything, while a cheap fine-tune forgets a lot and a safe one costs 3-25 times more; (d) teaching it from scratch costs 10-50x less measured energy.
+- **Against the simple story (kept in, on purpose):** (a) the baby's energy advantage **shrinks** with scale: 45x, 14x, 10x (its cost per lesson rises, 0.12 to 0.23 mJ, while the transformer needs fewer epochs as lessons grow, 5.2 to 2.3 mJ per lesson); I have not tested beyond 200 units, so I cannot say if or where the lines cross. (b) On **raw accuracy on unseen questions the transformer overtakes the baby** at 60 and 200 units (98.5 and 99.7 % against 94.9 and 91.0 %), because careful mode makes the baby refuse more as units grow (refusals 3.1, 5.1, 9.0 %) while a big enough network learns the small-number tables from examples. (c) The cut-off transformer's 24-42 % wrong beyond the range is still a real number, but it is a number about a network with no way to say "I have no basis".
+- **Caveats on the whole comparison.** (1) The curriculum is tidy and rule-shaped: the baby's home ground; a transformer with more data, regularisation, digit-aware number encoding or a hyperparameter sweep would do better, and I ran no sweep. (2) My transformer is plain Rust loops (no SIMD, no BLAS): its absolute joules are an upper estimate, perhaps several times too high; I do not know how much of the 10-50x is algorithm and how much is implementation. The baby's code is not optimised either. (3) Measured energy is the CPU package minus a 2-second idle reading; windows under 200 ms are noisy (one baby operation read 31 and 127 mJ in two runs); the five-run medians are the figures to use. (4) **My counted/priced estimates are off from the measurements by one to two orders of magnitude and not uniformly** (transformer teaching: 39 mJ estimated, 4.6 J measured, 116x; the older network answering: 0.8 uJ, 27 uJ measured, 34x), so ratios taken from estimates alone are not to be trusted; the teaching cost of the baby is not counted at all. (5) One world per row except where stated (seeds 1-3 for table 1). (6) Everything is synthetic; nothing here says what happens on real language.
+
+**Mistakes and surprises.** The gradient check first failed at 7.4 % relative error; it was float32 round-off on gradients of about 0.001 (absolute error about 0.0001, both signs, no pattern across blocks), so the test now measures the whole gradient vector (relative L2 under 3 %) and entries above 0.01 individually, not single tiny entries. I expected the transformer to degrade with scale; it **improved** on unseen questions (74 to 99.7 %), and I had left the extrapolation column out of the first scale run, which would have made the transformer look better than it is; adding it is what separates the two.
+
 ## First contact with real text: SVAMP word problems (2026-10-21)
 
 Everything before this was tidy synthetic lessons. `baby bridge` (`bridge.rs`) takes question/answer pairs somebody else wrote, says what the baby cannot read at all, teaches a share, grades the rest, and reports right / refused / **WRONG** / labelled-guess right and wrong by kind, why it refused, and every wrong fact by name. Corpus: **SVAMP** (arkilpatel/SVAMP, MIT licence, `SVAMP.json`, 339,970 bytes, 1,000 one-step arithmetic word problems built so that small wording changes flip the operation); downloaded with Daws's approval to scratch space, **not committed**. Kinds come from the file (Addition, Subtraction, Multiplication, Common-Division) and are used only as the units a teacher would give.
