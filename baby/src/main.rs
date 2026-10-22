@@ -455,12 +455,13 @@ fn print_scorecard(school: &school::School, world: &kinds::World) {
 }
 
 fn cmd_bridge(a: &Args) {
-    let (svamp, tsv) = (a.string("svamp", ""), a.string("pairs", ""));
-    let (path, loader): (String, fn(&str) -> Result<Vec<bridge::Problem>, String>) = match (svamp.is_empty(), tsv.is_empty()) {
-        (false, true) => (svamp, bridge::load_svamp),
-        (true, false) => (tsv, bridge::load_tsv),
+    let (svamp, tsv, asdiv) = (a.string("svamp", ""), a.string("pairs", ""), a.string("asdiv", ""));
+    let (path, loader): (String, fn(&str) -> Result<Vec<bridge::Problem>, String>) = match (svamp.is_empty(), tsv.is_empty(), asdiv.is_empty()) {
+        (false, true, true) => (svamp, bridge::load_svamp),
+        (true, false, true) => (tsv, bridge::load_tsv),
+        (true, true, false) => (asdiv, bridge::load_asdiv),
         _ => {
-            eprintln!("usage: baby bridge (--svamp SVAMP.json | --pairs FILE) [--units kind|discover] [--split random|blocks] [--test 0.3] [--seed N]");
+            eprintln!("usage: baby bridge (--svamp SVAMP.json | --asdiv ASDiv.xml | --pairs FILE) [--kinds all] [--units kind|discover] [--split random|blocks] [--test 0.3] [--seed N]");
             std::process::exit(2);
         }
     };
@@ -472,6 +473,12 @@ fn cmd_bridge(a: &Args) {
         eprintln!("{path}: {e}");
         std::process::exit(1);
     });
+    // ASDiv has many more kinds than SVAMP (geometry, ratios, gcd...): the four they share, unless --kinds all
+    let problems: Vec<_> = if a.string("asdiv", "").is_empty() || a.string("kinds", "") == "all" {
+        problems
+    } else {
+        problems.into_iter().filter(|p| ["addition", "subtraction", "multiplication", "common-division"].contains(&p.kind.as_str())).collect()
+    };
     let total = problems.len();
     // --numbers N keeps only the problems whose text holds exactly N numbers (0: all): the distractor numbers are a separate difficulty
     let only: usize = a.get("numbers", 0);

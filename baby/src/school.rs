@@ -553,7 +553,11 @@ impl School {
     /// Teach any lessons that are already grouped into named units. `calibration` (rewordings of lessons) sets how decisive a
     /// question must be to be recognised; without it the floor comes from the lessons' own margins, more cautiously.
     pub fn from_items(train: &[Item], names: Vec<String>, calibration: Option<&[Item]>, seed: u64, thrifty: bool) -> School {
+        let t0 = std::time::Instant::now();
         let baby = mechanisms::learn_items(train, names.len(), seed, thrifty);
+        if std::env::var("BABY_PROF").is_ok() {
+            eprintln!("PROF learn_items {:.1}s", t0.elapsed().as_secs_f32());
+        }
         let library = baby.weights.lib.clone();
         let bar = baby.bar;
         let mut units = Vec::new();
@@ -596,9 +600,16 @@ impl School {
         school.route_ratio = if loo > 0.0 && school.route_floor > 0.0 { school.route_floor / loo } else { 0.0 };
         school.calibrated_lessons = school.total_lessons();
         // Now that every unit has been learned, and with it the vocabulary the later ones added, look again at the program units.
-        school.library_seen = String::new();
+        // (If the library never gained anything, no unit was fitted with less than it has now: there is nothing to look at again. That is the case for units that
+        // are partial programs, which are never vocabulary, and the review would only repeat their whole cross-validation.)
+        school.library_seen = if school.weights.lib.is_empty() { school.weights.lib.to_lines() } else { String::new() };
+        let t1 = std::time::Instant::now();
         school.review_programs();
+        let t2 = std::time::Instant::now();
         school.settle_all_reach();
+        if std::env::var("BABY_PROF").is_ok() {
+            eprintln!("PROF review_programs {:.1}s, settle_all_reach {:.1}s", (t2 - t1).as_secs_f32(), t2.elapsed().as_secs_f32());
+        }
         school
     }
 

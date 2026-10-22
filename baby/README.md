@@ -43,6 +43,35 @@ cargo test --offline                 # 61 tests, including numerical checks of t
 ./target/release/baby energy         # what one question and one learning step cost, counted
 ```
 
+## A second corpus: ASDiv, and what a re-count did to SVAMP's figures (2026-10-22)
+
+**The corpus.** ASDiv (Academia Sinica Diverse MWP dataset, 2,305 problems; `dataset/ASDiv.xml`, 947,401 bytes; **CC BY-NC 4.0**, so used for private evaluation only: downloaded with Daws's explicit yes to scratch space and **not committed**). The 960 problems of the four kinds SVAMP shares (Addition 281, Subtraction 331, Multiplication 194, Common-Division 154; its other 20 kinds (geometry, ratio, gcd...) are set aside unless `--kinds all`). Unlike SVAMP it writes many numbers as **words** ("Seven red apples and two green apples..."), which the baby reads. `baby bridge --asdiv ASDiv.xml ...` (`bridge::load_asdiv`, a minimal XML reader; the answer is the number before the unit "9 (apples)").
+
+**First contact, as with SVAMP:** taught on all 885 readable problems, it learns nothing and states nothing wrong (0 right, 0 wrong; every unit "remember, 0 %"; routing alone already sends 65 % to the right kind).
+
+**Two-number problems, nothing retuned for this corpus** (3 seeds, random split, 678 problems): held-back program scores 68-92 % per kind; routing to the right kind **76.3 / 76.6 / 76.7 %**; labelled guesses **57.6 / 59.6 / 58.2 % right** and 35.6 / 29.8 / 34.9 % wrong; the stated hit rate is at or below the realised one in all three (58.3 vs 61.8, 55.3 vs 66.7, 56.6 vs 62.5); told the kind (oracle) 74-78 % right; nothing stated as fact. This is the same picture as SVAMP's, from a differently built corpus, with the routing corrections and last-words features unchanged.
+
+**With number selection** (`--select`, 3 seeds): the arithmetic part of ASDiv has few distractors (only 63-70 of about 600 readable lessons hold more than two numbers, 54-58 of them labelled by a program), so this is a small-number test: problems with two numbers or fewer 56.5 / 58.9 / 58.9 % right as labelled guesses; problems with more than two numbers (only 24-31 test questions per seed) 58.1 / 45.8 / 54.2 % right, stated 44.8 / 54.3 / 51.3 % after the baby scaled its claims (x0.78-0.93) from held-back answers; the selector kept the right pair in 72.0 / 59.1 / 76.2 % of the 21-25 problems where that is checkable. Too few to rank against SVAMP's 27-38 %; it says the mechanism transfers and the calibration holds.
+
+**Two mistakes found on the way.**
+1. *My first ASDiv selection run gave guesses to only 13 % of questions* (the plain run: 93 %). Cause: 114 of 960 problems carry zero or one number the baby can read ("a dozen", "twice", "half"); a program combining two numbers has nothing to work with in those lessons, and they pushed units past the tolerance for unreadable lessons. They are now set aside as unreadable ("fewer than two numbers it can read"), like the other unreadable cases.
+2. *That changed SVAMP's figures, and I should say so.* `numbers_in_text` counted runs of digits only; the baby reads number words too, so a SVAMP problem with two digit-numbers and a story word "one" was being taught as a "two-number" problem though the baby saw three. It now counts numbers as the baby reads them, and the filter above applies to SVAMP too. **Re-measured on all six SVAMP two-number splits, the figures are lower and more variable than the ones I reported earlier today** (routing 64-75 %, mean 70 %, was 74-78 %; labelled guesses right 35-73 %, mean 56 %, was 47-74 %, mean 63 %): 
+
+| split (seed) | routing to own kind | guess right | guess wrong | units that fell back to memory |
+|---|---|---|---|---|
+| random (1) | 69.8 | 61.3 | 35.8 | multiplication |
+| random (2) | 73.7 | 72.6 | 26.3 | multiplication |
+| random (3) | 71.7 | **35.4** | 22.2 | multiplication, common-division, addition |
+| blocks (1) | 67.6 | 56.8 | 27.9 | addition, multiplication |
+| blocks (2) | 75.0 | 69.4 | 25.9 | multiplication |
+| blocks (3) | 64.2 | **40.8** | 29.2 | multiplication, common-division |
+
+The swings come from one thing: whether a kind's program clears the guess bar (0.6 of held-back facts). In random 3 the common-division program scored 55 % instead of 89 % on a slightly different set of 240 lessons and that kind went from 90 % right to no guesses at all. The partial-program path is fragile to a handful of problems; the bar is one of my own constants (see the next section if it was tested). The SVAMP tables earlier on this page were measured under the old count and stand as history.
+
+**Cost, found and fixed.** Building a school on ASDiv's 678 problems took 222 s: 111 s cross-validating the programs, and then **another 111 s** in `review_programs` repeating that for every unit because the library "might have changed". When the library never gained anything (these partial programs are never vocabulary) nothing can have changed for any unit, so the review is now skipped in exactly that case: **identical output, 222 s -> 111 s**; the tidy-world gate reads exactly as before. The remaining 111 s is the program search's cross-validation (about 40 s for a 160-lesson unit) and is the next place to look for savings.
+
+**Honest limits.** ASDiv's arithmetic subset is mostly clean two-number problems, so it hardly tests number selection; SVAMP was built by varying ASDiv's problems, so the two are related builds, not independent sources; the licence limits it to private evaluation; the answers are whole numbers up to four digits.
+
 ## Real text, the problems with more numbers than the rules use: which numbers matter (2026-10-22)
 
 **The gap.** 491 of SVAMP's 971 readable problems hold three numbers and 155 hold four; the programs the baby builds take one or two. Until now those lessons were unreadable to it, so a school taught on the whole file learned nothing (the tolerant program search refuses when more than a fifth of the lessons hold more than two numbers) and every such question was refused.

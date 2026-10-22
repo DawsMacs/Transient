@@ -211,6 +211,44 @@ pub fn load_svamp(text: &str) -> Result<Vec<Problem>, String> {
     Ok(out)
 }
 
+fn xml_text(s: &str) -> String {
+    s.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&apos;", "'").replace("&amp;", "&").split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn xml_tag<'a>(block: &'a str, tag: &str) -> &'a str {
+    let open = format!("<{tag}>");
+    let close = format!("</{tag}>");
+    match block.find(&open) {
+        Some(i) => {
+            let rest = &block[i + open.len()..];
+            rest.find(&close).map_or("", |j| &rest[..j])
+        }
+        None => "",
+    }
+}
+
+/// ASDiv.xml (Academia Sinica, CC BY-NC 4.0): `<Problem ID=...><Body>..</Body><Question>..</Question><Solution-Type>..</Solution-Type><Answer>9 (apples)</Answer>..`.
+/// The text asked is the story followed by the question; the answer is the number before any unit. Its types are the kinds.
+pub fn load_asdiv(text: &str) -> Result<Vec<Problem>, String> {
+    let mut out = Vec::new();
+    let mut rest = text;
+    while let Some(i) = rest.find("<Problem ") {
+        let block_start = &rest[i..];
+        let Some(end) = block_start.find("</Problem>") else { break };
+        let block = &block_start[..end];
+        let id = block.split("ID=\"").nth(1).and_then(|r| r.split('"').next()).unwrap_or("?").to_string();
+        let query = format!("{} {}", xml_text(xml_tag(block, "Body")), xml_text(xml_tag(block, "Question")));
+        let answer_raw = xml_text(xml_tag(block, "Answer"));
+        let answer = answer_raw.split(|c: char| c == ' ' || c == '(').next().unwrap_or("").to_string();
+        out.push(Problem { id, query: query.trim().to_string(), answer, kind: xml_text(xml_tag(block, "Solution-Type")).to_lowercase().replace(' ', "-") });
+        rest = &block_start[end..];
+    }
+    if out.is_empty() {
+        return Err("no <Problem> elements found".into());
+    }
+    Ok(out)
+}
+
 /// question TAB answer [TAB kind], one per line; lines starting with # are comments.
 pub fn load_tsv(text: &str) -> Result<Vec<Problem>, String> {
     let mut out = Vec::new();
@@ -246,15 +284,20 @@ pub fn unreadable_reason(p: &Problem) -> Option<&'static str> {
     if p.answer.parse::<u64>().is_err() {
         return Some("an answer that is not a whole non-negative number");
     }
+    if numbers_in_text(&p.query) < 2 {
+        return Some("fewer than two numbers it can read (a dozen, twice, half...): a rule that combines two numbers has nothing to work with");
+    }
     if p.answer.len() > 4 {
         return Some("an answer of more than four digits");
     }
     None
 }
 
-/// How many numbers a problem's text holds (runs of digits).
+/// How many numbers a problem's text holds, as the baby reads numbers: digits and number words ("seven"), not runs of digits only.
 pub fn numbers_in_text(q: &str) -> usize {
-    q.split(|c: char| !c.is_ascii_digit()).filter(|d| !d.is_empty()).count()
+    static LINE: std::sync::OnceLock<crate::quantity::NumberLine> = std::sync::OnceLock::new();
+    let line = LINE.get_or_init(|| crate::quantity::NumberLine::from_counting(&crate::quantity::counting_lessons()));
+    crate::data::tokenize(q).iter().filter(|t| line.value(t).is_some()).count()
 }
 
 /// The problems the baby can be given, and how many were set aside for each reason.
@@ -693,6 +736,17 @@ mod tests {
       {"ID": "t-5", "Body": "A \"big\" jar has 12000 beans.", "Question": "How many beans in 2 jars?", "Equation": "( 12000.0 * 2.0 )", "Type": "Multiplication", "Answer": 24000.0},
       {"ID": "t-6", "Body": "Tom has 7 cars.\nHe gave away 9.", "Question": "How many fewer cars does Tom have?", "Equation": "( 7.0 - 9.0 )", "Type": "Subtraction", "Answer": -2.0}
     ]"#;
+
+    #[test]
+    fn the_asdiv_xml_is_read_with_its_answer_stripped_of_the_unit() {
+        let xml = "<ProblemSet>\n<Problem ID=\"a-1\" Grade=\"1\"><Body>Seven red apples &amp; two green apples are in the basket.</Body><Question>How many apples?</Question><Solution-Type>Addition</Solution-Type><Answer>9 (apples)</Answer><Formula>7+2=9</Formula></Problem>\n<Problem ID=\"a-2\"><Body>x</Body><Question>y</Question><Solution-Type>Common-Division</Solution-Type><Answer>3</Answer></Problem></ProblemSet>";
+        let p = load_asdiv(xml).unwrap();
+        assert_eq!(p.len(), 2);
+        assert_eq!((p[0].id.as_str(), p[0].answer.as_str(), p[0].kind.as_str()), ("a-1", "9", "addition"));
+        assert_eq!(p[0].query, "Seven red apples & two green apples are in the basket. How many apples?");
+        assert_eq!(p[1].kind, "common-division");
+        assert_eq!(numbers_in_text(&p[0].query), 2, "number words count");
+    }
 
     #[test]
     fn it_reads_the_word_problem_file_format_with_escapes_and_float_answers() {
