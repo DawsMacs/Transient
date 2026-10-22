@@ -75,7 +75,7 @@ struct Args {
 
 impl Args {
     fn parse(raw: &[String]) -> Args {
-        const FLAGS: [&str; 22] = ["curriculum", "quiet", "tsv", "verbose", "guess", "piece-keys", "full", "compact", "no-reorg", "row", "digits", "stage2-first", "active", "wondered", "check", "careful", "permissive", "guesses", "corrections", "calibrate", "skeptical", "persistent"];
+        const FLAGS: [&str; 23] = ["curriculum", "quiet", "tsv", "verbose", "guess", "piece-keys", "full", "compact", "no-reorg", "row", "digits", "stage2-first", "active", "wondered", "check", "careful", "permissive", "guesses", "corrections", "calibrate", "skeptical", "persistent", "trusting"];
         let mut positional = Vec::new();
         let mut opts = HashMap::new();
         let mut i = 0;
@@ -1084,6 +1084,10 @@ fn cmd_learn(a: &Args) {
                 eprintln!("could not save {path}: {e}");
                 std::process::exit(1);
             }
+            if r.disputed {
+                println!("held, not learned: \"{query}\" -> {answer} contradicts what unit '{}' has worked out ({:.0}% on facts held back). Is that right? Tell me again to confirm: baby learn \"{query}\" {answer} --unit {} --wondered", r.unit, 100.0 * r.held_back, r.unit);
+                return;
+            }
             if !r.surprised {
                 println!("nothing to learn: unit '{}' already works out \"{query}\" -> {answer} (not stored)", r.unit);
                 return;
@@ -1536,7 +1540,7 @@ fn main() {
             }
             let n_new: usize = args.get("adapt", 0);
             if args.opts.contains_key("teacher") {
-                compare::run_teacher(args.get("seed", 1), args.get("teacher", 200), args.get("rounds", 4), args.get("limit", 4), args.get("wrong", 0.0f32), args.flag("skeptical"), args.flag("persistent"));
+                compare::run_teacher(args.get("seed", 1), args.get("teacher", 200), args.get("rounds", 4), args.get("limit", 4), args.get("wrong", 0.0f32), !args.flag("trusting"), args.flag("persistent"));
                 return;
             }
             if args.opts.contains_key("refusals") {

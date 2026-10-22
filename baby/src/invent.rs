@@ -399,7 +399,7 @@ pub fn run_active(seed: u64, limit: usize) -> Vec<ActiveResult> {
                 Some(w) => {
                     let nums = numbers_in(&w.question);
                     match eval(kind, nums[0], *nums.get(1).unwrap_or(&0)) {
-                        Some(truth) if { let r = school.learn_wondered(&w.question, &truth.to_string(), &name); if std::env::var("ACTIVE_DEBUG").is_ok() { eprintln!("  learn_wondered -> {:?}", r.as_ref().map(|l| l.surprised)); } r.is_ok() } => {
+                        Some(truth) if { let r = school.learn_wondered_sure(&w.question, &truth.to_string(), &name); if std::env::var("ACTIVE_DEBUG").is_ok() { eprintln!("  learn_wondered -> {:?}", r.as_ref().map(|l| l.surprised)); } r.is_ok() } => {
                             if std::env::var("ACTIVE_DEBUG").is_ok() {
                                 eprintln!("  {} asked {:?} -> {truth}; unit now {} ({:.0}%) {}", kind.name, w.question, school.units[u].chosen.name(), 100.0 * school.units[u].best_evidence(), school.units[u].program().unwrap_or_default());
                                 let never: Vec<&Item> = b.world.new_items.iter().chain(b.world.beyond.iter()).filter(|i| i.unit == u).collect();
@@ -437,7 +437,7 @@ pub fn run_active(seed: u64, limit: usize) -> Vec<ActiveResult> {
                     let toks = crate::data::tokenize(&template);
                     let mut nums = vec![a, c].into_iter();
                     let q: Vec<String> = toks.iter().map(|t| if t.parse::<i64>().is_ok() { nums.next().unwrap_or(0).to_string() } else { t.clone() }).collect();
-                    let _ = school_random.learn_wondered(&q.join(" "), &truth.to_string(), &name);
+                    let _ = school_random.learn_wondered_sure(&q.join(" "), &truth.to_string(), &name);
                     given = true;
                     break;
                 }
@@ -495,7 +495,7 @@ pub fn run_check(seed: u64, limit: usize) -> Vec<CheckResult> {
             if said.as_deref() != Some(truth.to_string().as_str()) {
                 refuted += 1;
             }
-            if school.learn_wondered(&c.question, &truth.to_string(), &name).is_ok() {
+            if school.learn_wondered_sure(&c.question, &truth.to_string(), &name).is_ok() {
                 asked += 1;
             }
         }
@@ -507,7 +507,7 @@ pub fn run_check(seed: u64, limit: usize) -> Vec<CheckResult> {
             let Some(w) = school.wonder_about(Some(&name)).into_iter().next() else { break };
             let nums = numbers_in(&w.question);
             let Some(truth) = eval(kind, nums[0], *nums.get(1).unwrap_or(&0)) else { break };
-            let _ = school.learn_wondered(&w.question, &truth.to_string(), &name);
+            let _ = school.learn_wondered_sure(&w.question, &truth.to_string(), &name);
         }
         results.push(CheckResult { kind: kind.name, asked, refuted, before, after, settled: coverage(&school, &b, u) });
     }
@@ -572,7 +572,7 @@ pub fn run_careful(seed: u64, rounds: usize, per_unit: usize) -> CarefulResult {
                 if std::env::var("CAREFUL_DEBUG").is_ok() {
                     eprintln!("  round asks {:?} truth {truth} it says {:?}", c.question, school.ask(&c.question).answer);
                 }
-                if school.learn_wondered(&c.question, &truth.to_string(), &name).is_ok() {
+                if school.learn_wondered_sure(&c.question, &truth.to_string(), &name).is_ok() {
                     res.asked += 1;
                     if std::env::var("CAREFUL_DEBUG").is_ok() {
                         eprintln!("      unit now {}", school.describe_unit_open(u));

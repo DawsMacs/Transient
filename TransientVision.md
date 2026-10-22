@@ -432,3 +432,14 @@ Daws decided to move from `AGPL-3.0-or-later` to **`AGPL-3.0-only`**, to rely le
 - **Why `-only` rather than a proxy now.** AGPLv3 §14 lets a notice name a *proxy* whose public acceptance of a version permanently authorises it. That fails closed (no proxy statement means v3 stays), but its benefit is adopting a future legal fix without contacting every contributor, which matters only once there are outside contributors. As sole copyright holder, Daws can add a proxy or "or later" for *new* releases at any time; tightening the other way cannot be undone for copies already distributed. So `-only` is the reversible choice.
 - **Honest caveat.** Commits published before this change carried `AGPL-3.0-or-later`; anyone who already pulled them keeps that option on those copies. The change applies from this commit onward.
 - **Mechanics.** SPDX headers, `Cargo.toml`, `REUSE.toml`, README, CONTRIBUTING, CLAUDE.md and the handover now say `AGPL-3.0-only`; `LICENSES/AGPL-3.0-or-later.txt` was renamed `AGPL-3.0-only.txt`. The `LICENSE` file is the unmodified AGPLv3 text, whose generic "any later version" wording is part of the licence text itself and is left as is. Earlier entries above that say `-or-later` record the decision at the time and are left as written. The website text was updated to match.
+
+---
+
+## Entry 9 (2026-10-22): Reinforcing from true facts, and learning to make fewer mistakes
+
+On the baby learning from a teacher who is sometimes wrong: this is the AL idea, connecting the dots and reinforcing from true facts, **similar to how a human learns and trusts new sources**. The baby does not have to get it right the first time. As AL improves it gets better at learning, so it makes fewer mistakes, rather than needing to be right at once: even models get things wrong during training, and they need to be retrained or go through some feedback process. Skepticism of a source that contradicts what the baby has good evidence for (hold it, ask again, believe it when it is repeated) is to be **on by default**, on the assistant's own recommendation.
+
+### Context added by the assistant (labelled)
+
+- What was built from this: an established exact program survives a few contradicting lessons (one lesson against dozens that agree is an outlier, not a new law), and answers that contradict a settled rule are held for a second opinion. With slips up to 20 % the baby keeps 99.9-100 % of its unseen and beyond-range answers right; against a source that is consistently wrong about particular things it keeps 99.6 % at 5 % and 88 % at 20 %, and every wrong fact it states is a fact it was wrongly told. What it cannot do from inside is catch a source that is wrong about a whole kind of thing: all of that source's lessons would agree with each other. Numbers and failures: first section of `baby/README.md`.
+

@@ -257,7 +257,8 @@ pub struct School {
     /// that changes regime outside it (a sum that saturates, one that wraps) is then confidently wrong, and nothing in the lessons can say so.
     /// `set_careful(false)` is the permissive showcase.
     careful: bool,
-    /// Skeptical of a teacher whose answer contradicts a settled rule: hold it, ask again, believe it only when it is repeated. Off by default.
+    /// Skeptical of a teacher whose answer contradicts a settled rule: hold it, ask again, believe it only when it is repeated. On by default
+    /// (Daws, 2026-10-22, on the baby's recommendation: against independent slips it keeps accuracy at 99.9-100 % up to 20 % wrong answers).
     skeptical: bool,
     /// Answers held back for a second opinion: (unit, question, the answer that contradicted its rule).
     disputed: Vec<(String, String, String)>,
@@ -458,7 +459,7 @@ impl School {
         weights.lib = library;
         let routing = Routing::build(&units, &line);
         let library_seen = weights.lib.to_lines();
-        let mut school = School { units, weights, routing, line, route_floor: f32::NEG_INFINITY, route_base: f32::NEG_INFINITY, route_ratio: 0.0, calibrated_lessons: 0, seed, library_seen, bar, careful: true, skeptical: false, disputed: Vec::new(), guess_record: [(0, 0); 5], route_precision: Vec::new(), pen: Vec::new() };
+        let mut school = School { units, weights, routing, line, route_floor: f32::NEG_INFINITY, route_base: f32::NEG_INFINITY, route_ratio: 0.0, calibrated_lessons: 0, seed, library_seen, bar, careful: true, skeptical: true, disputed: Vec::new(), guess_record: [(0, 0); 5], route_precision: Vec::new(), pen: Vec::new() };
         // How decisive must a question be to count as a recognisable kind? Learned from rewordings of lessons it was taught.
         let own: Vec<&Item> = train.iter().collect();
         let (queries, safety): (Vec<&str>, f32) = match calibration {
@@ -703,7 +704,7 @@ impl School {
 
     /// Be skeptical of the teacher: an answer to one of its own checks that contradicts a rule it has good evidence for is held, not learned, until
     /// the same question is answered again with the same answer (then it is believed, and the rule is refuted properly) or with the rule's answer
-    /// (then the first one was a slip). Off by default; costs one more question per contradiction.
+    /// (then the first one was a slip). On by default; costs one more question per contradiction.
     pub fn set_skeptical(&mut self, skeptical: bool) {
         self.skeptical = skeptical;
         if !skeptical {
@@ -1406,6 +1407,14 @@ impl School {
         Ok(learned)
     }
 
+    /// `learn_wondered` for a teacher who repeats themselves: if the answer is held for a second opinion, say it again (so a contradiction that
+    /// is meant is believed, as when a person insists). For simulated always-right teachers and for tests; an interactive caller should instead
+    /// ask the person again, using `Learned.disputed`.
+    pub fn learn_wondered_sure(&mut self, query: &str, answer: &str, unit: &str) -> Result<Learned, String> {
+        let first = self.learn_wondered(query, answer, unit)?;
+        if first.disputed { self.learn_wondered(query, answer, unit) } else { Ok(first) }
+    }
+
     /// Teach it one more lesson, after school. With `unit` it joins that unit (or opens one of that name); without, it joins the
     /// unit the question resembles, if it recognises a kind at all. Then the unit's way of learning is worked out again.
     pub fn learn(&mut self, query: &str, answer: &str, unit: Option<&str>) -> Result<Learned, String> {
@@ -2070,6 +2079,12 @@ impl School {
             let nums: Vec<String> = self.guess_record.iter().flat_map(|g| [g.0.to_string(), g.1.to_string()]).collect();
             writeln!(out, "guessed {}", nums.join(" ")).unwrap();
         }
+        if !self.disputed.is_empty() {
+            writeln!(out, "disputed {}", self.disputed.len()).unwrap();
+            for (unit, query, answer) in &self.disputed {
+                writeln!(out, "x {unit}\t{answer}\t{query}").unwrap();
+            }
+        }
         writeln!(out, "pen {}", self.pen.len()).unwrap();
         for (q, a) in &self.pen {
             writeln!(out, "p {a}\t{q}").unwrap();
@@ -2138,6 +2153,17 @@ impl School {
                 }
             }
             it.next();
+        }
+        let mut disputed: Vec<(String, String, String)> = Vec::new();
+        if let Some(n) = it.peek().and_then(|l| l.strip_prefix("disputed ")).and_then(|n| n.trim().parse::<usize>().ok()) {
+            it.next();
+            for _ in 0..n {
+                let l = it.next().ok_or("disputed line")?.strip_prefix("x ").ok_or("bad disputed line")?;
+                let mut p = l.splitn(3, '\t');
+                // (the file says: unit, answer, question)
+                let (unit, answer, query) = (p.next().unwrap_or("").to_string(), p.next().unwrap_or("").to_string(), p.next().unwrap_or("").to_string());
+                disputed.push((unit, query, answer));
+            }
         }
         let pen_n: usize = field(it.next(), "pen")?.parse().map_err(|e| format!("{e}"))?;
         let mut pen = Vec::new();
@@ -2226,7 +2252,7 @@ impl School {
         weights.lib = library;
         let routing = Routing::build(&units, &line);
         let library_seen = weights.lib.to_lines();
-        let mut school = School { units, weights, routing, line, route_floor, route_base, route_ratio, calibrated_lessons: 0, seed, library_seen, bar, careful, skeptical: false, disputed: Vec::new(), guess_record, route_precision: Vec::new(), pen };
+        let mut school = School { units, weights, routing, line, route_floor, route_base, route_ratio, calibrated_lessons: 0, seed, library_seen, bar, careful, skeptical: true, disputed, guess_record, route_precision: Vec::new(), pen };
         school.calibrated_lessons = school.total_lessons();
         school.settle_all_reach();
         Ok(school)
@@ -2504,7 +2530,7 @@ mod tests {
         let n: i64 = w.question.rsplit(' ').next().unwrap().parse().unwrap();
         assert!(n > 15, "asks about a number nobody taught: {n}");
         // told the answer, it settles, and has nothing more to ask
-        s.learn_wondered(&w.question, &(n / 10 + n % 10).to_string(), "zork").unwrap();
+        s.learn_wondered_sure(&w.question, &(n / 10 + n % 10).to_string(), "zork").unwrap();
         assert_eq!(s.ask("what is zork 29").answer.as_deref(), Some("11"));
         assert_eq!(s.ask("what is zork 19").answer.as_deref(), Some("10"));
         assert!(s.wonder().is_empty());
@@ -2525,9 +2551,9 @@ mod tests {
         let asked: Vec<&str> = checks.iter().map(|c| c.question.as_str()).collect();
         assert_eq!(asked, ["what is zork 8", "what is zork 9", "what is zork 30"], "the gaps inside what it was taught, then well past it");
         // told 8 it agrees; told 9 it is refuted and refits
-        s.learn_wondered("what is zork 8", "8", "zork").unwrap();
+        s.learn_wondered_sure("what is zork 8", "8", "zork").unwrap();
         assert_eq!(s.ask("what is zork 9").answer.as_deref(), Some("0"));
-        s.learn_wondered("what is zork 9", "9", "zork").unwrap();
+        s.learn_wondered_sure("what is zork 9", "9", "zork").unwrap();
         assert_eq!(s.ask("what is zork 9").answer.as_deref(), Some("9"));
         // refuted, it no longer says 0 at 9 (asserted above), whatever it now holds...
         // ...and with pieces for the tens and the units, which it would have from other kinds, it can see the rivals
@@ -2537,7 +2563,7 @@ mod tests {
         // now two explanations fit (tens + units, and (first + tens) mod 10): it declines at 29 and wonders about 19
         let w = s.wonder();
         assert!(w.iter().any(|w| w.question == "what is zork 19"), "{:?}", w.iter().map(|w| &w.question).collect::<Vec<_>>());
-        s.learn_wondered("what is zork 19", "10", "zork").unwrap();
+        s.learn_wondered_sure("what is zork 19", "10", "zork").unwrap();
         assert_eq!(s.ask("what is zork 29").answer.as_deref(), Some("11"), "two questions of its own choosing, and it has the right explanation");
     }
 
@@ -2603,7 +2629,7 @@ mod tests {
         let checks = s.check_myself(3);
         let asked: Vec<&str> = checks.iter().map(|c| c.question.as_str()).collect();
         assert_eq!(&asked[..2], ["what is 24 zork 12", "what is 12 zork 24"], "each operand pushed to about twice its largest taught value");
-        s.learn_wondered("what is 24 zork 12", "30", "zork").unwrap();
+        s.learn_wondered_sure("what is 24 zork 12", "30", "zork").unwrap();
         assert!(s.ask("what is 20 zork 15").answer.is_none(), "refuted: it no longer trusts a rule that said 36 where the truth is 30");
         assert_ne!(s.ask("what is 24 zork 12").answer.as_deref(), Some("36"));
     }
@@ -2846,7 +2872,7 @@ mod tests {
         for _ in 0..6 {
             for c in s.check_myself(4) {
                 if let Some(a) = truth(&c.question) {
-                    s.learn_wondered(&c.question, w[a], "zork").unwrap();
+                    s.learn_wondered_sure(&c.question, w[a], "zork").unwrap();
                 }
             }
         }
@@ -2983,10 +3009,27 @@ mod tests {
         assert!(l.disputed);
         let l = s.learn_wondered("what is 12 zork 9", "41", "zork").unwrap();
         assert!(l.disputed, "a different answer the second time: still unsettled");
-        // off by default: the answer is simply learned
+        // (on by default; switched off, the answer is simply learned)
         let mut t = sums_school(|a, b| a + b);
         t.set_careful(true);
-        assert!(!t.learn_wondered("what is 8 zork 9", "19", "zork").unwrap().disputed);
+        assert!(t.learn_wondered("what is 8 zork 9", "19", "zork").unwrap().disputed, "skeptical by default");
+        t.set_skeptical(false);
+        assert!(!t.learn_wondered("what is 8 zork 9", "19", "zork").unwrap().disputed, "and trusting when switched off");
+    }
+
+    #[test]
+    fn an_answer_held_for_a_second_opinion_survives_saving_so_two_separate_runs_can_confirm_it() {
+        let mut s = sums_school(|a, b| a + b);
+        s.set_careful(true);
+        assert!(s.learn_wondered("what is 8 zork 9", "19", "zork").unwrap().disputed);
+        let dir = std::env::temp_dir().join(format!("disputed_{}", std::process::id()));
+        let path = dir.join("a.school").to_string_lossy().to_string();
+        s.save(&path).unwrap();
+        let mut back = School::load(&path).unwrap();
+        assert_eq!(back.disputed_count(), 1, "the held answer is in the file");
+        assert!(!back.learn_wondered("what is 8 zork 9", "19", "zork").unwrap().disputed, "said again in a later run: believed");
+        assert_eq!(back.disputed_count(), 0);
+        std::fs::remove_dir_all(dir).ok();
     }
 
     #[test]
@@ -3053,7 +3096,7 @@ mod tests {
         let checks = s.check_myself(3);
         for q in checks.iter().take(2) {
             let n: Vec<i64> = q.question.split_whitespace().filter_map(|w| w.parse().ok()).collect();
-            s.learn_wondered(&q.question, &(n[0] + n[1]).to_string(), "zork").unwrap();
+            s.learn_wondered_sure(&q.question, &(n[0] + n[1]).to_string(), "zork").unwrap();
         }
         assert!(s.ask("what is 20 zork 15").answer.is_none(), "two edges are not the corner");
         assert_eq!(s.ask("what is 20 zork 15").guess.map(|g| g.answer).as_deref(), Some("35"));
@@ -3061,7 +3104,7 @@ mod tests {
         let corner = &checks[2];
         assert!(corner.why.contains("both"), "{}", corner.why);
         let n: Vec<i64> = corner.question.split_whitespace().filter_map(|w| w.parse().ok()).collect();
-        s.learn_wondered(&corner.question, &(n[0] + n[1]).to_string(), "zork").unwrap();
+        s.learn_wondered_sure(&corner.question, &(n[0] + n[1]).to_string(), "zork").unwrap();
         assert_eq!(s.units[0].chosen, Mech::Rule, "every check was confirmed");
         assert_eq!(s.ask("what is 20 zork 15").answer.as_deref(), Some("35"), "now it may answer out there");
         assert!(s.ask("what is 100 zork 15").answer.is_none(), "but not much further than it has checked");
