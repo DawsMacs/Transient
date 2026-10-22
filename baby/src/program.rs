@@ -731,6 +731,39 @@ impl ProgramRule {
         (None, 0, Vec::new())
     }
 
+    /// Where this program and its own competing explanations part ways (a repaired program's alternatives are built with numbers the library does not
+    /// have, so `ambiguity` cannot find them again): up to three untaught inputs, the nearest to the taught range first among those where the most
+    /// explanations differ.
+    pub fn own_ambiguity(&self, items: &[Item]) -> Option<Ambiguity> {
+        if self.alts.is_empty() {
+            return None;
+        }
+        let arity = self.arity;
+        let mut seen: HashSet<Vec<i32>> = HashSet::new();
+        let mut hypotheses: Vec<Expr> = Vec::new();
+        for e in std::iter::once(&self.expr).chain(self.alts.iter()) {
+            if seen.insert(ProgramRule::grid_signature(e, arity)) && hypotheses.len() < 8 {
+                hypotheses.push(e.clone());
+            }
+        }
+        let taught: HashSet<(i32, i32)> = points_of(items).iter().map(|p| (p.0 as i32, p.1 as i32)).collect();
+        let mut scored: Vec<((i32, i32), usize)> = Vec::new();
+        for a in 0..=30i32 {
+            for b in 0..=if arity == 2 { 30 } else { 0 } {
+                if taught.contains(&(a, b)) {
+                    continue;
+                }
+                let answers: HashSet<i32> = hypotheses.iter().map(|e| { let v = e.eval(a as f32, b as f32); if v.is_finite() { (v * 100.0).round() as i32 } else { i32::MIN } }).collect();
+                if answers.len() >= 2 {
+                    scored.push(((a, b), answers.len()));
+                }
+            }
+        }
+        scored.sort_by(|x, y| y.1.cmp(&x.1).then((x.0 .0 + x.0 .1).cmp(&(y.0 .0 + y.0 .1))));
+        let inputs: Vec<(f32, f32)> = scored.iter().take(3).map(|(k, _)| (k.0 as f32, k.1 as f32)).collect();
+        (!inputs.is_empty()).then_some(Ambiguity { hypotheses, inputs, arity })
+    }
+
     /// When the lessons leave several explanations equally good (they agree on every lesson and part ways elsewhere), which numbers would
     /// settle it? Returns the explanations that fit, and the questions that tell them apart: whole numbers nobody taught, best first (the
     /// ones on which the explanations give the most different answers, then the smallest numbers). None if one explanation fits, or none.

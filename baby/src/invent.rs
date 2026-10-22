@@ -565,8 +565,8 @@ pub fn run_careful(seed: u64, rounds: usize, per_unit: usize) -> CarefulResult {
             }
             let name = b.names[u].clone();
             let checks: Vec<_> = school.check_myself(12).into_iter().filter(|c| c.unit == name).collect();
-            // only the edge questions: gaps are the business of the program checks
-            for c in checks.into_iter().filter(|c| c.why.contains("past") || c.why.contains("other way") || c.why.contains("below")).take(per_unit) {
+            // only the edge questions (and a repaired law's question between its rivals): gaps are the business of the program checks
+            for c in checks.into_iter().filter(|c| c.why.contains("past") || c.why.contains("other way") || c.why.contains("below") || c.why.contains("part ways")).take(per_unit) {
                 let nums = numbers_in(&c.question);
                 let Some(truth) = eval(kind, nums[0], *nums.get(1).unwrap_or(&0)) else { continue };
                 if std::env::var("CAREFUL_DEBUG").is_ok() {

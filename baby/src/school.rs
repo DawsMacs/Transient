@@ -1056,19 +1056,19 @@ impl School {
     /// saturates at 30 is `min(first + second, 30)`; a wrap at 40 is `(first + second) mod 40`. Found, the unit is that program (not refuted
     /// any more: it explains what it was told), still stating facts only inside the reach the lessons give it and guessing, with its record,
     /// beyond. Not found, nothing changes. The temporary numbers never enter the library.
-    fn repair_regime(&mut self, u: usize) {
+    fn repair_regime(&mut self, u: usize) -> bool {
         let unit = &self.units[u];
         if !unit.refuted || !matches!(unit.chosen, Mech::Rule | Mech::Select | Mech::Program) {
-            return;
+            return false;
         }
         let contradicting: Vec<usize> = (0..unit.lessons.len()).filter(|&i| predict(&unit.state, &unit.lessons[i].query, &self.weights).as_deref() != Some(unit.lessons[i].answer.as_str())).collect();
         if contradicting.is_empty() {
-            return;
+            return false;
         }
         let mut extra: Vec<i32> = Vec::new();
         for &i in &contradicting {
             let l = &unit.lessons[i];
-            let Some(y) = self.line.value(&l.answer) else { return };
+            let Some(y) = self.line.value(&l.answer) else { return false };
             let told = [Some(y), predict(&unit.state, &l.query, &self.weights).and_then(|p| self.line.value(&p)).map(|p| (p - y).abs())];
             for v in told.into_iter().flatten() {
                 let r = v.round();
@@ -1081,13 +1081,13 @@ impl School {
         let mut told: Vec<(String, String)> = contradicting.iter().map(|&i| (unit.lessons[i].query.clone(), unit.lessons[i].answer.clone())).collect();
         told.sort();
         if self.repair_failed.iter().any(|(n, t)| *n == unit.name && *t == told) {
-            return;
+            return false;
         }
         let name = unit.name.clone();
         let Some(mut rule) = ProgramRule::fit_repair_with(&unit.lessons, &self.weights.lib, &extra) else {
             self.repair_failed.retain(|(n, _)| *n != name);
             self.repair_failed.push((name, told));
-            return;
+            return false;
         };
         // A repair extends a law beyond where it was contradicted; it must not rewrite it where it was working. A program that fits wrongly-told lessons
         // by a coincidence (a selection repaired into `min(second, first + second div 6)`) disagrees with the old rule INSIDE the range the other lessons
@@ -1105,7 +1105,7 @@ impl School {
                     if !new.is_finite() || (new - old).abs() > 0.01 {
                         self.repair_failed.retain(|(n, _)| *n != name);
                         self.repair_failed.push((name, told));
-                        return;
+                        return false;
                     }
                 }
             }
@@ -1114,8 +1114,10 @@ impl School {
             Fitted::Program(Some(p)) => p.repaired.clone(),
             _ => Vec::new(),
         };
+        // (only lessons that CONTRADICTED a prediction are unproven; an answer that merely chose between competing explanations the program declined to
+        // choose between is an ordinary test of one of them, like any check)
         for &i in &contradicting {
-            if !repaired.contains(&unit.lessons[i].query) {
+            if predict(&unit.state, &unit.lessons[i].query, &self.weights).is_some() && !repaired.contains(&unit.lessons[i].query) {
                 repaired.push(unit.lessons[i].query.clone());
             }
         }
@@ -1128,6 +1130,7 @@ impl School {
         let slot = Mech::ALL.iter().position(|m| *m == Mech::Program).unwrap();
         unit.evidence[slot] = unit.evidence[slot].max(before);
         self.settle_reach(u);
+        true
     }
 
     /// Work out again how to learn a unit, from every lesson it now has.
@@ -1144,7 +1147,7 @@ impl School {
         let keep_old = {
             let unit = &self.units[u];
             match (&unit.state, unit.chosen) {
-                (Fitted::Program(Some(old)), Mech::Program) if old.partial.is_none() && old.alts.is_empty() && unit.best_evidence() >= mechanisms::reliable() && unit.facts() >= 12 => {
+                (Fitted::Program(Some(old)), Mech::Program) if old.partial.is_none() && (old.alts.is_empty() || !old.repaired.is_empty()) && unit.best_evidence() >= mechanisms::reliable() && (unit.facts() >= 12 || !old.repaired.is_empty()) => {
                     let new_is_exact = matches!(&state, Fitted::Program(Some(p)) if p.partial.is_none());
                     if new_is_exact {
                         false
@@ -1235,7 +1238,11 @@ impl School {
             if !open || unit.facts() < 5 || only.map_or(false, |n| n != unit.name) {
                 continue;
             }
-            let Some(amb) = ProgramRule::ambiguity(&unit.lessons, &self.weights.lib) else { continue };
+            let own = match &unit.state {
+                Fitted::Program(Some(p)) if !p.repaired.is_empty() => p.own_ambiguity(&unit.lessons),
+                _ => None,
+            };
+            let Some(amb) = own.or_else(|| ProgramRule::ambiguity(&unit.lessons, &self.weights.lib)) else { continue };
             let Some(template) = unit.lessons.iter().find(|l| tokenize(&l.query).iter().filter(|w| self.line.value(w).is_some()).count() == amb.arity) else { continue };
             for &(a, b) in amb.inputs.iter().take(2) {
                 let Some(question) = self.numeric_question(&template.query, a, b) else { continue };
@@ -1329,6 +1336,19 @@ impl School {
     pub fn check_myself(&self, limit: usize) -> Vec<Wonder> {
         let mut out = Vec::new();
         for (ui, unit) in self.units.iter().enumerate() {
+            // a repaired program with competing explanations: ask where they part ways (the nearest places first), so that one answer can choose
+            if let Fitted::Program(Some(p)) = &unit.state {
+                if !p.repaired.is_empty() && !p.alts.is_empty() && p.partial.is_none() {
+                    if let (Some(amb), Some(template)) = (p.own_ambiguity(&unit.lessons), unit.lessons.iter().find(|l| tokenize(&l.query).iter().filter(|w| self.line.value(w).is_some()).count() == p.arity())) {
+                        for &(a, b) in amb.inputs.iter().take(limit.min(2)) {
+                            let Some(question) = self.numeric_question(&template.query, a, b) else { continue };
+                            let says: Vec<String> = amb.hypotheses.iter().map(|e| format!("{} says {}", e.show(), e.eval(a, b))).collect();
+                            out.push(Wonder { unit: unit.name.clone(), question, why: format!("I rebuilt this unit's rule after a correction and {} explanations fit what I was told but part ways here: {}", amb.hypotheses.len(), says.join("; ")) });
+                        }
+                    }
+                    continue;
+                }
+            }
             let (arity_hint, program_text) = match &unit.state {
                 Fitted::Program(Some(p)) if p.alts.is_empty() && p.partial.is_none() => (Some(p.arity()), Some(p.expr.show())),
                 Fitted::Rule(_) | Fitted::Select(_) if unit.best_evidence() >= mechanisms::reliable() => (None, None),
@@ -1597,10 +1617,29 @@ impl School {
             self.add_to_tables(u, query);
             corrected = false;
         }
-        if !self.refit_in_place(u) {
-            self.relearn_unit(u);
+        // A settled law that this lesson contradicts is given the chance to be repaired BEFORE the unit is re-decided: a small unit re-decided on one
+        // contradiction falls back to memory (one lesson in sixteen is more than a rule tolerates), and then there is no law left to repair.
+        let was_settled = !opened && matches!(self.units[u].chosen, Mech::Rule | Mech::Select | Mech::Program) && self.units[u].best_evidence() >= mechanisms::reliable();
+        // (a repaired program that declines because its competing explanations disagree is also being told something: which of them is right)
+        let undecided_repair = matches!(&self.units[u].state, Fitted::Program(Some(p)) if !p.repaired.is_empty() && !p.alts.is_empty());
+        let contradicts = was_settled
+            && match predict(&self.units[u].state, query, &self.weights) {
+                Some(p) => p != answer,
+                None => undecided_repair,
+            };
+        let repaired_now = if contradicts {
+            self.units[u].remember = Remembered::from_items(&self.units[u].lessons);
+            self.settle_reach(u);
+            self.repair_regime(u)
+        } else {
+            false
+        };
+        if !repaired_now {
+            if !self.refit_in_place(u) {
+                self.relearn_unit(u);
+            }
+            self.repair_regime(u);
         }
-        self.repair_regime(u);
         let unit = &self.units[u];
         let learned = Learned { unit: unit.name.clone(), opened, corrected, was, now: unit.chosen, held_back: unit.best_evidence(), facts: unit.facts(), surprised: true, disputed: false };
         self.maybe_recalibrate_route();
@@ -2814,6 +2853,24 @@ mod tests {
         assert_eq!(back.ask("what is 24 zork 12").answer.as_deref(), Some("30"));
         assert_eq!(back.ask("what is 7 zork 9").answer.as_deref(), Some("16"));
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_small_unit_keeps_its_repair_when_one_lesson_fits_two_laws_and_one_question_chooses() {
+        // 15 lessons, the truth is min(2a, 30): told "29 -> 30" fits `min(a + a, 30)` and `a + a mod 28` equally; one correction must not
+        // send a unit this small back to plain memory (one lesson in sixteen is more than a rule tolerates), and it must ask where they differ
+        let items: Vec<Item> = (0..=14i64).map(|a| Item { unit: 0, fact: a as usize, template: 0, query: format!("what is zork {a}"), answer: (2 * a).min(30).to_string() }).collect();
+        let mut s = School::from_items(&items, vec!["zork".into()], None, 1, true);
+        s.set_careful(true);
+        s.learn_wondered_sure("what is zork 29", "30", "zork").unwrap();
+        assert_eq!(s.units[0].chosen, Mech::Program, "{}", s.describe_unit_open(0));
+        assert!(matches!(&s.units[0].state, Fitted::Program(Some(p)) if !p.alts.is_empty() && !p.repaired.is_empty()));
+        assert!(s.ask("what is zork 20").answer.is_none(), "two explanations part ways at 20: no fact");
+        let asked = s.check_myself(3);
+        assert!(!asked.is_empty() && asked[0].unit == "zork", "it asks where they differ");
+        let q = asked[0].question.clone();
+        s.learn_wondered_sure(&q, &(2 * q.rsplit(' ').next().unwrap().parse::<i64>().unwrap()).min(30).to_string(), "zork").unwrap();
+        assert_eq!(s.ask("what is zork 20").guess.map(|g| g.answer).or(s.ask("what is zork 20").answer).as_deref(), Some("30"), "one answer chose the law");
     }
 
     #[test]
