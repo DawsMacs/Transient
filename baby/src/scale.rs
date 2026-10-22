@@ -42,6 +42,8 @@ pub struct ScaleWorld {
     pub names: Vec<String>,
     /// The mechanism each unit should end up with: facts are remembered, sums and the like are rules, and so on.
     pub expect: Vec<&'static str>,
+    /// The operation of each numeric unit (None for a unit of facts): enough to answer any question about it, which a simulated teacher needs.
+    pub sems: Vec<Option<Sem>>,
     pub world: World,
     /// Queries whose taught answer was deliberately made wrong, with the answer they should have had.
     pub corrupted: HashMap<String, String>,
@@ -172,6 +174,30 @@ fn numeric_facts(sem: Sem, attr: &str, digits: bool, rng: &mut Rng) -> (Vec<Fact
     out
 }
 
+/// What a teacher who knows the operation would answer to a question about it, in the same terms the generator uses: `None` where the
+/// generator defines no fact (an answer with no number word, a negative result, operands out of the number line). `digits` as in `Config`.
+pub fn teacher_truth(sem: Sem, nums: &[usize], digits: bool) -> Option<usize> {
+    let (max, ans_max) = if digits { (30usize, 99usize) } else { (10, 10) };
+    // the operands of every operation stop at `max`, except "half of": its input is twice a number that stops at `max` and at half the answers
+    let limit = if sem == Sem::Half { 2 * (ans_max / 2).min(max) } else { max };
+    if nums.iter().any(|&x| x > limit) {
+        return None;
+    }
+    let ans = match (sem, nums) {
+        (Sem::Sum, [a, b]) => a + b,
+        (Sem::Times, [a, b]) => a * b,
+        (Sem::Apart, [a, b]) => a.abs_diff(*b),
+        (Sem::Minus, [a, b]) if b <= a => a - b,
+        (Sem::Max, [a, b]) if a != b => *a.max(b),
+        (Sem::Min, [a, b]) if a != b => *a.min(b),
+        (Sem::After, [a]) if *a < max => a + 1,
+        (Sem::Double, [a]) => 2 * a,
+        (Sem::Half, [a]) if a % 2 == 0 => a / 2,
+        _ => return None,
+    };
+    (ans <= ans_max).then_some(ans)
+}
+
 /// Misspell one word of a question by dropping a letter from its longest word that is not a number word.
 fn misspell(q: &str, rng: &mut Rng) -> String {
     let mut words: Vec<String> = q.split_whitespace().map(|w| w.to_string()).collect();
@@ -194,6 +220,7 @@ pub fn generate(c: &Config) -> ScaleWorld {
     // (unit index, attribute word, entities the unit holds) for the traps below.
     let mut fact_units: Vec<(usize, String, Vec<usize>)> = Vec::new();
     let mut numeric_units: Vec<(usize, String, Sem)> = Vec::new();
+    let mut sems: Vec<Option<Sem>> = Vec::new();
     let mut corrupted: HashMap<String, String> = HashMap::new();
 
     for u in 0..c.units {
@@ -203,6 +230,7 @@ pub fn generate(c: &Config) -> ScaleWorld {
         let (near, far): (Vec<Fact>, Vec<Fact>) = if numeric {
             let sem = SEMS[(u / 5 * 2 + (u % 5 - 3)) % SEMS.len()];
             numeric_units.push((u, attr.clone(), sem));
+            sems.push(Some(sem));
             expect.push(match sem {
                 Sem::Sum | Sem::Minus | Sem::After | Sem::Double | Sem::Half => "rule",
                 Sem::Max | Sem::Min => "select",
@@ -225,6 +253,7 @@ pub fn generate(c: &Config) -> ScaleWorld {
                 .map(|&e| Fact { slots: vec![word(e, 3)], answer: word(answer_base + rng.below(pool), 3), templates: templ(style, &attr) })
                 .collect();
             expect.push("remember");
+            sems.push(None);
             fact_units.push((u, attr.clone(), ents));
             (facts, Vec::new())
         };
@@ -304,7 +333,7 @@ pub fn generate(c: &Config) -> ScaleWorld {
         }
         must_refuse.push((fill("what is {A} {0} {1} {2}", attr, &[num("two", "2"), num("three", "3"), num("four", "4")]), "too many operands"));
     }
-    ScaleWorld { names, expect, world: w, corrupted, misspelt, must_refuse }
+    ScaleWorld { names, expect, sems, world: w, corrupted, misspelt, must_refuse }
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------
@@ -624,5 +653,34 @@ mod tests {
         let frac = sw.corrupted.len() as f32 / sw.world.train.len() as f32;
         assert!((0.12..0.28).contains(&frac), "{frac}");
         assert!(sw.world.reworded.iter().all(|i| !sw.corrupted.contains_key(&i.query)));
+    }
+
+    #[test]
+    fn the_simulated_teacher_agrees_with_the_generator_on_every_question_the_generator_makes() {
+        // the teacher answers a check question from the unit's operation alone; it must reproduce every taught, reworded, never-taught and
+        // beyond-range answer the generator itself wrote, in words and in digits
+        for digits in [false, true] {
+            let mut c = cfg(40);
+            c.digits = digits;
+            let sw = generate(&c);
+            assert_eq!(sw.sems.len(), sw.names.len());
+            let mut checked = 0;
+            for it in sw.world.train.iter().chain(&sw.world.reworded).chain(&sw.world.new_items).chain(&sw.world.beyond) {
+                let Some(sem) = sw.sems[it.unit] else { continue };
+                let nums: Vec<usize> = crate::data::tokenize(&it.query)
+                    .iter()
+                    .filter_map(|t| NUM.iter().position(|n| n == t).or_else(|| t.parse::<usize>().ok().filter(|_| digits)))
+                    .collect();
+                let truth = teacher_truth(sem, &nums, digits).map(|a| if digits { a.to_string() } else { NUM[a].to_string() });
+                assert_eq!(truth.as_deref(), Some(it.answer.as_str()), "{:?} ({sem:?}, digits {digits})", it.query);
+                checked += 1;
+            }
+            assert!(checked > 200, "{checked}");
+        }
+        // and it declines what has no answer in words
+        assert_eq!(teacher_truth(Sem::Sum, &[6, 7], false), None, "13 has no number word");
+        assert_eq!(teacher_truth(Sem::Minus, &[2, 5], false), None, "negative");
+        assert_eq!(teacher_truth(Sem::Max, &[3, 3], false), None, "a tie has no larger");
+        assert_eq!(teacher_truth(Sem::Half, &[3], false), None, "odd");
     }
 }

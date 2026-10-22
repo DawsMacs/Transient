@@ -509,31 +509,32 @@ pub fn export(seed: u64, units: usize, dir: &str) -> std::io::Result<()> {
     Ok(())
 }
 
+fn refusal_reason(how: &str) -> &'static str {
+    if how.contains("only taught (or have checked) numbers from") {
+        "a number outside the range taught (box)"
+    } else if how.contains("never together like this") {
+        "numbers each inside the range but not together (corner)"
+    } else if how.contains("I haven't met the word") {
+        "a word it has never met"
+    } else if how.contains("no kind of lesson I was taught is like") {
+        "no kind of lesson is like it (routing)"
+    } else if how.contains("I only memorise this kind") {
+        "memorise-only unit, nothing close enough"
+    } else if how.contains("couldn't work it out") {
+        "the unit could not work it out (declined)"
+    } else if how.contains("they disagree") {
+        "rule and memory disagree"
+    } else if how.contains("already shown my rule wrong") {
+        "rule refuted by a correction"
+    } else {
+        "other"
+    }
+}
+
 /// Why does the baby refuse more as the world grows? Every refusal on the never-taught questions of a scale world, tallied by the reason it
 /// gave and by the kind of unit the question belongs to, at several sizes.
 pub fn run_refusals(seed: u64, counts: &[usize]) {
     use crate::scale::{generate, Config};
-    fn reason(how: &str) -> &'static str {
-        if how.contains("only taught (or have checked) numbers from") {
-            "a number outside the range taught (box)"
-        } else if how.contains("never together like this") {
-            "numbers each inside the range but not together (corner)"
-        } else if how.contains("I haven't met the word") {
-            "a word it has never met"
-        } else if how.contains("no kind of lesson I was taught is like") {
-            "no kind of lesson is like it (routing)"
-        } else if how.contains("I only memorise this kind") {
-            "memorise-only unit, nothing close enough"
-        } else if how.contains("couldn't work it out") {
-            "the unit could not work it out (declined)"
-        } else if how.contains("they disagree") {
-            "rule and memory disagree"
-        } else if how.contains("already shown my rule wrong") {
-            "rule refuted by a correction"
-        } else {
-            "other"
-        }
-    }
     println!("never-taught questions the baby refused, by the reason it gave (percent of ALL never-taught questions)\n");
     for &units in counts {
         let sw = generate(&Config { units, entities: (units * 20).clamp(1000, 10_000), facts_per_unit: 12, noise: 0.0, typos: 0.0, digits: false, seed });
@@ -561,7 +562,7 @@ pub fn run_refusals(seed: u64, counts: &[usize]) {
                 if r.unit.map_or(false, |u| u != it.unit) {
                     routed_wrong += 1;
                 }
-                let why = reason(&r.how);
+                let why = refusal_reason(&r.how);
                 match by_reason.iter_mut().find(|(k, _)| *k == why) {
                     Some(x) => x.1 += 1,
                     None => by_reason.push((why, 1)),
@@ -579,4 +580,103 @@ pub fn run_refusals(seed: u64, counts: &[usize]) {
         }
         println!();
     }
+}
+
+/// Teacher checks, automatic. The baby asks its own check questions (`check_myself`: the edges and corner of what each rule was taught, a few
+/// per unit per round); a simulated teacher who knows each unit's operation answers the ones that have an answer; the baby learns the answers.
+/// How many questions does it take to clear the refusals, and does anything it states as a fact ever turn out wrong?
+pub fn run_teacher(seed: u64, units: usize, rounds: usize, per_unit: usize) {
+    use crate::scale::{generate, teacher_truth, Config};
+    let sw = generate(&Config { units, entities: (units * 20).clamp(1000, 10_000), facts_per_unit: 12, noise: 0.0, typos: 0.0, digits: false, seed });
+    let w = &sw.world;
+    let mut school = School::from_items(&w.train, sw.names.clone(), Some(&w.reworded), seed, true);
+    let numeric = sw.sems.iter().filter(|s| s.is_some()).count();
+    println!("{units} units ({numeric} numeric), {} lessons; per round the baby asks up to {per_unit} check questions per unit, a simulated teacher answers those the number words can express\n", w.train.len());
+    println!(
+        "{:<22} {:>9} {:>9}   {:>26} {:>26}   {:>12}",
+        "", "asked", "answered", "never taught r / ref / WRONG", "beyond range r / ref / WRONG", "refused had a right guess"
+    );
+    let report = |school: &School, label: &str, asked: usize, answered: usize| {
+        let (gn, gb) = (grade_baby(school, &w.new_items), grade_baby(school, &w.beyond));
+        let cell = |g: &Grade| format!("{:.1} / {:.1} / {:.1}", g.pct(g.right), g.pct(g.refused), g.pct(g.wrong));
+        println!("{label:<22} {asked:>9} {answered:>9}   {:>26} {:>26}   {:>12}", cell(&gn), cell(&gb), format!("{:.0}%", 100.0 * gn.guess_right as f64 / gn.refused.max(1) as f64));
+        gn.wrong + gb.wrong
+    };
+    let mut wrong_ever = report(&school, "before any checks", 0, 0);
+    // how well each never-taught question was recognised before any learning: the margin of its best unit over the runner-up, and who won
+    let before_route: Vec<(usize, f32)> = w.new_items.iter().map(|it| school.route(&it.query, &mut Ledger::default())).collect();
+    let floor_before = school.route_floor;
+    let (mut asked, mut answered, mut unanswerable) = (0usize, 0usize, 0usize);
+    for round in 1..=rounds {
+        let checks = school.check_myself(per_unit);
+        let mut learned_this_round = 0usize;
+        for c in &checks {
+            asked += 1;
+            let Some(u) = sw.names.iter().position(|n| *n == c.unit) else { continue };
+            let Some(sem) = sw.sems[u] else { continue };
+            let nums: Vec<usize> = crate::data::tokenize(&c.question).iter().filter_map(|t| crate::data::NUM.iter().position(|n| n == t)).collect();
+            match teacher_truth(sem, &nums, false) {
+                Some(a) => {
+                    if school.learn_wondered(&c.question, crate::data::NUM[a], &c.unit).is_ok() {
+                        answered += 1;
+                        learned_this_round += 1;
+                    }
+                }
+                None => unanswerable += 1,
+            }
+        }
+        wrong_ever += report(&school, &format!("after round {round}"), asked, answered);
+        if checks.is_empty() || learned_this_round == 0 {
+            println!("  (nothing left to ask or answer after round {round})");
+            break;
+        }
+    }
+    if let Ok(f) = std::env::var("FLOOR_SCALE") {
+        // (experiment only) what if the recognition floor had moved with the margins?
+        school.route_floor *= f.parse::<f32>().unwrap_or(1.0);
+        let (gn, gb) = (grade_baby(&school, &w.new_items), grade_baby(&school, &w.beyond));
+        println!("with the recognition floor scaled by {f} (to {:.3}): never taught {:.1} / {:.1} / {:.1}, beyond {:.1} / {:.1} / {:.1} (right / refused / WRONG)", school.route_floor, gn.pct(gn.right), gn.pct(gn.refused), gn.pct(gn.wrong), gb.pct(gb.right), gb.pct(gb.refused), gb.pct(gb.wrong));
+        let traps = sw.must_refuse.iter().filter(|(q, _)| school.ask(q).answer.is_some()).count();
+        println!("must-refuse traps answered: {traps} of {}", sw.must_refuse.len());
+    }
+    // what is left: every refused never-taught question, by the reason and by what the guess (if any) was
+    let (mut left, mut none_guess, mut right_guess, mut wrong_guess) = (0usize, 0usize, 0usize, 0usize);
+    let mut reasons: Vec<(&'static str, usize)> = Vec::new();
+    for it in &w.new_items {
+        let r = school.ask(&it.query);
+        if r.answer.is_none() {
+            left += 1;
+            match &r.guess {
+                None => none_guess += 1,
+                Some(g) if g.answer == it.answer => right_guess += 1,
+                Some(_) => wrong_guess += 1,
+            }
+            let why = refusal_reason(&r.how);
+            match reasons.iter_mut().find(|(k, _)| *k == why) {
+                Some(x) => x.1 += 1,
+                None => reasons.push((why, 1)),
+            }
+        }
+    }
+    reasons.sort_by(|a, b| b.1.cmp(&a.1));
+    if std::env::var("ROUTE_DEBUG").is_ok() {
+        println!("\nroute floor before {floor_before:.3}, after {:.3}", school.route_floor);
+        let mut shown = 0;
+        for (i, it) in w.new_items.iter().enumerate() {
+            let r = school.ask(&it.query);
+            if r.answer.is_none() && refusal_reason(&r.how) == "no kind of lesson is like it (routing)" && shown < 8 {
+                shown += 1;
+                let (u_now, m_now) = school.route(&it.query, &mut Ledger::default());
+                println!(
+                    "  {:?}: true unit {} ({} lessons now), margin before {:.2} (best unit {}), now {:.2} (best unit {}, {} lessons now)",
+                    it.query, it.unit, school.units[it.unit].facts(), before_route[i].1, before_route[i].0, m_now, u_now, school.units[u_now].facts()
+                );
+            }
+        }
+    }
+    println!("\nstill refused among the never-taught: {left} (a right guess {right_guess}, a WRONG guess {wrong_guess}, no guess {none_guess})");
+    for (why, c) in &reasons {
+        println!("    {c:>5}  {why}");
+    }
+    println!("\n{unanswerable} check questions had no answer a teacher could give in number words (a result past ten, a negative result); wrong answers stated as fact, summed over every report: {wrong_ever}");
 }
