@@ -1569,6 +1569,12 @@ The road there before `program`, because the dead ends are the useful part:
 | discovers on its own (browsing, other modalities) | **no**: a teacher answers; nothing explores |
 | grows (a bare UMA becoming a learned UMA) | **no**: capacity is fixed up front |
 
+## en-US (2026-10-23)
+
+Everything in the repo is now en-US: prose, comments, identifiers (`memorize_only`, `reorganize_inner`, `behaviors`) and the strings the program prints. It is a standard for the rebuild too: Novice is en-US from its first line.
+
+It touched baby's code, so it was checked rather than assumed. All 142 tests still pass, and `baby school` prints the same table apart from the spelling in two lines and the run time. One coupling to remember: the unit-explanation text "I only memorize this kind of thing" is written in `school.rs` and matched in `compare.rs`, so a spelling change to one has to reach the other. Saved `runs/` models carry none of the renamed strings, but older logs in `runs/` use the old spelling. Quote punctuation (commas and periods outside closing quotes) was not changed.
+
 ## Next (candidates; the freedom to reorder is mine)
 
 1. ~~Does learning stay light when the world gets bigger?~~ Answered for clean lessons up to 600 units (see the scale section; learning one lesson is flat at ~0.5 ms). Label noise is solved at 2 % and 5 % (robust fitting, cross-checks); open: other noise kinds, a Zipf-shaped vocabulary, discovery at scale, and the pen with thousands of waiting lessons.

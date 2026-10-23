@@ -14,7 +14,7 @@ whether or not it works. The code is `baby/` (pure Rust, zero dependencies, buil
 
 ## Rules
 
-- **Communication protocol: American English.** All writing (code, identifiers, comments, docs, site copy, commit messages, replies) uses American English spelling and vocabulary (color, behavior, license, organize, recognize, center, percent, toward). Check new text before committing.
+- **Communication protocol: en-US.** All writing (code, identifiers, comments, runtime strings, docs, site copy, commit messages, replies) is en-US: spelling and vocabulary (color, behavior, license, organize, recognize, center, percent, toward). Novice, rebuilt from scratch, is en-US from its first line. Check new text before committing.
 - **Honesty over polish.** Report WRONG separately from refused. Record mistakes and rejected hypotheses in `baby/README.md` as they happen. State caveats plainly (synthetic tidy lessons; estimated joules; mechanisms and thresholds are
   the assistant's, not discovered).
 - **Pessimism is input, never a brake.** Daws wants risks phrased as design constraints/terrain/checkpoints that redirect the work. Do not propose kill criteria or stop the project over difficulty; do not claim certainty of success.

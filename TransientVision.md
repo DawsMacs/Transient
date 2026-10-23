@@ -380,6 +380,8 @@ description than one with a single fixed learner.
 
 - **2026-10-23** The exam's wrong-teacher tier (`adapt-write --wrong P --repeat F`): the adaptive stream's truths are told wrongly for a share of the facts, consistently, and the judge separates wrong facts that repeat a believed mistake from wrong facts about things never wrongly told (must be 0). Its first run found a hole at once: one wrongly told lesson that a coincidence law agreed with replaced a correct tens-digit law, and the baby then stated a wrong fact the teacher never touched (0/1/1 and 0/1/0 on three seeds). Fixed by adopting a fresh fit that explains a contradicting lesson only as a repair, keeping the replaced law as a rival (`baby/README.md`, first section). Now 0 elsewhere on all six runs; the baby still believes a teacher who repeats a wrong answer (14-39 repeats; a naive memorizer 32-59).
 
+- **2026-10-23** The repo and the site moved to en-US, a communication protocol for all writing and code. Because it renamed identifiers and printed strings in baby, I ran the tests (142 pass) and compared the `baby school` scorecard (identical but for spelling). For Novice it is a requirement from the first line. Details in `baby/README.md` ("en-US") and the handover.
+
 ---
 
 ## More to come
