@@ -6,7 +6,7 @@
 //!   baby learn  "what is two multiplied by three" six --unit times    keep learning AFTER school: add a lesson, re-work how that unit is learned
 //!   baby discover [--seed N] [--out PATH]   hand it a heap of UNLABELED lessons: it finds the units itself, then is scored like the others
 //!   baby tutor [--school FILE] [--rounds N] [--limit N] [--out FILE]   the baby asks what it wants checked, you answer (Enter skips, q quits; `question => answer` teaches it something of your own)
-//!   baby exam write DIR [--units N --seed N] | score DIR PREDICTIONS.tsv | run DIR [--out FILE] | adapt-write DIR [--wrong P --repeat F] | adapt-run DIR | adapt-drive DIR COMMAND...   the entry exam: plain files and a line protocol any system can be taught and judged by (Novice's bar)
+//!   baby exam write DIR [--units N --seed N] | score DIR PREDICTIONS.tsv | run DIR [--out FILE] | adapt-write DIR [--wrong P --repeat F] | adapt-run DIR | adapt-drive DIR COMMAND... | transformer DIR [--d N --layers N --epochs N --threshold P]   the entry exam: plain files and a line protocol any system can be taught and judged by (Novice's bar)
 //!   baby bridge (--svamp FILE | --pairs FILE) [--units kind|discover] [--split random|blocks] [--numbers N] [--select] [--test F] [--seed N]   REAL TEXT: what does the baby make of problems somebody else wrote?
 //!   baby compare [--seed N] [--sizes 16,32,64] [--layers N] [--epochs N] [--adapt N | --scale 20,60 | --export DIR [--units N] | --refusals 20,200 | --teacher UNITS [--rounds N --limit N]]   the controlled comparison: the baby against a matched attention transformer, in joules
 //!   baby cost                               what LEARNING costs: time and memory to teach it, a new lesson, a new kind, and to tidy up
@@ -1537,6 +1537,35 @@ fn cmd_exam(a: &Args) {
                 }
             }
         }
+        "transformer" => match exam::load(&dir) {
+            Ok(e) => {
+                let seed: u64 = a.get("seed", 1);
+                let meter = compare::Meter::new();
+                let run = exam::transformer_run(&e, a.get("d", 32usize), a.get("layers", 2usize), a.get("epochs", 60usize), a.get("threshold", 0.9f32), seed, &meter);
+                println!("a plain attention transformer ({} parameters, {} epochs) taught the same lessons and put the same questions\n", run.params, run.epochs);
+                for (label, preds) in [("ALWAYS ANSWERS (every answer stated as a fact)".to_string(), &run.always), (format!("REFUSES BELOW ITS OWN PROBABILITY {} (every answer above it stated as a fact)", run.threshold), &run.cut)] {
+                    println!("=== {label}");
+                    match exam::judge(&e, preds) {
+                        Ok(v) => {
+                            exam::print(&v);
+                            let right: usize = v.groups.iter().filter(|(g, _)| g.as_str() != "trap").map(|(_, r)| r.fact_right + r.guess_right).sum();
+                            let wrong = v.wrong_facts + v.traps_answered;
+                            println!("  right answers {right}; stated wrongly (wrong facts + answered traps) {wrong}");
+                            if let (Some(t), Some(an)) = (run.energy.teach_j, run.energy.answer_j) {
+                                println!("  capability per joule: {:.1} right answers per joule overall ({} right for {:.2} J), {:.2} right-and-not-wrong per joule", right as f64 / (t + an), right, t + an, right.saturating_sub(wrong) as f64 / (t + an));
+                            }
+                        }
+                        Err(err) => eprintln!("{err}"),
+                    }
+                    println!();
+                }
+                exam::print_energy(&run.energy, e.lessons.len(), e.questions.len(), 0, &meter);
+            }
+            Err(err) => {
+                eprintln!("{err}");
+                std::process::exit(1);
+            }
+        },
         "run" => match exam::load(&dir) {
             Ok(e) => {
                 let seed: u64 = a.get("seed", 1);

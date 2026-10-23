@@ -329,11 +329,69 @@ pub fn print_energy(e: &Energy, lessons: usize, questions: usize, right: usize, 
     println!("\nenergy (the CPU package's own counter, joules above the machine's idle draw{}):", if e.repeats > 1 { format!("; short runs repeated and averaged, up to {}x", e.repeats) } else { String::new() });
     println!("  teaching   {:>10}   {:.2} s   ({} per lesson)", j(e.teach_j), e.teach_s, j(e.teach_j.map(|x| x / lessons.max(1) as f64)));
     println!("  answering  {:>10}   {:.2} s   ({} per question)", j(e.answer_j), e.answer_s, j(e.answer_j.map(|x| x / questions.max(1) as f64)));
-    if let (Some(t), Some(a)) = (e.teach_j, e.answer_j) {
+    if let (Some(t), Some(a), true) = (e.teach_j, e.answer_j, right > 0) {
         println!("  capability per joule: {:.1} right answers per joule overall ({} right answers for {:.2} J), {:.1} per joule once taught", right as f64 / (t + a), right, t + a, right as f64 / a.max(1e-9));
     }
     if let Some(w) = meter.warning() {
         println!("\n{w}");
+    }
+}
+
+/// The repo's plain attention transformer (the matched counterpart of `baby compare`) taught the static exam's lessons and put its questions, as a system a
+/// successor can be compared with on the same judge and the same meter. A transformer has no way to say "I do not know" of its own, so it is scored two ways
+/// from the same trained model: always answering (every answer a fact), and refusing below a confidence cut (a conventional, untuned choice: it is mine).
+pub struct TransformerRun {
+    pub params: usize,
+    pub epochs: usize,
+    /// every question answered with its most probable answer, as a fact
+    pub always: Vec<Vec<String>>,
+    /// the same, refusing where the model's own probability is under the cut
+    pub cut: Vec<Vec<String>>,
+    pub threshold: f32,
+    pub energy: Energy,
+}
+
+pub fn transformer_run(exam: &Exam, d: usize, layers: usize, epochs: usize, threshold: f32, seed: u64, meter: &crate::compare::Meter) -> TransformerRun {
+    use crate::compare::{train_transformer, Lexicon};
+    let items: Vec<crate::kinds::Item> = exam.lessons.iter().map(|l| crate::kinds::Item { unit: 0, fact: l.4, template: 0, query: l.1.clone(), answer: l.2.clone() }).collect();
+    let lex = Lexicon::from(&items);
+    let trained = train_transformer(&lex, &items, d, layers, epochs, seed, meter);
+    // (a question longer than any lesson is cut to the longest lesson: the model has no positions beyond it)
+    let ask_all = || -> Vec<(String, f32)> {
+        let mut scratch = crate::ledger::Ledger::default();
+        exam.questions
+            .iter()
+            .map(|(_, _, q, _)| {
+                let mut tokens = lex.encode(q);
+                tokens.truncate(lex.longest);
+                let (best, p) = trained.model.ask(&tokens, &mut scratch);
+                (lex.classes.get(best).cloned().unwrap_or_default(), p)
+            })
+            .collect()
+    };
+    let t = std::time::Instant::now();
+    let answers = ask_all();
+    let one_ask = t.elapsed().as_secs_f64();
+    let reps = ((MIN_WINDOW_S / one_ask.max(1e-3)).ceil() as usize).clamp(1, 400);
+    let (_, as_, aj) = meter.run(|| {
+        for _ in 0..reps {
+            std::hint::black_box(ask_all());
+        }
+    });
+    let make = |cut: f32| -> Vec<Vec<String>> {
+        exam.questions
+            .iter()
+            .zip(&answers)
+            .map(|((id, _, _, _), (a, p))| if *p >= cut { vec![id.clone(), "fact".into(), a.clone(), format!("{p:.3}")] } else { vec![id.clone(), "refuse".into(), String::new(), String::new()] })
+            .collect()
+    };
+    TransformerRun {
+        params: trained.params,
+        epochs: trained.epochs,
+        always: make(0.0),
+        cut: make(threshold),
+        threshold,
+        energy: Energy { teach_j: trained.measured_j, teach_s: trained.secs, answer_j: aj.map(|j| j / reps as f64), answer_s: as_ / reps as f64, repeats: reps },
     }
 }
 
@@ -762,6 +820,23 @@ mod tests {
         assert_eq!(v.all.thirds.map(|t| t.0), [0, 2, 1], "right in each third");
         assert_eq!(v.roles["deceptive"].n, 3);
         assert!(v.offenders[0].starts_with("S5 [hidden]"), "{:?}", v.offenders);
+    }
+
+    #[test]
+    fn the_transformer_is_put_the_same_questions_and_never_says_it_does_not_know_unless_cut() {
+        let dir = std::env::temp_dir().join(format!("exam_tf_{}", std::process::id()));
+        let dir = dir.to_string_lossy().to_string();
+        write(&dir, 6, 1).unwrap();
+        let exam = load(&dir).unwrap();
+        let run = transformer_run(&exam, 8, 1, 4, 0.9, 1, &crate::compare::Meter::new());
+        assert_eq!((run.always.len(), run.cut.len()), (exam.questions.len(), exam.questions.len()));
+        assert!(run.always.iter().all(|p| p[1] == "fact"), "without a cut it answers everything, traps included");
+        let v = judge(&exam, &run.always).unwrap();
+        assert_eq!(v.traps_answered, v.traps, "a transformer answers every trap");
+        // a cut can only turn answers into refusals, never the other way
+        assert!(run.cut.iter().zip(&run.always).all(|(c, a)| c[1] == "refuse" || c == a));
+        assert!(run.cut.iter().any(|p| p[1] == "refuse"));
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

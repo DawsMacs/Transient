@@ -8,7 +8,7 @@ Order of reading: this file, then `TransientVision.md` (Daws's own words: never 
 
 ## START HERE (state at the end of 2026-10-23)
 
-**Repo state.** `main` at the commit named by `git log -1`; **142 tests pass** (`cargo test --release --offline`, ~20 s); CI green on every commit checked; tree clean. `baby/` is pure Rust with zero dependencies; `tools/` has two naive foreign systems for the exam (Python). Nothing in `runs/` or the scratch folders matters (all regenerable); **ASDiv and SVAMP data are NOT in the repo and must not be** (ASDiv is CC BY-NC: private evaluation only).
+**Repo state.** `main` at the commit named by `git log -1`; **143 tests pass** (`cargo test --release --offline`, ~20 s); CI green on every commit checked; tree clean. `baby/` is pure Rust with zero dependencies; `tools/` has two naive foreign systems for the exam (Python). Nothing in `runs/` or the scratch folders matters (all regenerable); **ASDiv and SVAMP data are NOT in the repo and must not be** (ASDiv is CC BY-NC: private evaluation only).
 
 **What the baby is now (one paragraph).** A system taught units of lessons that chooses, per unit, how to learn it from facts it holds back (remember / rule / select / program / provisional or partial program that only guesses); states as fact only inside the range taught or checked, otherwise a labeled guess with an honest stated rate or nothing; checks itself by asking questions (and now a person can answer them: `baby tutor`); is skeptical of a source that contradicts what it is sure of; after a miss rebuilds the law (`repair_regime`) but keeps the law it replaced as a competing explanation until two later lessons separate them (`repair_veto`); on real text routes a question's kind with a learned correction layer, cuts a many-number question down to the numbers that matter (`selector`), learns from told answers where a program can place them (`learn_told`), and scales its stated confidence to what it achieved on held-back answers. Everything is judged by the entry exam (`baby exam ...`), which any successor, in any language, can be judged by.
 
@@ -21,7 +21,7 @@ Order of reading: this file, then `TransientVision.md` (Daws's own words: never 
 
 **Open problems, in the order I would take them** (Daws usually says "go ahead with your plan"; default to doing):
 1. ~~A wrong-teacher tier in the adaptive exam~~ **DONE 2026-10-23** (`baby exam adapt-write DIR --wrong P --repeat F`; the judge splits wrong facts into *repeats* of a wrongly-told fact and *elsewhere*, which must be 0). Its first run found a hole at once (a wrong lesson that a coincidence law agrees with replaced a correct tens-digit law and 19 was stated as 9; elsewhere 0/1/1 and 0/1/0 on seeds 1-3 at 10 %/20 %); fixed by `rebuild_policy` (see `baby/README.md`, first section; failure item 28). Now elsewhere 0 on all six runs, clean stream unchanged. **Run both tiers after any change to repair, refit or reach**: `adapt-write DIR --seed S --wrong 0.1 --repeat 0.3` (and 0.2) for S = 1, 2, 3 (~10-20 min in parallel). Next here: the 14-39 *repeats* (the baby still believes a teacher who repeats a wrong answer; the floor is 32-59), and a rate/teacher sweep beyond 10/20 %.
-2. **The baby's energy against the earlier transformer comparison, on the exam** (capability per joule, Entry 7), and the exam on a harder tier.
+2. **The baby's energy against the earlier transformer comparison, on the exam** (capability per joule, Entry 7): **static exam DONE 2026-10-23** (`baby exam transformer DIR`, section "The exam, put to the matched transformer" in `baby/README.md`): on seeds 1-3 the transformer states 1,500-2,800 wrong facts and answers 43-100 % of the traps (the baby: 0 and 0), teaching costs 11-24x the baby's, answering 2.2-2.7x (upper bounds, noisy machine). **Still open:** the adaptive tier for the transformer (cost of learning from a told answer; fine-tune vs replay), a quiet-machine rerun (ask Daws to close the browser), a larger/tuned model (PyTorch needs Daws's yes for the wheel; the GPU for the pretrained comparison), and the exam on a harder tier.
 3. **Let the baby choose its own next question** and ask about facts and phrasings, not only numeric units. Measured first: the current chooser is already efficient (2 questions per unit reach 99.6 % of the rule-changing kinds' coverage with 25 % fewer questions than 4), so the win is likely small; do the measurement again before building.
 4. **Win back the coverage the veto costs** under a persistent teacher (right 74.9 / 82.0 % vs 79.2 / 88.8 % before the repair step on seeds 2 / 3). One attempt (ask where the rebuilt and replaced laws part ways) was WORSE and brought back 32 wrong facts: see section 10 item 23. Untried: a second independent source; asking only repeated answers.
 5. **Cut the rest of adapting's cost**: `BABY_PROF=1 baby exam adapt-run` prints the stage times; the remainder is `review_programs` (4 rounds of ~11 s, one per library change), `refit_in_place` (118 ms x 272 surprising answers) and the 25-lesson periodic re-decisions.
@@ -58,7 +58,7 @@ Order of reading: this file, then `TransientVision.md` (Daws's own words: never 
 
 ## 2. Where the work stands (2026-10-23)
 
-Everything is in `~/Transient/baby/` (pure Rust, **zero dependencies**, builds offline, **142 tests pass**, ~13k lines) plus `tools/pytorch_baseline.py` (not under cargo). Git repo, `origin` = `git@github.com:DawsMacs/Transient.git` (**public**, Daws's global account `DawsMacs`, SSH), branch `main`, **CI green** (`.github/workflows/ci.yml`: build, tests, and the scorecard's WRONG column must be 0.0 %). License `AGPL-3.0-only` (SPDX headers, `REUSE.toml`, `LICENSE`, `LICENSES/`), DCO not CLA (`CONTRIBUTING.md`).
+Everything is in `~/Transient/baby/` (pure Rust, **zero dependencies**, builds offline, **143 tests pass**, ~13k lines) plus `tools/pytorch_baseline.py` (not under cargo). Git repo, `origin` = `git@github.com:DawsMacs/Transient.git` (**public**, Daws's global account `DawsMacs`, SSH), branch `main`, **CI green** (`.github/workflows/ci.yml`: build, tests, and the scorecard's WRONG column must be 0.0 %). License `AGPL-3.0-only` (SPDX headers, `REUSE.toml`, `LICENSE`, `LICENSES/`), DCO not CLA (`CONTRIBUTING.md`).
 All work is committed and pushed (`git log --oneline -5` shows the last commits).
 
 **The baby** (`baby school` / `baby ask` / `baby learn`) is one system:
@@ -95,7 +95,7 @@ Older headline numbers still hold (tidy 13-unit curriculum `kinds.rs`): scorecar
 
 ```
 cd ~/Transient
-cargo test --release --offline          # 142 passed (about 20 s)
+cargo test --release --offline          # 143 passed (about 20 s)
 cargo build --release --offline
 ./target/release/baby school            # teaches 13 units (~0.3 s); the honest scorecard: WRONG must be 0.0 % on every row
 ./target/release/baby ask "how far apart are two and nine"      # seven, with how it knew

@@ -382,6 +382,8 @@ description than one with a single fixed learner.
 
 - **2026-10-23** The repo and the site moved to en-US, a communication protocol for all writing and code. Because it renamed identifiers and printed strings in baby, I ran the tests (142 pass) and compared the `baby school` scorecard (identical but for spelling). For Novice it is a requirement from the first line. Details in `baby/README.md` ("en-US") and the handover.
 
+- **2026-10-23** The entry exam put to the matched transformer (`baby exam transformer`): same lessons, same judge, same meter, three seeds. The transformer fits what it was taught and then states 1,500-2,800 wrong facts and answers 43-100 % of the traps depending on whether it refuses below its own confidence; the baby states 0 and answers 0. Teaching cost is 11-24x the baby's and answering 2.2-2.7x (upper bounds on a busy machine). The adaptive tier for the transformer is the open next step.
+
 ---
 
 ## More to come

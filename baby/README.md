@@ -43,6 +43,24 @@ cargo test --offline                 # 61 tests, including numerical checks of t
 ./target/release/baby energy         # what one question and one learning step cost, counted
 ```
 
+## The exam, put to the matched transformer: capability per joule (2026-10-23; Vision Entry 7)
+
+`baby exam transformer DIR [--d N --layers N --epochs N --threshold P]` teaches the repo's plain attention transformer (`transformer.rs`, 2 layers, d = 32, trained to fit its lessons, up to 60 epochs) the static exam's lessons and puts it the same questions, judged by the same judge and measured by the same meter as `baby exam run`. A transformer cannot say "I do not know" by itself, so one trained model is scored two ways: **always answering** (every answer a fact) and **refusing below its own probability 0.9** (a conventional cut; mine, untuned). 60 units, 2,520 lessons, 4,832 questions; seeds 1, 2, 3.
+
+| | baby (seeds 1 / 2 / 3) | transformer, always answers | transformer, cut at 0.9 |
+|---|---|---|---|
+| taught / reworded, facts right | 100 / 100 % | 100 / 100 % | 100 / 100 % |
+| never taught, facts right | 94.9 / 94.9 / 83.7 % (the rest right guesses) | 97.7 / 94.4 / 97.7 % | 93.4 / 87.5 / 90.6 % |
+| beyond the taught range | 100 % right *labelled guesses*, 0 facts | **17 % right, 82 % wrong facts** | 14 % right, 44-53 % wrong facts, 33-41 % refused |
+| wrong facts stated | **0 / 0 / 0** | 2,803 / 2,772 / 2,786 | 1,497 / 1,787 / 1,710 |
+| traps answered (of 140) | **0 / 0 / 0** | 140 / 140 / 140 | 64 / 68 / 60 |
+| teaching energy | 1.88 / 1.02 / 0.54 J | 21.6 / 24.9 / 10.9 J | same model |
+| answering, per question | 58 / 67 / 55 uJ | 158 / 145 / 135 uJ | same model |
+
+The transformer teaches itself in 10-15 epochs (39,000 parameters) and fits what it was taught perfectly. Per question it is 2.2-2.7x the baby's answering cost; teaching is **11-24x** the baby's (paired in the same session, same load; the baby's teaching window is 0.34 s, so its joules swing from 0.5 to 1.9 J between seeds while its answers do not change). The comparison that matters is the honesty column: a cut on the transformer's own confidence still states 1,500-1,800 wrong facts and answers 43-49 % of the traps, because its confidence is high exactly where it has no basis (the same finding as the earlier comparison, now on the exam any successor is judged by).
+
+**Caveats, stated plainly.** (1) Joules are the processor package above idle with other processes using up to ~49 % of the busy time during these runs: upper bounds, +-30 %. (2) "Right answers per joule" is not comparable across the two without reading the table: the baby's 4,692 right answers include 3,396 right *labelled guesses* beyond the taught range, the transformer's 1,889 are stated facts, and 2,943 of its facts were wrong. By the honest count (right minus stated wrong) the transformer's always-answering run is at 0 per joule and the cut run at 0-10 per joule. (3) One small plain transformer, trained once with no search; the earlier comparison's 24-setting PyTorch search did not change the unseen-question picture, but a larger or tuned model was not run here and the pretrained-model comparison still waits for the GPU. (4) The baby's never-taught coverage depends on the world: 83.7 % facts on seed 3 (16.3 % right guesses) against 94.9 % on seeds 1 and 2; the handover's 94.9 % bar is seed 1/2, not an average. (5) The exam is the baby's home ground (synthetic, tidy, number words); the transformer is not at a disadvantage in reading it, but the questions beyond the taught range need answers it has never seen as classes, which is exactly the point of those questions. (6) Not run: the adaptive tier for the transformer (what it costs to learn from a told answer; the earlier comparison measured fine-tuning at 125-227 mJ and forgetful, replay at 1.2-3.9 J, against the baby's ~60 mJ for 20 facts); that is the natural next step.
+
 ## The exam's wrong-teacher tier, and the hole it found on its first run (2026-10-23)
 
 **What was added.** `baby exam adapt-write DIR --wrong P --repeat F`. The adaptive stream's truths are told wrongly for a share `P` of the *facts*, consistently: every time that fact comes up, in any phrasing or as an exact re-ask, the teacher says the same wrong answer (the true answer plus 1-9). `--repeat F` re-asks that share of the stream later, so a believed mistake can show itself. `stream.tsv` gains two columns, `TOLD` and `FACT`; the `TOLD` protocol line carries the told answer, so a system cannot tell. Answers are judged against the truth. The judge splits each wrong fact in two: a **repeat** (that fact was wrongly told earlier in the stream: the system believed its teacher) and **elsewhere** (a fact never wrongly told: the teacher's mistakes damaged something). **Elsewhere must be 0**; repeats are reported, not failed. This is open problem 1 of the handover.
