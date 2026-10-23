@@ -24,7 +24,7 @@ Order of reading: this file, then `TransientVision.md` (Daws's own words: never 
 
 ## 2. Where the work stands (2026-10-22)
 
-Everything is in `~/Transient/baby/` (pure Rust, **zero dependencies**, builds offline, **128 tests pass**, ~13k lines) plus `tools/pytorch_baseline.py` (not under cargo). Git repo, `origin` = `git@github.com:DawsMacs/Transient.git` (**public**, Daws's global account `DawsMacs`, SSH), branch `main`, **CI green** (`.github/workflows/ci.yml`: build, tests, and the scorecard's WRONG column must be 0.0 %). Licence `AGPL-3.0-only` (SPDX headers, `REUSE.toml`, `LICENSE`, `LICENSES/`), DCO not CLA (`CONTRIBUTING.md`).
+Everything is in `~/Transient/baby/` (pure Rust, **zero dependencies**, builds offline, **131 tests pass**, ~13k lines) plus `tools/pytorch_baseline.py` (not under cargo). Git repo, `origin` = `git@github.com:DawsMacs/Transient.git` (**public**, Daws's global account `DawsMacs`, SSH), branch `main`, **CI green** (`.github/workflows/ci.yml`: build, tests, and the scorecard's WRONG column must be 0.0 %). Licence `AGPL-3.0-only` (SPDX headers, `REUSE.toml`, `LICENSE`, `LICENSES/`), DCO not CLA (`CONTRIBUTING.md`).
 All work is committed and pushed (the last commit is "Skepticism on by default..." or later: `git log --oneline -5`).
 
 **The baby** (`baby school` / `baby ask` / `baby learn`) is one system:
@@ -57,7 +57,7 @@ Older headline numbers still hold (tidy 13-unit curriculum `kinds.rs`): scorecar
 
 ```
 cd ~/Transient
-cargo test --release --offline          # 128 passed (about 25 s)
+cargo test --release --offline          # 131 passed (about 25 s)
 cargo build --release --offline
 ./target/release/baby school            # teaches 13 units (~0.3 s); the honest scorecard: WRONG must be 0.0 % on every row
 ./target/release/baby ask "how far apart are two and nine"      # seven, with how it knew
@@ -82,7 +82,7 @@ If `wrong` is ever above 0.0 % on the scorecard (outside the deceptive kinds, wh
 
 ## 4. Commands (`baby <command>`; usage at the top of `main.rs`)
 
-`school [--permissive]`, `ask "..." [--permissive]`, `learn "<q>" <a> [--unit NAME] [--wondered]` (with `--wondered`, a contradiction of a settled rule is held; say it again to confirm), `wonder [--check] [--limit N]`, `sleep [--compact]`, `discover`, `grade`, `cost`, `storage`, `effort`, `teach`, and the experiments:
+`tutor [--school FILE --rounds N --limit N --out FILE]` (a person answers the baby's own check questions), `school [--permissive]`, `ask "..." [--permissive]`, `learn "<q>" <a> [--unit NAME] [--wondered]` (with `--wondered`, a contradiction of a settled rule is held; say it again to confirm), `wonder [--check] [--limit N]`, `sleep [--compact]`, `discover`, `grade`, `cost`, `storage`, `effort`, `teach`, and the experiments:
 - `scale [--units N --entities N --noise F --digits --typos F --no-reorg | --sweep 20,60,200,600]`
 - `invent [--seed N | --seeds K] [--noise F] [--bar F] [--stage2-first] [--active | --check | --careful [--rounds N --limit N] | --guesses | --corrections | --calibrate]`
 - `bridge (--svamp FILE | --pairs FILE.tsv) [--units kind|discover] [--split random|blocks] [--numbers N] [--test F] [--seed N]` (real text; `--pairs` is `question TAB answer [TAB kind]`)
@@ -101,6 +101,7 @@ Global: `--bar F` forces the reliability bar (measurement only).
 | `program.rs` | expression search (`fit_repair_with`, `ProgramRule.repaired`: the lessons a repair was built around, saved as `repaired N`/`rep` lines); `Library`; `fit_trusted_with` (exact first, then `fit_partial_with`: >= 80 % of >= 24 lessons, MDL-checked), `ambiguity`; `ProgramRule.partial` |
 | `quantity.rs` | number line, digits, `fit_ridge_robust`, `op_of`/`active_ops`/`all_ops` |
 | `discover.rs`, `scale.rs` (also `teacher_truth`, `sems`), `invent.rs` | unit discovery; the scale-test generator; the invention battery (Base/Hidden/Stage2/Deceptive/Unexplainable) and its careful/guesses/corrections/calibrate runs |
+| `tutor.rs` | `session`: the baby asks (`check_myself`), a person answers (a function, so tests use the same code); a contradicting answer is held until repeated; `question => answer` goes through `learn_told` |
 | `selector.rs` | which numbers of a question matter: averaged perceptron on the words around each number and its overlap with the question (the last sentence); `focus` keeps two and blanks the rest; `used_pair` finds the one pair a program turns into the answer; saved in the school file |
 | `bridge.rs` | `baby bridge`: real-text corpora (SVAMP JSON via a minimal zero-dependency JSON reader, or TSV), readability filters, split, teach, grade with oracle and routing diagnostics |
 | `transformer.rs`, `compare.rs` | a from-scratch attention transformer with hand-written, gradient-checked backward pass; `baby compare` (the whole comparison, the refusal diagnostic, the teacher-check experiment, the energy `Meter`) |
@@ -143,7 +144,7 @@ Docs: `README.md` (public technical overview), `docs/Direction.md` (strategy, ha
 2. **Pretrained-model comparison on real text** once Daws has the GPU: what does a 0.5-8B model score on SVAMP, at what joules, against the baby's labelled guesses.
 3. **Comparison extensions:** more seeds at >= 400 units (the 253x at 1,000 units is one run; the ratio depends on how many epochs the transformer needs, 5-45); beyond 1,000 units; a larger PyTorch search (24 settings is small) and digit-aware number encoding; an optimised transformer to separate algorithm from implementation.
 4. **Sources wrong about a whole kind of thing** (cannot be caught from inside: all its lessons agree): per-source track records, provenance and quarantine (the design notes are in Vision Entry 2); an experiment with a teacher consistently wrong about *every* sum, and a second, right, source to compare.
-5. **A real interactive teacher** (the machinery for taking in a told answer exists: `School::place_told` / `learn_told`, `bridge --online` measures it, +0.3-2.5 points over 240-324 questions; a CLI that asks the person its check questions and handles `disputed` still does not exist): a command that asks the user its check questions one by one and handles `disputed` (the CLI pieces exist: `baby wonder --check` lists, `baby learn --wondered` holds and confirms); today only simulated teachers have been run.
+5. ~~A real interactive teacher~~ **DONE 2026-10-22: `baby tutor`** (`tutor.rs`; handles `disputed`, `question => answer` via `place_told`/`learn_told`; scripted tests only, no real session yet beyond piped answers; next: let it choose the question whose answer tells it most, and ask about facts/phrasings, not only numeric units) (the machinery for taking in a told answer: `School::place_told` / `learn_told`, `bridge --online` measures it, +0.3-2.5 points over 240-324 questions): a command that asks the user its check questions one by one and handles `disputed` (the CLI pieces exist: `baby wonder --check` lists, `baby learn --wondered` holds and confirms); today only simulated teachers have been run.
 6. ~~Make "update after a miss" learn the new regime~~ **DONE 2026-10-22** (`repair_regime`). Still open from it: it only helps regimes expressible in 7 pieces with a number the contradictions name; its guesses are labelled and widen to facts only through checks, so use the repaired program to *choose* the next check (the point where the candidate laws differ); a second source to tell a one-point repair from a slip.
 
 **Smaller OPEN items (each is in the READMEs with its evidence):** the 1.6 % weakest tail the recognition floor leaves (a policy choice, not a bug); compacted schools (`sleep --compact`) read their reach from the lessons that remain (untested under careful; likely too narrow); the reach check is not counted in the operation ledger; the `asked` count of the old careful table (498 vs ~230) never explained; **library capacity / pinning** (8 function slots vs ~14 program units); **asking about facts and phrasings** (today only numeric units) and choosing questions by expected information; merged rule families; **discovery at scale** (quadratic pair loops); the pen with thousands of waiting lessons; adapting more knobs from measurement (folds, outlier allowance, search budget); a compact lossless storage format; wiring the real energy meter into the ledger (my 45 nm estimates were ~100x below the measurements); **the UMA growth path** and **mechanisms of a different kind**: not started; Rust proof points from `docs/Direction.md`: not started; the number line is still taught by counting lessons.

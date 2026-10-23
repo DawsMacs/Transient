@@ -358,6 +358,8 @@ description than one with a single fixed learner.
 
 - **2026-10-22** Learning from being told (Entry 9: fewer mistakes by learning from true facts): when the baby is told the true answer to a question it guessed at, it now files the question where a program reproduces that answer from some of its numbers, which also says which numbers mattered, and learns the selector and the routing again from it. My first version filed every correction wherever the question routed and made things worse late in a stream (37 down to 15 % right), because lessons a unit's program cannot explain dragged it below 80 % explained and it lost its program; it now learns only what it can place (49 to 90 % of the answers). The result is small and honest: over streams of 240 to 324 held-out questions guesses right rise by 0.3 to 2.5 points and routing by up to 4, in all five streams, never wrong as fact; the errors that remain are mostly wording, not a shortage of lessons.
 
+- **2026-10-22** A person can now answer the baby's own questions (`baby tutor`): it shows each question, why it asks and what it would say now; you type the answer. It is skeptical of you the way it is of any source: an answer that contradicts a rule it has good evidence for is held until you repeat it (a different second answer leaves it unsettled, Enter keeps its rule), and `a question => the answer` teaches it something of your own, filed where a program reproduces the answer. Until now only simulated and scripted teachers had answered it. Honest limit: no real person has yet used it beyond me piping in a few answers.
+
 ---
 
 ## More to come
