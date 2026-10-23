@@ -343,6 +343,8 @@ fn routing_features(q: &str, line: &NumberLine) -> Vec<String> {
 
 const ROUTE_TAIL: usize = 8;
 const ROUTE_FOLDS: usize = 5;
+/// A settled exact unit takes in this many told lessons between thinking its way of learning through again from scratch.
+const SETTLED_RETHINK_EVERY: usize = 25;
 /// How many lessons a unit that only guesses takes in between looking again at its program.
 const GUESSER_REFIT_EVERY: usize = 25;
 /// After this many lessons it was told, the routing corrections are learned again.
@@ -1851,13 +1853,31 @@ impl School {
                     self.add_to_tables(u, query);
                 }
             }
-            self.relearn_unit(u);
+            // Think the unit through again, now: unless it is a settled exact rule, selection or program (nothing to decide: a surprising answer was already
+            // taken in by `learn`, a confirming one only extends where it may state facts), which looks again only every `SETTLED_RETHINK_EVERY` lessons.
+            // (Re-deciding is a cross-validation of every mechanism: it was most of the energy of a stream of told answers, 1.8 J each.)
+            if !(self.settled_exact(u) && self.units[u].facts() % SETTLED_RETHINK_EVERY != 0) {
+                self.relearn_unit(u);
+            } else if !learned.surprised {
+                let items = self.units[u].lessons.clone();
+                self.units[u].remember = Remembered::from_items(&items);
+                self.settle_reach(u);
+            }
             self.repair_regime(u);
         }
         // a change in vocabulary can give a settled-looking program a rival: ask each one, cheaply, whether it is still the only explanation
         self.review_programs();
         self.maybe_recalibrate_route();
         Ok(learned)
+    }
+
+    /// Is unit `u` a rule, selection or exact program with no competing explanation, reliable on the facts held back? (Nothing left to decide about how to learn it.)
+    fn settled_exact(&self, u: usize) -> bool {
+        let unit = &self.units[u];
+        matches!(unit.chosen, Mech::Rule | Mech::Select | Mech::Program)
+            && unit.best_evidence() >= mechanisms::reliable()
+            && !matches!(&unit.state, Fitted::Program(Some(p)) if p.partial.is_some() || !p.alts.is_empty())
+            && !matches!(&unit.state, Fitted::Program(None) | Fitted::Remember(_) | Fitted::Network(_))
     }
 
     /// `learn_wondered` for a teacher who repeats themselves: if the answer is held for a second opinion, say it again (so a contradiction that

@@ -368,6 +368,8 @@ description than one with a single fixed learner.
 
 - **2026-10-23** Joules in the exam (Entry 7: capability per joule as the machine itself measures it). The exam now reports what teaching and what answering cost on the CPU's own counter, for the baby and for any system run through the pipe protocol. The baby teaches 2,520 lessons for 0.68 J and answers 4,832 questions for 0.28 J: lookup after learning is close to free, about 4,800 right answers per joule overall. But on the adaptive stream, learning from every told answer, it spent 1,419 J, 1.8 J a question, forty times what teaching everything cost, for half a right answer per joule. Adapting is where the baby's energy goes, and doing it without thinking the whole unit through again is the next thing to beat. Honest limits: one run each for the adaptive figures, desktop counter to about thirty per cent, only the processor package.
 
+- **2026-10-23** Beaten by 3.5 times the same day, by reading the code rather than guessing: for every answer it was told, the baby re-decided how to learn the whole unit (a cross-validation of every mechanism), twice when the answer surprised it. A rule it has already settled on now simply takes the lesson in and extends where it may speak, and thinks it through afresh every twenty-five lessons. The same stream costs 400 joules instead of 1,419 (half a joule a question instead of 1.8), with the same answers and nothing wrong stated as fact; the rule-changing kinds even came out a little better in the long careful battery (718 right of 720 against 704). That is still thousands of times what answering without learning costs, so there is more to find.
+
 ---
 
 ## More to come
