@@ -374,6 +374,8 @@ pub fn print_prof() {
 }
 
 const ROUTE_FOLDS: usize = 5;
+/// A repaired program overrules the law it replaced once this many lessons told after the repair have separated the two.
+const RETIRE_AFTER: usize = 2;
 /// A settled exact unit takes in this many told lessons between thinking its way of learning through again from scratch.
 const SETTLED_RETHINK_EVERY: usize = 25;
 /// How many lessons a unit that only guesses takes in between looking again at its program.
@@ -430,6 +432,8 @@ pub struct School {
     told_since_retrain: usize,
     /// Set while a lesson that was told is being taken in (`learn_told`): a unit that only guesses then is not re-fitted for every lesson.
     cheap_guessers: bool,
+    /// For each repaired unit: (lessons when computed, the law it replaced re-derived from its other lessons, how many lessons told since have separated the two laws).
+    old_law: std::cell::RefCell<HashMap<String, (usize, Option<Fitted>, usize)>>,
     /// What the selector was taught from (text, positions of the numbers used) and what it has been told since, so that it can be taught again.
     selector_examples: Vec<(String, Vec<usize>)>,
     /// For each unit, of the held-back lessons that were routed to it, the share that really belonged there (measured only when some unit is a
@@ -631,7 +635,7 @@ impl School {
         weights.lib = library;
         let routing = Routing::build(&units, &line);
         let library_seen = weights.lib.to_lines();
-        let mut school = School { units, weights, routing, line, route_floor: f32::NEG_INFINITY, route_base: f32::NEG_INFINITY, route_ratio: 0.0, calibrated_lessons: 0, seed, library_seen, bar, careful: true, skeptical: true, disputed: Vec::new(), guess_record: [(0, 0); 5], repair_failed: Vec::new(), selector: None, guess_scale: [1.0, 1.0], told_since_retrain: 0, cheap_guessers: false, selector_examples: Vec::new(), route_precision: Vec::new(), pen: Vec::new() };
+        let mut school = School { units, weights, routing, line, route_floor: f32::NEG_INFINITY, route_base: f32::NEG_INFINITY, route_ratio: 0.0, calibrated_lessons: 0, seed, library_seen, bar, careful: true, skeptical: true, disputed: Vec::new(), guess_record: [(0, 0); 5], repair_failed: Vec::new(), selector: None, guess_scale: [1.0, 1.0], told_since_retrain: 0, cheap_guessers: false, old_law: Default::default(), selector_examples: Vec::new(), route_precision: Vec::new(), pen: Vec::new() };
         // How decisive must a question be to count as a recognisable kind? Learned from rewordings of lessons it was taught.
         let own: Vec<&Item> = train.iter().collect();
         let (queries, safety): (Vec<&str>, f32) = match calibration {
@@ -845,6 +849,42 @@ impl School {
 
     /// Measure how often a question routed to each unit really belongs there, by routing every lesson with the table built from the others.
     /// Only when some unit is a partial program; elsewhere routing is exact and precision is taken as 1.
+    /// A rebuilt law (a repaired program) does not yet get to overrule the law it replaced. That law is a competing explanation, and the project's rule is to
+    /// state only where competing explanations agree: until `RETIRE_AFTER` lessons told AFTER the repair have separated the two (the old one wrong, the new one
+    /// right), anything the new law says that the old law contradicts is only a guess. Without this, one wrong lesson beyond the taught range (a persistent
+    /// teacher's) could be rebuilt into a law, and answers that merely agree with both laws then vouched for it where they differ.
+    fn repair_veto(&self, u: usize, q: &str, said: &str) -> u8 {
+        let unit = &self.units[u];
+        let Fitted::Program(Some(p)) = &unit.state else { return 0 };
+        let mech = match p.before.as_deref() {
+            Some("rule") => Mech::Rule,
+            Some("select") => Mech::Select,
+            Some("program") => Mech::Program,
+            _ => return 0,
+        };
+        let n = unit.lessons.len();
+        let mut cache = self.old_law.borrow_mut();
+        let entry = cache.entry(unit.name.clone()).or_insert((usize::MAX, None, 0));
+        if entry.0 != n {
+            let others: Vec<Item> = unit.lessons.iter().filter(|l| !p.repaired.contains(&l.query)).cloned().collect();
+            let old = fit(mech, &others, &self.weights, self.seed);
+            let support = others
+                .iter()
+                .filter(|l| predict(&old, &l.query, &self.weights).as_deref() != Some(l.answer.as_str()) && predict(&unit.state, &l.query, &self.weights).as_deref() == Some(l.answer.as_str()))
+                .count();
+            *entry = (n, Some(old), support);
+        }
+        if entry.2 >= RETIRE_AFTER {
+            return 0;
+        }
+        match entry.1.as_ref().and_then(|o| predict(o, q, &self.weights)) {
+            Some(o) if o != said => 1,
+            Some(_) => 0,
+            // the law it replaced has nothing to say here (a result it cannot represent, say): that is no endorsement
+            None => 2,
+        }
+    }
+
     fn settle_route_precision(&mut self) {
         let any_partial = self.units.iter().any(|u| matches!(&u.state, Fitted::Program(Some(p)) if p.partial.is_some()));
         if !any_partial || self.units.len() < 2 {
@@ -1328,6 +1368,28 @@ impl School {
                         };
                     }
                 }
+                if let (Some(a), Fitted::Program(Some(p))) = (&answer, &unit.state) {
+                    // (a question it was told, exactly, is a fact whatever the old law says: that is what it was told)
+                    let vetoed = if !p.repaired.is_empty() && p.partial.is_none() && unit.remember.exact(q).as_deref() != Some(a.as_str()) { self.repair_veto(u, q, a) } else { 0 };
+                    if vetoed != 0 {
+                        let how = if vetoed == 1 {
+                            "this unit's rule was rebuilt from a correction, and the rule it replaced says something else here"
+                        } else {
+                            "this unit's rule was rebuilt from a correction, and the rule it replaced has nothing to say here"
+                        };
+                        if unit.refuted || vetoed == 2 {
+                            // (a unit that has been shown wrong somewhere does not even guess; nor does a rebuilt rule where the earlier one is silent)
+                            return Reply { guess: None, answer: None, unit: Some(u), how: said(&format!("{how}: I will not say")) };
+                        }
+                        let (hit, miss) = self.guess_record[stretch_bucket(0.3)];
+                        return Reply {
+                            guess: Some(Guess { answer: a.clone(), stretch: 0.3, rate: (hit as f32 + 1.0) / ((hit + miss) as f32 + 2.0), tried: hit + miss }),
+                            answer: None,
+                            unit: Some(u),
+                            how: said(&format!("{how}: only a guess until more lessons have settled which is right")),
+                        };
+                    }
+                }
                 if self.careful && answer.is_some() && matches!(unit.chosen, Mech::Rule | Mech::Select | Mech::Program) {
                     if let (Some((why, stretch)), Some(a)) = (self.beyond_reach(u, &tokens), answer.as_ref()) {
                         // a question it was told, and the unit's own working agrees with what it was told: that is a fact, whatever the reach
@@ -1484,6 +1546,10 @@ impl School {
             }
         }
         rule.repaired = repaired;
+        rule.before = match &unit.state {
+            Fitted::Program(Some(p)) if p.before.is_some() => p.before.clone(),
+            _ => Some(unit.chosen.name().to_string()),
+        };
         let before = unit.best_evidence();
         let unit = &mut self.units[u];
         unit.state = Fitted::Program(Some(rule));
@@ -2582,7 +2648,7 @@ impl School {
                     writeln!(out, "partial {share}").unwrap();
                 }
                 if !p.repaired.is_empty() {
-                    writeln!(out, "repaired {}", p.repaired.len()).unwrap();
+                    writeln!(out, "repaired {} {}", p.repaired.len(), p.before.as_deref().unwrap_or("-")).unwrap();
                     for q in &p.repaired {
                         writeln!(out, "rep {q}").unwrap();
                     }
@@ -2812,7 +2878,11 @@ impl School {
                         it.next();
                         rule.partial = Some(share);
                     }
-                    if let Some(n) = it.clone().next().and_then(|l| l.strip_prefix("repaired ")).and_then(|n| n.trim().parse::<usize>().ok()) {
+                    if let Some((n, before)) = it.clone().next().and_then(|l| l.strip_prefix("repaired ")).and_then(|l| {
+                        let mut parts = l.split_whitespace();
+                        Some((parts.next()?.parse::<usize>().ok()?, parts.next().filter(|b| *b != "-").map(String::from)))
+                    }) {
+                        rule.before = before;
                         it.next();
                         for _ in 0..n {
                             rule.repaired.push(it.next().ok_or("rep line")?.strip_prefix("rep ").ok_or("bad rep line")?.to_string());
@@ -2830,7 +2900,7 @@ impl School {
         weights.lib = library;
         let routing = Routing::build(&units, &line);
         let library_seen = weights.lib.to_lines();
-        let mut school = School { units, weights, routing, line, route_floor, route_base, route_ratio, calibrated_lessons: 0, seed, library_seen, bar, careful, skeptical: true, disputed, guess_record, repair_failed: Vec::new(), selector, guess_scale, told_since_retrain: 0, cheap_guessers: false, selector_examples: Vec::new(), route_precision: Vec::new(), pen };
+        let mut school = School { units, weights, routing, line, route_floor, route_base, route_ratio, calibrated_lessons: 0, seed, library_seen, bar, careful, skeptical: true, disputed, guess_record, repair_failed: Vec::new(), selector, guess_scale, told_since_retrain: 0, cheap_guessers: false, old_law: Default::default(), selector_examples: Vec::new(), route_precision: Vec::new(), pen };
         school.calibrated_lessons = school.total_lessons();
         school.settle_all_reach();
         Ok(school)
@@ -3431,6 +3501,22 @@ mod tests {
         // and nothing below the probes is stated as a fact it cannot back: the truth under (48, 12) at (19, 2) is 21
         let r = s.ask("what is 19 zork 2");
         assert!(r.answer.as_deref().map_or(true, |a| a == "21"), "stated {:?}, truth 21 ({})", r.answer, p.expr.show());
+    }
+
+    #[test]
+    fn a_rebuilt_law_does_not_overrule_the_one_it_replaced_until_lessons_told_after_the_repair_have_separated_them() {
+        let mut s = sums_school(|a, b| (a + b).min(30));
+        s.set_careful(true);
+        s.learn("what is 24 zork 12", "30", Some("zork")).unwrap(); // the repair: min(first + second, 30)
+        s.learn("what is 48 zork 12", "30", Some("zork")).unwrap(); // the first lesson since that the old law gets wrong and the new one right
+        // (30, 10) lies under (48, 12), which vouches for it, but the old law says 40 and the new one 30: one lesson is not yet enough
+        let r = s.ask("what is 30 zork 10");
+        assert!(r.answer.is_none(), "not yet a fact: {:?}", r.answer);
+        assert_eq!(r.guess.map(|g| g.answer).as_deref(), Some("30"), "but the rebuilt law may guess");
+        assert_eq!(s.ask("what is 48 zork 12").answer.as_deref(), Some("30"), "what it was told is a fact whatever the old law says");
+        // a second lesson that separates them retires the old law
+        s.learn("what is 12 zork 48", "30", Some("zork")).unwrap();
+        assert_eq!(s.ask("what is 30 zork 10").answer.as_deref(), Some("30"), "now the rebuilt law speaks as fact where it is vouched for");
     }
 
     #[test]

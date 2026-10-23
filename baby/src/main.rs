@@ -80,7 +80,7 @@ struct Args {
 
 impl Args {
     fn parse(raw: &[String]) -> Args {
-        const FLAGS: [&str; 23] = ["curriculum", "quiet", "tsv", "verbose", "guess", "piece-keys", "full", "compact", "no-reorg", "row", "digits", "stage2-first", "active", "wondered", "check", "careful", "permissive", "guesses", "corrections", "calibrate", "skeptical", "persistent", "trusting"];
+        const FLAGS: [&str; 26] = ["curriculum", "quiet", "tsv", "verbose", "guess", "piece-keys", "full", "compact", "no-reorg", "row", "digits", "stage2-first", "active", "wondered", "check", "careful", "permissive", "guesses", "corrections", "calibrate", "skeptical", "persistent", "trusting", "select", "online", "no-joules"];
         let mut positional = Vec::new();
         let mut opts = HashMap::new();
         let mut i = 0;
@@ -1811,12 +1811,13 @@ fn main() {
             }
             if args.flag("careful") {
                 let seeds: u64 = args.get("seeds", 1);
+                let first: u64 = args.get("first", 1);
                 let rounds: usize = args.get("rounds", 3);
                 let per_unit: usize = args.get("limit", 2);
                 let mut dec: Vec<invent::Tally3> = vec![Default::default(); rounds + 2];
                 let mut gen: Vec<invent::Tally3> = vec![Default::default(); rounds + 2];
                 let mut asked = 0;
-                for seed in 1..=seeds {
+                for seed in first..first + seeds {
                     let r = invent::run_careful(seed, rounds, per_unit);
                     for i in 0..rounds + 2 {
                         dec[i].right += r.deceptive[i].right; dec[i].refused += r.deceptive[i].refused; dec[i].wrong += r.deceptive[i].wrong;

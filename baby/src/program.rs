@@ -359,6 +359,8 @@ pub struct ProgramRule {
     /// only as good as one point, and the point is consistent with many laws (a cap at 24 explains 24 + 12 = 24 as well as one at 30 would
     /// explain 30), so those lessons are told facts but never vouch for the questions below them.
     pub repaired: Vec<String>,
+    /// For a repaired program: what the unit was before the repair ("rule", "select" or "program"). The law it replaced stays a competing explanation (see `School::repair_veto`).
+    pub before: Option<String>,
     arity: usize,
     line: NumberLine,
     vocab: HashSet<String>,
@@ -377,7 +379,7 @@ impl ProgramRule {
 
     /// Rebuild a program that was saved as text.
     pub fn rebuild(expr: Expr, arity: usize, vocab: Vec<String>) -> ProgramRule {
-        ProgramRule { expr, alts: Vec::new(), partial: None, repaired: Vec::new(), work: 0, arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.into_iter().collect() }
+        ProgramRule { expr, alts: Vec::new(), partial: None, repaired: Vec::new(), before: None, work: 0, arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.into_iter().collect() }
     }
 
     fn read(line: &NumberLine, q: &str) -> (Vec<f32>, Vec<String>) {
@@ -651,7 +653,7 @@ impl ProgramRule {
                 hits_n += 1;
                 hit_exprs.push(c.expr.clone());
                 if first.is_none() {
-                    first = Some(ProgramRule { expr: c.expr.clone(), arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work, alts: Vec::new(), partial: None, repaired: Vec::new() });
+                    first = Some(ProgramRule { expr: c.expr.clone(), arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work, alts: Vec::new(), partial: None, repaired: Vec::new(), before: None });
                 }
                 if !count_all {
                     return (first, behaviours(&hit_exprs), hit_exprs);
@@ -674,7 +676,7 @@ impl ProgramRule {
                     hits_n += 1;
                     hit_exprs.push(Expr::Half(Box::new(c.expr.clone())));
                     if first.is_none() {
-                        first = Some(ProgramRule { expr: Expr::Half(Box::new(c.expr.clone())), arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work, alts: Vec::new(), partial: None, repaired: Vec::new() });
+                        first = Some(ProgramRule { expr: Expr::Half(Box::new(c.expr.clone())), arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work, alts: Vec::new(), partial: None, repaired: Vec::new(), before: None });
                     }
                     if !count_all {
                         return (first, behaviours(&hit_exprs), hit_exprs);
@@ -707,7 +709,7 @@ impl ProgramRule {
                                 hit_exprs.push(Expr::Bin(op, Box::new(l.expr.clone()), Box::new(r.expr.clone())));
                                 if first.is_none() {
                                     let expr = Expr::Bin(op, Box::new(l.expr.clone()), Box::new(r.expr.clone()));
-                                    first = Some(ProgramRule { expr, arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work, alts: Vec::new(), partial: None, repaired: Vec::new() });
+                                    first = Some(ProgramRule { expr, arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work, alts: Vec::new(), partial: None, repaired: Vec::new(), before: None });
                                 }
                                 if !count_all {
                                     return (first, behaviours(&hit_exprs), hit_exprs);
@@ -745,7 +747,7 @@ impl ProgramRule {
                                 hits_n += 1;
                                 hit_exprs.push(expr.clone());
                                 if first.is_none() {
-                                    first = Some(ProgramRule { expr: expr.clone(), arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work, alts: Vec::new(), partial: None, repaired: Vec::new() });
+                                    first = Some(ProgramRule { expr: expr.clone(), arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work, alts: Vec::new(), partial: None, repaired: Vec::new(), before: None });
                                 }
                                 if !count_all {
                                     return (first, behaviours(&hit_exprs), hit_exprs);
@@ -905,7 +907,7 @@ mod tests {
     fn a_long_fit_found_late_over_thin_data_is_not_believed_but_a_short_one_found_early_is() {
         let thin: Vec<Item> = (0..13).map(|a: i64| Item { unit: 0, fact: a as usize, template: 0, query: format!("zork {a}"), answer: ((a % 3 == 0) as i64).to_string() }).collect();
         let rich: Vec<Item> = (0..12).flat_map(|a: i64| (0..4).map(move |b: i64| (a, b))).map(|(a, b)| Item { unit: 0, fact: (a * 4 + b) as usize, template: 0, query: format!("zork {a} {b}"), answer: (a * a + b * b).to_string() }).collect();
-        let rule = |work| ProgramRule { expr: Expr::A, alts: Vec::new(), partial: None, repaired: Vec::new(), work, arity: 1, line: NumberLine::from_counting(&counting_lessons()), vocab: HashSet::new(), };
+        let rule = |work| ProgramRule { expr: Expr::A, alts: Vec::new(), partial: None, repaired: Vec::new(), before: None, work, arity: 1, line: NumberLine::from_counting(&counting_lessons()), vocab: HashSet::new(), };
         assert!(!rule(100_000).is_believable(&thin), "13 bits of 0/1 against 17 bits of searching: luck explains it");
         assert!(rule(500).is_believable(&thin), "9 bits of searching against 13 bits of data");
         assert!(rule(3_000_000).is_believable(&rich), "48 facts with many answers carry far more than 22 bits");

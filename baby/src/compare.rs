@@ -857,6 +857,12 @@ pub fn run_teacher(seed: u64, units: usize, rounds: usize, per_unit: usize, wron
     }
     // the traps: questions that must never be answered (a negative result, a result with no number word, two attributes at once, ...)
     let traps = sw.must_refuse.iter().filter(|(q, _)| school.ask(q).answer.is_some()).count();
+    if std::env::var("TRAP_DEBUG").is_ok() {
+        for (q, why) in sw.must_refuse.iter().filter(|(q, _)| school.ask(q).answer.is_some()) {
+            let r = school.ask(q);
+            eprintln!("TRAP ANSWERED {q:?} ({why}) -> {:?}: {}", r.answer, r.how);
+        }
+    }
     println!("\nmust-refuse traps answered after all that learning: {traps} of {}", sw.must_refuse.len());
     println!("\n{unanswerable} check questions had no answer a teacher could give in number words (a result past ten, a negative result); wrong answers stated as fact, summed over every report: {wrong_ever}");
 }
