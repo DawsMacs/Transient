@@ -22,12 +22,12 @@ cargo build --release --offline
 ./target/release/baby storage                  # what it keeps: lessons vs what it learned from them, per unit
 ./target/release/baby sleep --compact          # forget what is already explained (about half the file), keep every promise
 ./target/release/baby grade                    # re-run the honest scorecard on a saved school
-./target/release/baby discover --out runs/discovered.school   # hand it a heap of UNLABELLED lessons; it finds the units itself
-./target/release/baby ask --school runs/discovered.school "three minus five"   # ask the baby that organised itself
+./target/release/baby discover --out runs/discovered.school   # hand it a heap of UNLABELED lessons; it finds the units itself
+./target/release/baby ask --school runs/discovered.school "three minus five"   # ask the baby that organized itself
 ```
 
 Every answer comes with how the baby knew (`worked out by an expression I built, (first x second), 100% on facts I held back` /
-`recalled, not worked out`), and every refusal with why (`I haven't met the word...`, `I only memorise this kind of thing and
+`recalled, not worked out`), and every refusal with why (`I haven't met the word...`, `I only memorize this kind of thing and
 nothing I was taught is close enough`, `no kind of lesson I was taught is like this question`).
 
 The older experiments, each of which has its own section below:
@@ -56,13 +56,13 @@ cargo test --offline                 # 61 tests, including numerical checks of t
 
 **What the one-unit trace showed** (`STREAM_UNIT=<unit>` prints each question to that unit with how it answered and what it held). The tens-digit kind held the correct `first div 10` until the teacher wrongly said `28 -> 8` (true: 2). Right after that lesson the unit held `(first mod 10) apart (((first div 10) + (first mod 10)) mod 10)`, which says 8 at 28 and *is* the tens digit wherever the two digits sum to less than ten. It fits every lesson including the wrong one, with no exception to pay for, so the fresh decision preferred it; it replaced a correct law, was not marked as a repair (so the replaced-law veto of last session never applied), and 19 was stated as fact: 9 (true: 1). A second case (`modthree`) looked the same. This is the ambiguity family again, now entered through a wrong teacher: **one wrong answer can pose as support for a rival law.**
 
-**The fix.** `School::rebuild_policy`, used by both `relearn_unit` and `refit_in_place`: an established exact program (no rivals, reliable, >= 12 facts) that a fresh exact fit would replace, where the old law contradicts one to three lessons, is replaced only **as a repair**: the contradicting lessons are marked unproven (they do not vouch for their neighbours) and the replaced law stays a competing explanation (`repair_veto`), so where the two part ways the new law only guesses until two later lessons separate them. The agreement guard of `repair_regime` was factored out (`rebuilt_agrees_with_old`) and is still used there.
+**The fix.** `School::rebuild_policy`, used by both `relearn_unit` and `refit_in_place`: an established exact program (no rivals, reliable, >= 12 facts) that a fresh exact fit would replace, where the old law contradicts one to three lessons, is replaced only **as a repair**: the contradicting lessons are marked unproven (they do not vouch for their neighbors) and the replaced law stays a competing explanation (`repair_veto`), so where the two part ways the new law only guesses until two later lessons separate them. The agreement guard of `repair_regime` was factored out (`rebuilt_agrees_with_old`) and is still used there.
 
 **What I tried first and was wrong about.** My first version *refused* the rebuild when it disagreed with the old law inside the range the other lessons cover. It broke an existing test (`a_unit_with_one_explanation_checks_it...`): when the single contradiction is the *truth* (told 9 -> 9 against a coincidental `first mod 9`), refusing keeps a wrong law. The data cannot tell that case from this one (the old law was right here, wrong there), so the symmetric answer is the one the repair step already had: adopt, keep the rival, state only where both agree. A second consequence needed a flag: a program adopted this way is `rebuilt`, and when the library later grows and something else fits equally well it is re-examined (`reconsider`); a repair built from the numbers a contradiction names stays sticky as before. Two weak things I wrote and replaced: a unit test that passed *with and without* the fix (it fell to memory in its small fixture; the replacement offers the coincidence as the fresh fit by hand and fails without the fix, checked), and a one-unit replay switch (`STREAM_ONLY`) that taught the unit alone: the tens digit needs pieces other units contributed to the library, so it never reproduced (removed). I have **not** established whether the swap went through `relearn_unit` or `refit_in_place` in the exam run (the unit had ~40 lessons, so either is possible); the policy sits in both.
 
 **After the fix** (same streams, same seeds): elsewhere **0 / 0 / 0** at 10 % and **0 / 0 / 0** at 20 %; facts right 61.4 / 64.9 / 63.0 % (10 %) and 51.4 / 56.6 / 52.2 % (20 %); repeats unchanged (14 / 14 / 10 and 39 / 25 / 28); the clean stream byte-identical in totals (64.2 / 65.2 / 64.4 % facts right, WRONG 0). The tens-digit trace now reads `repair (1, "program")` after the wrong lesson and 25 is a guess. Regression battery (all rerun): persistent teacher 87.40 / 74.89 / 81.96 % right, 39 / 52 / 45 wrong, all repeats, 0 elsewhere, 0 traps; careful deceptive 331 / 149 / 0 (limit 1), 478 / 2 / 0 (limit 2), 684 / 36 / 0 (3 seeds, limit 4), genuine 4,671 / 39 / 0; `invent --seeds 4` 64/64, 32/36, 0/24, WRONG 0; scale and noise runs WRONG 0.00; compare at 20 and 200 units 100 % / 100 %, 0 traps. 142 tests (3 new).
 
-**The floor.** The naive Python memoriser (`tools/exam_adapt_baseline.py`) on the seed-1 streams: 20.1 % / 17.5 % facts right at 10 % / 20 %, and **32 / 59 wrong facts that repeat a believed mistake** (baby: 14 / 39), elsewhere 0 (it learns no law, so it cannot be damaged that way).
+**The floor.** The naive Python memorizer (`tools/exam_adapt_baseline.py`) on the seed-1 streams: 20.1 % / 17.5 % facts right at 10 % / 20 %, and **32 / 59 wrong facts that repeat a believed mistake** (baby: 14 / 39), elsewhere 0 (it learns no law, so it cannot be damaged that way).
 
 **Honest limits.** The counts that moved were 0 / 1 / 1 and 0 / 1 / 0: small, and found on three seeds only; the fix removes what was seen and the mechanism is understood, but this is again a spot check, not a proof (every harder test found a new hole). The wrong teacher is mine: persistent per fact, wrong by 1-9 on the true answer, independent of difficulty; the streams are the invention battery's tidy kinds, one rate per run. The baby still believes its teacher on a repeat (14-39 repeats): the tier measures that, it does not fix it, and a source consistently wrong about a whole kind still cannot be caught from inside.
 
@@ -72,22 +72,22 @@ Entry 10 says every new version is rebuilt from scratch with the previous work a
 
 - `baby exam write DIR [--units N] [--seed N]` writes plain tab-separated files and a `README.txt` of the protocol: **`lessons.tsv`** (`id, question, answer, unit, fact`: the unit names the kind, `fact` numbers lessons that say the same thing in different words; both optional to use), **`calibration.tsv`** (optional extra material: other phrasings of taught facts, **disjoint from every question**), **`questions.tsv`** (`id, group, question, truth`; groups `taught`, `reworded`, `never`, `beyond`, `trap`; a trap's truth is empty: it must be refused). A system, in any language, writes **`predictions.tsv`** (`id, status, answer, confidence`; status `fact`, `guess` with its own probability, or `refuse`).
 - `baby exam score DIR predictions.tsv` judges by rules that do not depend on how the system works: **WRONG facts must be 0**; **traps answered (as fact or guess) must be 0**; then facts right per group (coverage), guesses right, and whether the confidence it states for its guesses is at or below how often they were right. Every offender is listed by id. A system that refuses everything is honest and covers nothing: coverage is what is then compared.
-- `baby exam run DIR [--out FILE]` teaches the baby and judges it: the bar a successor starts from. `tools/exam_baseline.py` is a deliberately naive foreign system (a Python exact-match memoriser) to show the judge works across languages and to give the floor.
+- `baby exam run DIR [--out FILE]` teaches the baby and judges it: the bar a successor starts from. `tools/exam_baseline.py` is a deliberately naive foreign system (a Python exact-match memorizer) to show the judge works across languages and to give the floor.
 
 **Reference results** (seed 1, the scale generator's worlds):
 
 | exam | system | taught | reworded | never | beyond | traps answered | wrong facts |
 |---|---|---|---|---|---|---|---|
 | 60 units (2,520 lessons, 4,832 questions) | baby | 100 % | 100 % | 94.9 % fact + 5.1 % right guess | 100 % right guess | 0 of 140 | 0 |
-| 60 units | naive memoriser (python) | 100 % | 0 | 0 | 0 | 0 of 140 | 0 |
+| 60 units | naive memorizer (python) | 100 % | 0 | 0 | 0 | 0 of 140 | 0 |
 | 200 units (8,580 lessons, 16,997 questions) | baby | 100 % | 100 % | 91.0 % fact + 9.0 % right guess | 100 % right guess | 0 of 467 | 0 |
-| 200 units | naive memoriser (python) | 100 % | 0 | 0 | 0 | 0 of 467 | 0 |
+| 200 units | naive memorizer (python) | 100 % | 0 | 0 | 0 | 0 of 467 | 0 |
 
-(Percentages are facts right unless said; the baby's whole 60-unit run, from the lessons to a judged scorecard, takes 0.5 s; its guesses state 50 % (no checks yet) against 100 % realised, which the judge calls honest. Tidy rule-shaped worlds are its home ground: this is the *floor* a successor must clear and then exceed on harder material, not an achievement.)
+(Percentages are facts right unless said; the baby's whole 60-unit run, from the lessons to a judged scorecard, takes 0.5 s; its guesses state 50 % (no checks yet) against 100 % realized, which the judge calls honest. Tidy rule-shaped worlds are its home ground: this is the *floor* a successor must clear and then exceed on harder material, not an achievement.)
 
 **What the exam found in the baby on its first run (recorded as it happened).** My first version answered **two traps as fact** (22 traps at 8 units: "what is the gedevubi of ridoba **sedavubi**", two attributes at once) and refused 20 % of reworded questions. Two causes, both in my exam, both informative about the baby: (1) it was given no calibration material, and the baby's recognition floor, which is what keeps it from answering a question that merely resembles a taught one, is calibrated on rephrasings; (2) I numbered every lesson as its own fact, discarding the teacher's grouping (which lessons are one fact in different words), which the baby's cross-validation and memory rely on. With the grouping (`fact` column) and a disjoint half of the rephrasings as calibration: 0 of 22 traps, 100 % of reworded. **So the baby's trap-honesty depends on its teacher's grouping and on calibration material; a successor should state what it needs, and the exam now offers both openly.**
 
-**Limits.** The exam is the scale generator's tidy, number-word, rule-shaped worlds: no real text (SVAMP and ASDiv cannot be redistributed: their licences, and `bridge` already runs the baby on them locally); static (the interactive parts, the baby asking questions of a teacher, a stream of corrections, are not in it); coverage and honesty only, no joules (the energy meter is the baby's and the machine's); a successor that learned nothing but memorised the answers to `taught` would pass the honesty rules and win only that group.
+**Limits.** The exam is the scale generator's tidy, number-word, rule-shaped worlds: no real text (SVAMP and ASDiv cannot be redistributed: their licenses, and `bridge` already runs the baby on them locally); static (the interactive parts, the baby asking questions of a teacher, a stream of corrections, are not in it); coverage and honesty only, no joules (the energy meter is the baby's and the machine's); a successor that learned nothing but memorized the answers to `taught` would pass the honesty rules and win only that group.
 
 ### The adaptive tier (same day)
 
@@ -95,7 +95,7 @@ The static exam cannot test the thing the project is about: learning from being 
 
 **Reference results** (seed 1; 3,048 lessons, 787 questions):
 
-| role | n | baby: right in the 1st / 2nd / 3rd third | naive Python memoriser |
+| role | n | baby: right in the 1st / 2nd / 3rd third | naive Python memorizer |
 |---|---|---|---|
 | base | 158 | 100 -> 100 -> 100 % | 0 -> 0 -> 0 % |
 | hidden | 288 | 100 -> 100 -> 100 % | 0 |
@@ -110,26 +110,26 @@ The static exam cannot test the thing the project is about: learning from being 
 
 ### Joules in the exam: capability per joule (2026-10-23)
 
-Entry 7 says the measure that matters is **capability per joule as the machine measures it**, so the exam now measures it. `baby exam run`, `adapt-run` and `adapt-drive` report, after the verdict, the energy of **teaching** and of **answering** separately, read from the CPU package's own counter (RAPL) as joules above the machine's idle draw, with the guards the energy meter has accumulated (idle baseline re-measured before and after, an invalid reading shown as n/a, a warning if other processes used the CPU); very short runs are repeated and averaged so that the window is long enough to mean something (`repeats` in the report). A system driven over the pipe protocol is measured the same way: its process is on the same counter, and it says where teaching ends by replying `READY` (the protocol gained that acknowledgement). Measurement is on by default where the counter is readable (`--no-joules` for the static run, `EXAM_NO_JOULES=1` for the adaptive ones, whose command comes last on the line so cannot take a flag). **Quiet machine required** (the handover's rule): these were taken with the browser closed and no other job running.
+Entry 7 says the measure that matters is **capability per joule as the machine measures it**, so the exam now measures it. `baby exam run`, `adapt-run` and `adapt-drive` report, after the verdict, the energy of **teaching** and of **answering** separately, read from the CPU package's own counter (RAPL) as joules above the machine's idle draw, with the guards the energy meter has accumulated (idle baseline re-measured before and after, an invalid reading shown as n/a, a warning if other processes used the CPU); very short runs are repeated and averaged so that the window is long enough to mean something (`repeats` in the report). A system driven over the pipe protocol is measured the same way: its process is on the same counter, and it says where teaching ends by replying `READY` (the protocol gained that acknowledgment). Measurement is on by default where the counter is readable (`--no-joules` for the static run, `EXAM_NO_JOULES=1` for the adaptive ones, whose command comes last on the line so cannot take a flag). **Quiet machine required** (the handover's rule): these were taken with the browser closed and no other job running.
 
 | run | teaching | answering | per lesson / per question | right answers per joule |
 |---|---|---|---|---|
 | baby, static, 60 units (2,520 lessons, 4,832 questions) | 679-688 mJ (0.32 s) | 279-285 mJ (0.13 s) | 273 uJ / 59 uJ | 4,822-4,897 overall; 16,400 once taught |
 | baby, static, 200 units (8,580 lessons, 16,997 questions) | 2.48 J (1.15 s) | 1.17 J (0.51 s) | 289 uJ / 69 uJ | 4,533 overall; 14,200 once taught |
 | **baby, adaptive stream (3,048 lessons, 787 questions, learning from every told answer)** | 34.6 J (18.8 s) | **1,419 J (801 s)** | 11 mJ / **1.80 J** | **0.5** (693 right answers for 1,453 J) |
-| naive Python memoriser, adaptive stream | 16 mJ | 61 mJ | 5 uJ / 78 uJ | 0 (it answers nothing right) |
+| naive Python memorizer, adaptive stream | 16 mJ | 61 mJ | 5 uJ / 78 uJ | 0 (it answers nothing right) |
 
 **What this says, plainly.** Lookup after learning is nearly free for the baby: about 60 microjoules a question. **Adapting is not**: each answer it is told makes it think its unit through again, 1.80 J per question, **about 30,000 times the cost of answering without learning and about 41 times what teaching all 3,048 lessons cost**. The adaptive stream's 87-88 % right answers and the climb on the rule-changing kinds (90.6 -> 93.8 -> 100 %) are bought at 0.5 right answers per joule, against 16,000 for pure answering. That is the baby's weakest number against its own stated measure and the first thing a successor (or the next stretch of baby) should beat: learn from a told answer without re-thinking the unit. (The Python system's 0 is not a result about energy efficiency: it is cheap because it does nothing; the right-answers-per-joule figure only means something between systems that get comparable answers right.)
 
 **Beating that number (same day).** Reading the code showed the waste: for each told answer `learn_wondered` re-decided the unit's way of learning (a cross-validation of every mechanism) once to record a confirmation, and twice for a surprising answer (`learn` had already refitted it). A settled rule, selection or exact program (reliable on facts held back, no competing explanation) now just takes the lesson in and extends its reach (`settled_exact`), and re-decides from scratch every 25 lessons (`SETTLED_RETHINK_EVERY`). **Measured on the same stream, twice on an idle desktop: answering and adapting 1,419 J -> 397 J and 403 J (801 s -> 235 s), 1.80 J -> 0.51 J per question, 0.5 -> 1.6 right answers per joule (692 right answers for 445 J)**; teaching is unchanged (34-43 J: the 20 % spread between runs is the meter's other-process share, which it flags as an upper bound). The answers did not change in any way that matters: 0 wrong facts; the rule-changing kinds still climb 90.6 -> 93.8 -> 100 %; 692 right answers against 693; one kind (stage2) is two refusals worse in the first third of the stream. The honesty gate: hidden 64/64, unexplainable 0/24, **careful battery deceptive 718 / 2 / 0 (was 704 / 16 / 0)**, genuine 4,671 / 39 / 0, WRONG columns 0.00, 20 %-persistent teacher 87.40 % / 39 wrong all repeats / 0 elsewhere (was 87.31 % / 42), slips 99.97 % / 0, corrections 157/157, 0 of 467 traps, test suite 137 passing in 18 s (was 25 s). Still 8,400 times the cost of answering without learning (0.51 J vs 59 uJ); where the rest goes (the surprising answers' refits, `repair_regime`, the periodic re-decisions, the guess scales) has not been measured.
 
-**Where the rest went, and a second cut (same day).** Stage timers (`BABY_PROF=1`; `school::timed`, printed after `adapt-run`) over the 787 told answers (about 235 s of CPU time at that point) gave: `relearn_unit` called from `learn_wondered` **145 s (62 %)**, 140 calls at ~1 s each; `review_programs` 45 s (19 %); `learn` itself 50 s (`refit_in_place` 32 s over 272 surprising answers at 118 ms, 12 full re-decisions 18 s). Most of the 140 re-decisions were units that can only memorise (the unexplainable kinds), which `refit_in_place` already re-tests only every ten facts, but `learn_wondered` re-decided on every told answer. They now follow the same every-ten-facts rule (`memorise_only_known`): re-decisions 140 -> 56, 145 s -> 50 s, listed total 290 s -> 192 s, **answers unchanged** (the ALL row 86.7 -> 88.5 -> 88.5 % identical, 0 wrong facts). **Measured on an idle desktop: answering and adapting 268 J (150 s), 0.34 J per told answer, 2.2 right answers per joule overall (692 right for 313 J), against 1,419 J / 1.80 J / 0.5 at the start of the day: 5.3 times cheaper.** The meter's usual warning (other processes up to 25 % of the CPU) applies, so read 268 J as an upper bound. Not cut, deliberately: `review_programs` is free almost always (788 checks cost 0.02 s) but runs four times in the stream, about 11 s each, because each time the shared library gains a building block every open unit is examined again; that is real work for a real change. The honesty gate after this change: identical to the one before it (careful 718 / 2 / 0, 0 wrong anywhere, 0 of 467 traps, corrections 157/157, 20 %-persistent 87.40 % / 39 / 0 elsewhere).
+**Where the rest went, and a second cut (same day).** Stage timers (`BABY_PROF=1`; `school::timed`, printed after `adapt-run`) over the 787 told answers (about 235 s of CPU time at that point) gave: `relearn_unit` called from `learn_wondered` **145 s (62 %)**, 140 calls at ~1 s each; `review_programs` 45 s (19 %); `learn` itself 50 s (`refit_in_place` 32 s over 272 surprising answers at 118 ms, 12 full re-decisions 18 s). Most of the 140 re-decisions were units that can only memorize (the unexplainable kinds), which `refit_in_place` already re-tests only every ten facts, but `learn_wondered` re-decided on every told answer. They now follow the same every-ten-facts rule (`memorize_only_known`): re-decisions 140 -> 56, 145 s -> 50 s, listed total 290 s -> 192 s, **answers unchanged** (the ALL row 86.7 -> 88.5 -> 88.5 % identical, 0 wrong facts). **Measured on an idle desktop: answering and adapting 268 J (150 s), 0.34 J per told answer, 2.2 right answers per joule overall (692 right for 313 J), against 1,419 J / 1.80 J / 0.5 at the start of the day: 5.3 times cheaper.** The meter's usual warning (other processes up to 25 % of the CPU) applies, so read 268 J as an upper bound. Not cut, deliberately: `review_programs` is free almost always (788 checks cost 0.02 s) but runs four times in the stream, about 11 s each, because each time the shared library gains a building block every open unit is examined again; that is real work for a real change. The honesty gate after this change: identical to the one before it (careful 718 / 2 / 0, 0 wrong anywhere, 0 of 467 traps, corrections 157/157, 20 %-persistent 87.40 % / 39 / 0 elsewhere).
 
 **Limits.** The counter reads the whole CPU package above idle, to within about +-30 % on a desktop; the baby's static timings repeat to 2 %; the adaptive figures are one run each. They do not include memory, disk, a GPU or the machine's idle draw. The Python system's interpreter start-up is inside its teaching figure.
 
 ## A person answers the baby's questions: `baby tutor` (2026-10-22)
 
-Until now the questions the baby asks about its own explanations (`baby wonder --check`: the farthest number it has not checked, the corner, the swapped order) were answered only by simulated teachers; the CLI could list them and take one answer at a time with `baby learn --wondered`. `baby tutor [--school FILE] [--rounds N] [--limit N] [--out FILE]` runs the whole loop with a person (`tutor.rs`, `tutor::session`): it shows each question, **why it asks**, and **what it would say now** (a fact, or "probably X, a guess, 50 % sure"), then you type the answer, press Enter to skip, `?` if you do not know, or `q` to stop. It learns from each answer and saves the school at the end. Three behaviours:
+Until now the questions the baby asks about its own explanations (`baby wonder --check`: the farthest number it has not checked, the corner, the swapped order) were answered only by simulated teachers; the CLI could list them and take one answer at a time with `baby learn --wondered`. `baby tutor [--school FILE] [--rounds N] [--limit N] [--out FILE]` runs the whole loop with a person (`tutor.rs`, `tutor::session`): it shows each question, **why it asks**, and **what it would say now** (a fact, or "probably X, a guess, 50 % sure"), then you type the answer, press Enter to skip, `?` if you do not know, or `q` to stop. It learns from each answer and saves the school at the end. Three behaviors:
 - **Skepticism with a person.** An answer that contradicts a rule the baby has good evidence for is not believed on one word: it says what it would have said and asks you to type the answer again. The same answer twice is believed; a different second answer leaves it unsettled with the rule kept; Enter keeps the rule. (A slip of the finger costs one more question; a genuine contradiction, such as a sum that really caps at 30, is believed when you repeat it.)
 - **Your own lessons through the same door.** At any prompt `a question => the answer` is placed by `School::learn_told`: filed under the unit whose program turns the question's numbers into that answer (cut down to those numbers), or refused with the reason if no program can place it.
 - **Digits become the unit's words.** If the unit speaks in number words and you type `6`, it is taken as `six` (up to ten).
@@ -166,13 +166,13 @@ The collapse is gone and the direction is right in all five, but the gain is **s
 
 **First contact, as with SVAMP:** taught on all 885 readable problems, it learns nothing and states nothing wrong (0 right, 0 wrong; every unit "remember, 0 %"; routing alone already sends 65 % to the right kind).
 
-**Two-number problems, nothing retuned for this corpus** (3 seeds, random split, 678 problems): held-back program scores 68-92 % per kind; routing to the right kind **76.3 / 76.6 / 76.7 %**; labelled guesses **57.6 / 59.6 / 58.2 % right** and 35.6 / 29.8 / 34.9 % wrong; the stated hit rate is at or below the realised one in all three (58.3 vs 61.8, 55.3 vs 66.7, 56.6 vs 62.5); told the kind (oracle) 74-78 % right; nothing stated as fact. This is the same picture as SVAMP's, from a differently built corpus, with the routing corrections and last-words features unchanged.
+**Two-number problems, nothing retuned for this corpus** (3 seeds, random split, 678 problems): held-back program scores 68-92 % per kind; routing to the right kind **76.3 / 76.6 / 76.7 %**; labeled guesses **57.6 / 59.6 / 58.2 % right** and 35.6 / 29.8 / 34.9 % wrong; the stated hit rate is at or below the realized one in all three (58.3 vs 61.8, 55.3 vs 66.7, 56.6 vs 62.5); told the kind (oracle) 74-78 % right; nothing stated as fact. This is the same picture as SVAMP's, from a differently built corpus, with the routing corrections and last-words features unchanged.
 
-**With number selection** (`--select`, 3 seeds): the arithmetic part of ASDiv has few distractors (only 63-70 of about 600 readable lessons hold more than two numbers, 54-58 of them labelled by a program), so this is a small-number test: problems with two numbers or fewer 56.5 / 58.9 / 58.9 % right as labelled guesses; problems with more than two numbers (only 24-31 test questions per seed) 58.1 / 45.8 / 54.2 % right, stated 44.8 / 54.3 / 51.3 % after the baby scaled its claims (x0.78-0.93) from held-back answers; the selector kept the right pair in 72.0 / 59.1 / 76.2 % of the 21-25 problems where that is checkable. Too few to rank against SVAMP's 27-38 %; it says the mechanism transfers and the calibration holds.
+**With number selection** (`--select`, 3 seeds): the arithmetic part of ASDiv has few distractors (only 63-70 of about 600 readable lessons hold more than two numbers, 54-58 of them labeled by a program), so this is a small-number test: problems with two numbers or fewer 56.5 / 58.9 / 58.9 % right as labeled guesses; problems with more than two numbers (only 24-31 test questions per seed) 58.1 / 45.8 / 54.2 % right, stated 44.8 / 54.3 / 51.3 % after the baby scaled its claims (x0.78-0.93) from held-back answers; the selector kept the right pair in 72.0 / 59.1 / 76.2 % of the 21-25 problems where that is checkable. Too few to rank against SVAMP's 27-38 %; it says the mechanism transfers and the calibration holds.
 
 **Two mistakes found on the way.**
 1. *My first ASDiv selection run gave guesses to only 13 % of questions* (the plain run: 93 %). Cause: 114 of 960 problems carry zero or one number the baby can read ("a dozen", "twice", "half"); a program combining two numbers has nothing to work with in those lessons, and they pushed units past the tolerance for unreadable lessons. They are now set aside as unreadable ("fewer than two numbers it can read"), like the other unreadable cases.
-2. *That changed SVAMP's figures, and I should say so.* `numbers_in_text` counted runs of digits only; the baby reads number words too, so a SVAMP problem with two digit-numbers and a story word "one" was being taught as a "two-number" problem though the baby saw three. It now counts numbers as the baby reads them, and the filter above applies to SVAMP too. **Re-measured on all six SVAMP two-number splits, the figures are lower and more variable than the ones I reported earlier today** (routing 64-75 %, mean 70 %, was 74-78 %; labelled guesses right 35-73 %, mean 56 %, was 47-74 %, mean 63 %): 
+2. *That changed SVAMP's figures, and I should say so.* `numbers_in_text` counted runs of digits only; the baby reads number words too, so a SVAMP problem with two digit-numbers and a story word "one" was being taught as a "two-number" problem though the baby saw three. It now counts numbers as the baby reads them, and the filter above applies to SVAMP too. **Re-measured on all six SVAMP two-number splits, the figures are lower and more variable than the ones I reported earlier today** (routing 64-75 %, mean 70 %, was 74-78 %; labeled guesses right 35-73 %, mean 56 %, was 47-74 %, mean 63 %): 
 
 | split (seed) | routing to own kind | guess right | guess wrong | units that fell back to memory |
 |---|---|---|---|---|
@@ -183,11 +183,11 @@ The collapse is gone and the direction is right in all five, but the gain is **s
 | blocks (2) | 75.0 | 69.4 | 25.9 | multiplication |
 | blocks (3) | 64.2 | **40.8** | 29.2 | multiplication, common-division |
 
-The swings come from whether a kind gets a partial program at all. In random 3 the common-division program scored 55 % instead of 89 % on a slightly different set of 240 lessons and that kind went from 90 % right to no guesses at all. **My first explanation was the 0.6 guess bar; that was wrong.** Running the six splits with the bar at 0.6, 0.45 and 0.3 gave identical output to the decimal. A debug print of the partial-program fit showed it only ever reaches its acceptance test for the subtraction unit (`first apart second`, 84-91 % of lessons explained, ample bits); for the units that fall back to memory in those splits the search finds no expression that explains 80 % of the lessons within its budget, so the unit is rejected earlier, before any bar applies. **Three hypotheses tested and rejected on the fragile split (random, seed 3), each giving output identical to the decimal:** the guess bar (0.6 / 0.45 / 0.3), the search's work budget (1 M / 4 M / 16 M candidates), and the ambiguity cap inside the partial search (a print there fires only for the subtraction unit, with one smallest expression each time). For the units that fall back to memory the fit never reaches the partial-program search (or its acceptance test) at all; where it leaves the path before that is not found. **Found, by printing inside `fit_trusted_with` and `choose_for_unit`.** The failing kinds did get a program: `first x second`, `(larger div smaller)`, `first + second`, found as *exact* programs (the plurality of each input's lessons settles the points, so a handful of wrong lessons do not stop the search). But their held-back scores (80 %, 55 %, 77 %) are under the reliability bar, so the unit was judged "memorise only", and the fallback that keeps a program as a guess-only one demanded the program be flagged *partial*, which an exact fit never is. A program right on the plurality of its inputs but not reliable enough to state facts is exactly what a labelled guess is for. **The fix:** such a program (held-back score between the guess bar and the reliability bar) is *provisional*: `ProgramRule::make_provisional` flags it with the same `partial` mark as a program that fits most lessons, so it can only ever give labelled guesses; `choose_for_unit` accepts it; `fit_for` applies it where a unit is fitted (`learn_items`, `relearn_unit`). **Result** (SVAMP two-number, six splits, guesses right before -> after): random 61.3 -> 61.3, 72.6 -> 72.6, **35.4 -> 41.4**; blocks **56.8 -> 61.3**, 69.4 -> 69.4, 40.8 -> 40.8: mean 56.1 -> 57.8 %; wrong labelled guesses rise a little where it now guesses more (e.g. 22.2 -> 31.3 % in random 3); stated vs realised stays within 4 points where it changed (60.9 vs 56.9, 63.9 vs 61.3); ASDiv (already all programs) unchanged to the decimal. The honesty gate is unchanged on every line (hidden 64/64, unexplainable kinds that got a mechanism 0/24, careful 704 / 16 / 0, WRONG columns 0.00, 0 of 467 traps). What is left on the fragile split is classification, not learning: the addition kind is a program again but 79 % of its questions get a wrong guess (they are sent to the larger subtraction unit), and division (55 %) is still under the guess bar. Test: `a_program_right_on_most_inputs_but_not_reliable_enough_to_state_facts_may_only_guess` (127 tests). The SVAMP tables earlier on this page were measured under the old count and stand as history.
+The swings come from whether a kind gets a partial program at all. In random 3 the common-division program scored 55 % instead of 89 % on a slightly different set of 240 lessons and that kind went from 90 % right to no guesses at all. **My first explanation was the 0.6 guess bar; that was wrong.** Running the six splits with the bar at 0.6, 0.45 and 0.3 gave identical output to the decimal. A debug print of the partial-program fit showed it only ever reaches its acceptance test for the subtraction unit (`first apart second`, 84-91 % of lessons explained, ample bits); for the units that fall back to memory in those splits the search finds no expression that explains 80 % of the lessons within its budget, so the unit is rejected earlier, before any bar applies. **Three hypotheses tested and rejected on the fragile split (random, seed 3), each giving output identical to the decimal:** the guess bar (0.6 / 0.45 / 0.3), the search's work budget (1 M / 4 M / 16 M candidates), and the ambiguity cap inside the partial search (a print there fires only for the subtraction unit, with one smallest expression each time). For the units that fall back to memory the fit never reaches the partial-program search (or its acceptance test) at all; where it leaves the path before that is not found. **Found, by printing inside `fit_trusted_with` and `choose_for_unit`.** The failing kinds did get a program: `first x second`, `(larger div smaller)`, `first + second`, found as *exact* programs (the plurality of each input's lessons settles the points, so a handful of wrong lessons do not stop the search). But their held-back scores (80 %, 55 %, 77 %) are under the reliability bar, so the unit was judged "memorize only", and the fallback that keeps a program as a guess-only one demanded the program be flagged *partial*, which an exact fit never is. A program right on the plurality of its inputs but not reliable enough to state facts is exactly what a labeled guess is for. **The fix:** such a program (held-back score between the guess bar and the reliability bar) is *provisional*: `ProgramRule::make_provisional` flags it with the same `partial` mark as a program that fits most lessons, so it can only ever give labeled guesses; `choose_for_unit` accepts it; `fit_for` applies it where a unit is fitted (`learn_items`, `relearn_unit`). **Result** (SVAMP two-number, six splits, guesses right before -> after): random 61.3 -> 61.3, 72.6 -> 72.6, **35.4 -> 41.4**; blocks **56.8 -> 61.3**, 69.4 -> 69.4, 40.8 -> 40.8: mean 56.1 -> 57.8 %; wrong labeled guesses rise a little where it now guesses more (e.g. 22.2 -> 31.3 % in random 3); stated vs realized stays within 4 points where it changed (60.9 vs 56.9, 63.9 vs 61.3); ASDiv (already all programs) unchanged to the decimal. The honesty gate is unchanged on every line (hidden 64/64, unexplainable kinds that got a mechanism 0/24, careful 704 / 16 / 0, WRONG columns 0.00, 0 of 467 traps). What is left on the fragile split is classification, not learning: the addition kind is a program again but 79 % of its questions get a wrong guess (they are sent to the larger subtraction unit), and division (55 %) is still under the guess bar. Test: `a_program_right_on_most_inputs_but_not_reliable_enough_to_state_facts_may_only_guess` (127 tests). The SVAMP tables earlier on this page were measured under the old count and stand as history.
 
-**Cost, found and fixed.** Building a school on ASDiv's 678 problems took 222 s: 111 s cross-validating the programs, and then **another 111 s** in `review_programs` repeating that for every unit because the library "might have changed". When the library never gained anything (these partial programs are never vocabulary) nothing can have changed for any unit, so the review is now skipped in exactly that case: **identical output, 222 s -> 111 s**; the tidy-world gate reads exactly as before. **Retracted and fixed (later the same day):** I wrote here that the remaining 111 s was the program search's cross-validation. Measured, that was wrong: the program search takes about **1 s**; memory and select are free; the **rule** mechanism's ridge fit took about 11 s per fit, and with up to 13 robust rounds per fit and a cross-validation around it that was over 90 % of the build. The cause: the ridge fit solved a dense system of 3 x (number of words) unknowns by Gaussian elimination, and on real text the vocabulary is thousands of story words, which is cubic. With more unknowns than lessons the same fit has an equivalent *dual* form whose system has the size of the number of lessons (the Woodbury identity: theta = L^-1 X^T (I + X L^-1 X^T)^-1 y, to rounding), so it is now solved that way when 3 x words is at least 600 and more than twice the lessons (`Quantity::fit_ridge_dual`; every tidy-world fit stays on the original path). **ASDiv build 111 s -> 13.7 s, SVAMP two-number runs 13 s -> 6 s, outputs identical** (compared line by line on ASDiv and four SVAMP splits), and the tidy-world gate reads exactly as before (hidden 64/64, unexplainable 0/24, careful 704 / 16 / 0, WRONG columns 0.00, 0 of 467 traps, 20 %-persistent 87.31 % / 42 / 0 elsewhere). Test: `the_dual_form_of_the_ridge_fit_gives_the_same_rule_as_the_primal_form` (132 tests). A first attempt that removed per-candidate allocations from the program search changed nothing (12.8 s vs 12.4 s): I had optimised the part that cost 1 s. `perf` is not available here (kernel setting; not mine to change), so the profile came from timing each mechanism.
+**Cost, found and fixed.** Building a school on ASDiv's 678 problems took 222 s: 111 s cross-validating the programs, and then **another 111 s** in `review_programs` repeating that for every unit because the library "might have changed". When the library never gained anything (these partial programs are never vocabulary) nothing can have changed for any unit, so the review is now skipped in exactly that case: **identical output, 222 s -> 111 s**; the tidy-world gate reads exactly as before. **Retracted and fixed (later the same day):** I wrote here that the remaining 111 s was the program search's cross-validation. Measured, that was wrong: the program search takes about **1 s**; memory and select are free; the **rule** mechanism's ridge fit took about 11 s per fit, and with up to 13 robust rounds per fit and a cross-validation around it that was over 90 % of the build. The cause: the ridge fit solved a dense system of 3 x (number of words) unknowns by Gaussian elimination, and on real text the vocabulary is thousands of story words, which is cubic. With more unknowns than lessons the same fit has an equivalent *dual* form whose system has the size of the number of lessons (the Woodbury identity: theta = L^-1 X^T (I + X L^-1 X^T)^-1 y, to rounding), so it is now solved that way when 3 x words is at least 600 and more than twice the lessons (`Quantity::fit_ridge_dual`; every tidy-world fit stays on the original path). **ASDiv build 111 s -> 13.7 s, SVAMP two-number runs 13 s -> 6 s, outputs identical** (compared line by line on ASDiv and four SVAMP splits), and the tidy-world gate reads exactly as before (hidden 64/64, unexplainable 0/24, careful 704 / 16 / 0, WRONG columns 0.00, 0 of 467 traps, 20 %-persistent 87.31 % / 42 / 0 elsewhere). Test: `the_dual_form_of_the_ridge_fit_gives_the_same_rule_as_the_primal_form` (132 tests). A first attempt that removed per-candidate allocations from the program search changed nothing (12.8 s vs 12.4 s): I had optimized the part that cost 1 s. `perf` is not available here (kernel setting; not mine to change), so the profile came from timing each mechanism.
 
-**Honest limits.** ASDiv's arithmetic subset is mostly clean two-number problems, so it hardly tests number selection; SVAMP was built by varying ASDiv's problems, so the two are related builds, not independent sources; the licence limits it to private evaluation; the answers are whole numbers up to four digits.
+**Honest limits.** ASDiv's arithmetic subset is mostly clean two-number problems, so it hardly tests number selection; SVAMP was built by varying ASDiv's problems, so the two are related builds, not independent sources; the license limits it to private evaluation; the answers are whole numbers up to four digits.
 
 ## Real text, the problems with more numbers than the rules use: which numbers matter (2026-10-22)
 
@@ -197,11 +197,11 @@ The swings come from whether a kind gets a partial program at all. In random 3 t
 
 **What was built** (`selector.rs`, `School::set_selector`, `School::focus`, `bridge::run_select`, `baby bridge ... --select`; the flag must come last on the command line). A `Selector` scores each number in a text on the words just before and after it, where it stands, and the question-overlap cues, learned by an averaged perceptron (fixed seed, 12 epochs, no dependencies); `focus` keeps the two best and blanks the others with a word (`numx`), so the rest of the baby sees an ordinary two-number question. Where do the labels come from? **From the baby's own programs, not from the corpus's equations:** first it learns its units from the lessons with at most two numbers; then for each many-number lesson it looks for the pair of numbers that its unit's program turns into the given answer and, where exactly one pair does, that pair is a label ("connecting the dots"). It learns the selector from those, teaches again with the unused numbers of those lessons blanked, and asks every question through the selector. The selector and the rate scales below are saved in the school file (`selector N` / `sw` lines, `guessscale`), and a question with two numbers or fewer is never touched.
 
-**Honest stated rates needed their own fix.** The first run was badly over-confident: the many-number questions stated 77 % and were right 32 %, and even the two-number ones stated 81 % and were right 62 %. Two causes: a guess from a question cut down to two numbers is right only if the cut was right (the stated rate ignored that), and the labelled lessons are exactly the ones a program already explains, which inflates each unit's held-back score. Fix: `School::calibrate_guesses`. The harness holds back every fourth lesson, teaches on the rest, lets the baby ask itself those questions, and rescales its stated hit rates to what it really achieved, separately for questions read as written and for ones cut down (never up); then it is taught on everything and carries the scales.
+**Honest stated rates needed their own fix.** The first run was badly over-confident: the many-number questions stated 77 % and were right 32 %, and even the two-number ones stated 81 % and were right 62 %. Two causes: a guess from a question cut down to two numbers is right only if the cut was right (the stated rate ignored that), and the labeled lessons are exactly the ones a program already explains, which inflates each unit's held-back score. Fix: `School::calibrate_guesses`. The harness holds back every fourth lesson, teaches on the rest, lets the baby ask itself those questions, and rescales its stated hit rates to what it really achieved, separately for questions read as written and for ones cut down (never up); then it is taught on everything and carries the scales.
 
 **Numbers** (SVAMP, 3 seeds x random/blocks; tested on all readable problems held out, about 290-325 per split; seeds 2 and 3 rerun after I found that `--seed` had been swallowed as the value of `--select`, so the first three runs were all seed 1). Nothing is stated as a fact in any of them (0 right, 0 wrong as fact):
 
-| split (seed) | two numbers or fewer: guess right / wrong | more than two: guess right / wrong | stated vs realised, two or fewer | stated vs realised, more than two | selector kept the used pair | routed to own kind |
+| split (seed) | two numbers or fewer: guess right / wrong | more than two: guess right / wrong | stated vs realized, two or fewer | stated vs realized, more than two | selector kept the used pair | routed to own kind |
 |---|---|---|---|---|---|---|
 | random (1) | 61.5 / 38.5 | **32.2** / 67.3 | 65.6 vs 61.5 | 23.7 vs 32.4 | 56.8 % | 74.1 % |
 | random (2) | 61.7 / 33.0 | **35.2** / 64.2 | 55.5 vs 65.2 | 15.9 vs 35.4 | 55.9 % | 79.8 % |
@@ -210,7 +210,7 @@ The swings come from whether a kind gets a partial program at all. In random 3 t
 | blocks (2) | 55.9 / 32.4 | **27.4** / 71.7 | 72.9 vs 63.3 | 29.7 vs 27.6 | 46.0 % | 62.7 % |
 | blocks (3) | 47.4 / 19.0 | **28.8** / 59.6 | 52.5 vs 71.4 | 26.2 vs 32.6 | 54.5 % | 76.4 % |
 
-Before: **0 %** right on the many-number questions (nothing learned, everything refused). Now 27-38 % of them get a right labelled guess. That is not good, and the table says why: about 60-72 % of them get a wrong labelled guess (the selector keeps the right pair about 46-59 % of the time, the kind is recognised 63-80 %, the program is right 67-91 % once told the kind: the product is about a third). What changed is that the baby now says so: for these questions it states 16-31 %, below what it achieves in five of six splits (the exception, blocks 2, is 2 points over), while for the two-number questions its stated rate is within 10 points in five of six splits (over by 4-10 points in three of them: 65.6 vs 61.5, 78.3 vs 70.9, 72.9 vs 63.3; 19 points under in blocks 3: 52.5 vs 71.4). The two-number guesses are a little worse than in the earlier two-number-only runs (about 47-69 % against 57-74 %): the units now also hold the focused many-number lessons, and these test sets are different.
+Before: **0 %** right on the many-number questions (nothing learned, everything refused). Now 27-38 % of them get a right labeled guess. That is not good, and the table says why: about 60-72 % of them get a wrong labeled guess (the selector keeps the right pair about 46-59 % of the time, the kind is recognized 63-80 %, the program is right 67-91 % once told the kind: the product is about a third). What changed is that the baby now says so: for these questions it states 16-31 %, below what it achieves in five of six splits (the exception, blocks 2, is 2 points over), while for the two-number questions its stated rate is within 10 points in five of six splits (over by 4-10 points in three of them: 65.6 vs 61.5, 78.3 vs 70.9, 72.9 vs 63.3; 19 points under in blocks 3: 52.5 vs 71.4). The two-number guesses are a little worse than in the earlier two-number-only runs (about 47-69 % against 57-74 %): the units now also hold the focused many-number lessons, and these test sets are different.
 
 **Mistakes (recorded as they happened).**
 - My first claim of "which numbers matter" was a perceptron on local context alone: 39 %, no better than before. The cue that mattered was the question overlap, found by asking what makes a distractor a distractor.
@@ -228,7 +228,7 @@ Before: **0 %** right on the many-number questions (nothing learned, everything 
 
 **Cause** (bisect: present from the first repair commit; `WRONG_DEBUG` and a path trace). A bigger-of selection unit ("which is X, eight or zero") was taught only 0-5. The teacher's persistent wrong answers for "ten or five" and "ten or nine" lay beyond that; the repair rebuilt a law around them, `second max (first min 7)`, using constants taken from the wrong answers. My guard checks the repaired law against the old one only where the *other* lessons vouch (0-5 x 0-5, where the two agree exactly), so it passed. Later correct lessons that happen to agree with both laws (ties, or the other number larger) then counted as confirmations and vouched for everything below them, including (8,0), where the old law was right and the new one said 7. 68 questions were answered wrongly as facts.
 
-**The fix is a principle the project already used elsewhere** ("answer only where competing explanations agree"): the law a repair replaced stays a competing explanation. A repaired program remembers what kind of law it replaced (`before`, saved with the school; the old law itself is re-derived on demand from the unit's other lessons, cached, not saved). **Until `RETIRE_AFTER` = 2 lessons told after the repair have separated the two (the old law wrong on them, the new one right), a fact the new law would state that the old law contradicts is demoted to a labelled guess** (to *no answer* on a refuted unit, and where the old law is **silent**: silence is not endorsement, which is how the one answered trap, "two bikivubi five", a negative result that a coincidence law turned into "zero", got through my first version). A question it was told exactly stays a fact. `School::repair_veto`; tests: `a_rebuilt_law_does_not_overrule_the_one_it_replaced_until_lessons_told_after_the_repair_have_separated_them` (139 tests).
+**The fix is a principle the project already used elsewhere** ("answer only where competing explanations agree"): the law a repair replaced stays a competing explanation. A repaired program remembers what kind of law it replaced (`before`, saved with the school; the old law itself is re-derived on demand from the unit's other lessons, cached, not saved). **Until `RETIRE_AFTER` = 2 lessons told after the repair have separated the two (the old law wrong on them, the new one right), a fact the new law would state that the old law contradicts is demoted to a labeled guess** (to *no answer* on a refuted unit, and where the old law is **silent**: silence is not endorsement, which is how the one answered trap, "two bikivubi five", a negative result that a coincidence law turned into "zero", got through my first version). A question it was told exactly stays a fact. `School::repair_veto`; tests: `a_rebuilt_law_does_not_overrule_the_one_it_replaced_until_lessons_told_after_the_repair_have_separated_them` (139 tests).
 
 **Result** (9 teacher jobs, seeds 1-3, 20 and 200 units, slips and persistent): **0 damage elsewhere in every one, 0 traps answered**; seed 2 at 20 units 71 -> 3 wrong (all repeats), right 88.5 %; 200 units: 20 %-persistent right 87.4 / 74.9 / 82.0 % on seeds 1 / 2 / 3, wrong facts 39 / 52 / 45, all repeats of facts it was wrongly told. The rest of the gate is unchanged (careful battery 0 wrong at 1, 2 and 4 questions per unit: 331 / 478 / 480 of 480 right; the standard battery 684 / 36 / 0; corrections 157/157; hidden 64/64; scale 0.00; adaptive exam 0 wrong, rule-changing kinds 90.6 -> 93.8 -> 100 %).
 
@@ -274,18 +274,18 @@ The rest of the gate is clean (hidden 64/64, unexplainable 0/24, 0 wrong anywher
 
 **Numbers** (`baby bridge --svamp ... --units kind --numbers 2`, 340 two-number problems, seeds 1-3, mean of three; random split / blocks split):
 
-| | routing to the right kind (before -> after) | labelled guesses right | wrong as a labelled guess | stated as fact |
+| | routing to the right kind (before -> after) | labeled guesses right | wrong as a labeled guess | stated as fact |
 |---|---|---|---|---|
 | random | 56.7 % -> **76.4 %** | 49.8 % -> **67.8 %** | 29.8 % -> 27.5 % | 0 wrong, 0 stated |
 | blocks | 50.1 % -> **72.5 %** | 37.8 % -> **58.7 %** | 29.7 % -> 25.4 % | 0 wrong, 0 stated |
 
-Each of the six splits improves on routing (+15 to +24 points) and on guesses right (+13 to +21). The last-words feature alone, on top of the corrections: +1 to +5 points of routing in all six splits, never worse. The stated hit rate stays at or below the realised rate in five of six splits (e.g. 66.9 vs 69.8 %, 66.2 vs 74.5 %, 70.3 vs 69.0 %, 66.3 vs 73.8 %, 61.1 vs 67.5 %) and is 8 points over in one blocks split (75.3 % stated vs 67.3 % right). Nothing is stated as fact: every answer on real text is still a labelled guess.
+Each of the six splits improves on routing (+15 to +24 points) and on guesses right (+13 to +21). The last-words feature alone, on top of the corrections: +1 to +5 points of routing in all six splits, never worse. The stated hit rate stays at or below the realized rate in five of six splits (e.g. 66.9 vs 69.8 %, 66.2 vs 74.5 %, 70.3 vs 69.0 %, 66.3 vs 73.8 %, 61.1 vs 67.5 %) and is 8 points over in one blocks split (75.3 % stated vs 67.3 % right). Nothing is stated as fact: every answer on real text is still a labeled guess.
 
 **Mistakes (recorded as they happened).**
 - First version: corrections on top of counts, and **the samples fed in unit order**. A perceptron trained in class order forgets all but the last class: the cross-validated routing fell to 39 % (below majority) even for the pure learner. Shuffling each epoch (deterministic) took it from 39 % to 69 % in the folds. The sign of a bug was a result *below the majority class*.
 - Adding the corrections on top of the counts was worse than counting (41 % vs 48 %); the pure learner is what works.
 
-**Honest limits.** One adversarially built corpus; the units are the file's labels; 340 problems with exactly two numbers (the 3-4-number problems still learn nothing); about a quarter of all questions still get a wrong labelled guess (routing errors and the program's own); the epochs, the 8-word tail, the 1.0 margin and the 95 % trigger are mine and were not tuned (the tail length was picked from one offline run: 6, 8, 10 words gave 81.4, 81.6, 79.2 %); routing precision is still one number per unit.
+**Honest limits.** One adversarially built corpus; the units are the file's labels; 340 problems with exactly two numbers (the 3-4-number problems still learn nothing); about a quarter of all questions still get a wrong labeled guess (routing errors and the program's own); the epochs, the 8-word tail, the 1.0 margin and the 95 % trigger are mine and were not tuned (the tail length was picked from one offline run: 6, 8, 10 words gave 81.4, 81.6, 79.2 %); routing precision is still one number per unit.
 
 ## After a miss, learn the new regime: repairing a law from the lessons that contradict it (2026-10-22; Vision Entry 7: guess, get it wrong, update)
 
@@ -293,16 +293,16 @@ Each of the six splits improves on routing (+15 to +24 points) and on guesses ri
 
 **What was built** (`School::repair_regime`, `ProgramRule::fit_repair_with`). When a numeric unit is refuted, the numbers the contradicting lessons point to (the answer they gave, and how far the old rule was from it: 30, or the 40 of a wrap) are offered as temporary terminals to one exact program search over **all** the unit's lessons. The program is accepted only if it clears the same believability and ambiguity bars as any program **and** agrees with the old rule at every point inside the range the uncontradicted lessons cover (see the mistake below). Then the unit *is* that program, it is no longer refuted, and the temporary numbers never enter the library. A failed search is remembered until the contradicting lessons change (finding nothing for some lessons means finding nothing for more).
 
-**One point is not a law.** A lone correction is consistent with many regimes: "24 + 12 is 24" is explained by a cap at 24 as well as by a reflection at 30. If the corrected lesson vouched for the questions below it (as an ordinary explained lesson does in the staircase reach) the repaired program would state 22 + 12 = 24 as a *fact* (truth 26). So a repaired program records the lessons it was built around (`ProgramRule::repaired`, saved as `repaired N` / `rep <query>` lines): they are told, so the exact question is a fact, but they do not widen the range it may state as fact. Everything beyond is a labelled guess with the stated hit rate; later checks (ordinary lessons) extend the reach as before. A repaired program is not silenced by the record of the old rule's miss (the miss that made it is not its own), but still states the record's low rate.
+**One point is not a law.** A lone correction is consistent with many regimes: "24 + 12 is 24" is explained by a cap at 24 as well as by a reflection at 30. If the corrected lesson vouched for the questions below it (as an ordinary explained lesson does in the staircase reach) the repaired program would state 22 + 12 = 24 as a *fact* (truth 26). So a repaired program records the lessons it was built around (`ProgramRule::repaired`, saved as `repaired N` / `rep <query>` lines): they are told, so the exact question is a fact, but they do not widen the range it may state as fact. Everything beyond is a labeled guess with the stated hit rate; later checks (ordinary lessons) extend the reach as before. A repaired program is not silenced by the record of the old rule's miss (the miss that made it is not its own), but still states the record's low rate.
 
-**Numbers.** `baby invent --corrections --seeds 3`: of the 157 wrong guesses, **157 are now right guesses** (before: 157 refused); of the 137 right guesses, **137 stay right guesses** (before: 64 refused); 0 wrong facts, 0 broken. The long careful battery (`invent --careful --seeds 3 --rounds 2 --limit 4`) after 2 rounds: deceptive **518 / 202 / 0** (was 521 / 199 / 0), genuine 4,671 / 39 / 0 (unchanged), WRONG 0. **Stated facts are a wash, not a gain** (3 fewer of 720); the gain is in labelled guesses. An intermediate build read 492 / 228 / 0 (29 facts lost); the recovery is the next paragraph. (The build before the agreement guard read 678 / 42 / 0, but that build was the one that stated 240 wrong facts under a wrong teacher, so 678 was partly bought with wrong facts; I first quoted it as the result and it is not.)
+**Numbers.** `baby invent --corrections --seeds 3`: of the 157 wrong guesses, **157 are now right guesses** (before: 157 refused); of the 137 right guesses, **137 stay right guesses** (before: 64 refused); 0 wrong facts, 0 broken. The long careful battery (`invent --careful --seeds 3 --rounds 2 --limit 4`) after 2 rounds: deceptive **518 / 202 / 0** (was 521 / 199 / 0), genuine 4,671 / 39 / 0 (unchanged), WRONG 0. **Stated facts are a wash, not a gain** (3 fewer of 720); the gain is in labeled guesses. An intermediate build read 492 / 228 / 0 (29 facts lost); the recovery is the next paragraph. (The build before the agreement guard read 678 / 42 / 0, but that build was the one that stated 240 wrong facts under a wrong teacher, so 678 was partly bought with wrong facts; I first quoted it as the result and it is not.)
 
-**Winning the facts back (same day).** Per-kind tally against the pre-repair commit showed the whole loss in one kind, `capdouble` (min(2a, 30)), which ended as a plain rule with 13 of 27 right. Three causes, found by tracing it: (1) in a small unit (15 lessons) one contradiction is more than a rule tolerates, so the unit was re-decided and fell to *memory* before the repair ran, and with no law left there was nothing to repair: the repair now runs first, while the settled law is still in place (`learn`); (2) one point fits two equally small laws (`min(a + a, 30)` and `a + (a mod 28)`), and a program with rivals counts as open and was thrown away at the next re-decision: a repaired program is now kept with its rivals (answering only where they agree), `own_ambiguity` finds where they part ways and `check_myself`/`wonder` ask exactly there, and the answer chooses (a lesson the program merely *declined* is a test of a rival, not a contradiction, so it vouches for its neighbours like any check); (3) my own experiment harness filtered out every question except edges, so the new question was never asked in the measurement (`invent.rs`). `capdouble` is 26 of 27 again. The pre-repair build's cap of `3 x 10` from library constants let one lesson vouch for its neighbours, which was the one-point hazard (harmless there by luck), so part of the old figure was not honestly earned.
+**Winning the facts back (same day).** Per-kind tally against the pre-repair commit showed the whole loss in one kind, `capdouble` (min(2a, 30)), which ended as a plain rule with 13 of 27 right. Three causes, found by tracing it: (1) in a small unit (15 lessons) one contradiction is more than a rule tolerates, so the unit was re-decided and fell to *memory* before the repair ran, and with no law left there was nothing to repair: the repair now runs first, while the settled law is still in place (`learn`); (2) one point fits two equally small laws (`min(a + a, 30)` and `a + (a mod 28)`), and a program with rivals counts as open and was thrown away at the next re-decision: a repaired program is now kept with its rivals (answering only where they agree), `own_ambiguity` finds where they part ways and `check_myself`/`wonder` ask exactly there, and the answer chooses (a lesson the program merely *declined* is a test of a rival, not a contradiction, so it vouches for its neighbors like any check); (3) my own experiment harness filtered out every question except edges, so the new question was never asked in the measurement (`invent.rs`). `capdouble` is 26 of 27 again. The pre-repair build's cap of `3 x 10` from library constants let one lesson vouch for its neighbors, which was the one-point hazard (harmless there by luck), so part of the old figure was not honestly earned.
 
-**`wrapsum`, and the box that hid it (same day).** `wrapsum` (a sum that wraps at 40) still ended with 0 stated facts of 62. Tracing it showed the repair was never attempted at the probe that exposes the wrap, (24, 22) -> 6: the unit was not `refuted`, because `refuted` still asked whether the contradicting lesson lay outside the *per-operand box* of the other lessons, and 24 and 22 had each been seen separately. It is the box-versus-staircase hole of the reach again, in a second place. `refuted` now also counts a contradiction at a point that no other lesson is at least as large as in every place (the staircase). That alone changed nothing, because the agreement guard then rejected the repair: it checked the old rule at every point of the *box*, including corner points nothing vouches for, where a wrapped law legitimately differs from a sum. The guard now checks only the points the other lessons cover (the staircase). Result: `wrapsum` 62 of 62 stated right (was 0), and the careful battery after 2 rounds: deceptive **704 / 16 / 0** (was 518 / 202 / 0, originally 521 / 199 / 0), genuine 4,671 / 39 / 0, WRONG 0; corrections 157/157 right guesses, scale/noise/permissive/teacher-check batteries unchanged. **The cost, measured:** against a *consistently* wrong teacher a little more is lost, because a wrongly-labelled corner inside the box is no longer absorbed as noise but looks like a regime change that no one can tell from the real thing: 5 % persistent 99.58 -> 99.11 % right (wrong facts 1 -> 4), 20 % persistent 87.97 -> 87.31 % (25 -> 42; 21 units refuted instead of 11); every wrong fact is still a repeat of one it was wrongly told and none is damage elsewhere; slips are unaffected (20 %: 99.97 %, 0 wrong). I judge +186 right facts of 720 on the deceptive kinds worth about half a point under a persistently wrong teacher, but it is a trade, not a free gain. Test: `a_wrap_that_shows_itself_only_at_a_corner_is_repaired_even_though_each_operand_was_seen_separately` (119 tests). Short batteries unchanged (scale sweep and 2 %/5 % noise WRONG 0.00; permissive invention 64/64, 32/36, 0/24; teacher checks 100 % / 100 %, 0 traps). Tests: 119 (was 112): saturating and wrapping sums repaired from one correction, the reflection hazard, an unrepairable pair of contradictions changes nothing, save/load of a repaired program.
+**`wrapsum`, and the box that hid it (same day).** `wrapsum` (a sum that wraps at 40) still ended with 0 stated facts of 62. Tracing it showed the repair was never attempted at the probe that exposes the wrap, (24, 22) -> 6: the unit was not `refuted`, because `refuted` still asked whether the contradicting lesson lay outside the *per-operand box* of the other lessons, and 24 and 22 had each been seen separately. It is the box-versus-staircase hole of the reach again, in a second place. `refuted` now also counts a contradiction at a point that no other lesson is at least as large as in every place (the staircase). That alone changed nothing, because the agreement guard then rejected the repair: it checked the old rule at every point of the *box*, including corner points nothing vouches for, where a wrapped law legitimately differs from a sum. The guard now checks only the points the other lessons cover (the staircase). Result: `wrapsum` 62 of 62 stated right (was 0), and the careful battery after 2 rounds: deceptive **704 / 16 / 0** (was 518 / 202 / 0, originally 521 / 199 / 0), genuine 4,671 / 39 / 0, WRONG 0; corrections 157/157 right guesses, scale/noise/permissive/teacher-check batteries unchanged. **The cost, measured:** against a *consistently* wrong teacher a little more is lost, because a wrongly-labeled corner inside the box is no longer absorbed as noise but looks like a regime change that no one can tell from the real thing: 5 % persistent 99.58 -> 99.11 % right (wrong facts 1 -> 4), 20 % persistent 87.97 -> 87.31 % (25 -> 42; 21 units refuted instead of 11); every wrong fact is still a repeat of one it was wrongly told and none is damage elsewhere; slips are unaffected (20 %: 99.97 %, 0 wrong). I judge +186 right facts of 720 on the deceptive kinds worth about half a point under a persistently wrong teacher, but it is a trade, not a free gain. Test: `a_wrap_that_shows_itself_only_at_a_corner_is_repaired_even_though_each_operand_was_seen_separately` (119 tests). Short batteries unchanged (scale sweep and 2 %/5 % noise WRONG 0.00; permissive invention 64/64, 32/36, 0/24; teacher checks 100 % / 100 %, 0 traps). Tests: 119 (was 112): saturating and wrapping sums repaired from one correction, the reflection hazard, an unrepairable pair of contradictions changes nothing, save/load of a repaired program.
 
 **Mistakes (recorded as they happened).**
-- My first test for "no repair possible" used one arbitrary correction ("24 + 12 is 7"). The repair found `(first + second) mod 29`, which fits every lesson (no taught sum reaches 29): the premise was wrong, the behaviour right. A lone number is a wrap *somewhere*; it needs two contradictions that no small law shares.
+- My first test for "no repair possible" used one arbitrary correction ("24 + 12 is 7"). The repair found `(first + second) mod 29`, which fits every lesson (no taught sum reaches 29): the premise was wrong, the behavior right. A lone number is a wrap *somewhere*; it needs two contradictions that no small law shares.
 - The skip lists of the reach functions are searched with `binary_search`; I appended the unproven lessons unsorted and the hull silently ignored the skip (the debug print showed the same hull with and without skipping). Sorted now.
 - **The sometimes-wrong teacher run caught a real regression** that no other battery did. With a *persistent* 20 % teacher the first version had **270 wrong facts, 240 of them damage elsewhere** (before: 28, all repeats of facts it was wrongly told), 85.8 % right instead of 88.0 %. `WRONG_DEBUG` showed a *selection* unit ("which is bigger or smaller") repaired into `min(second, first + second div 6)`: a coincidental program that fits the wrongly-told lessons but disagrees with the true rule *inside* the taught range, and stated those answers as facts. A repair may extend a law beyond where it was contradicted; it must not rewrite it where it was working. Fix: the repaired program must agree with the old rule at every point (up to 30 x 30, words up to ten) of the range the other lessons cover. Re-run: persistent 20 % **87.91 % right, 28 wrong facts, all repeats, 0 elsewhere** (final build: 87.97 %, 25, 0); persistent 5 % 99.58 % (unchanged); slips 5 % 99.93 %, 20 % 99.90 %. **There is no unit test for this guard** (I could not construct a small deterministic case); the experiment is its test, so re-run `compare --teacher 200 --wrong 0.2 --persistent` after any change to repair.
 
@@ -310,11 +310,11 @@ Each of the six splits improves on routing (+15 to +24 points) and on guesses ri
 
 ## A teacher who is sometimes wrong (2026-10-22; Daws: "reinforcing based on true facts... how a human learns and trusts their new sources")
 
-Every teacher-check result before this used a simulated teacher who is always right. `baby compare --teacher N --wrong P [--persistent] [--trusting]` makes the teacher wrong with probability P (the wrong answer is a random other number word). Two kinds of error, because they need different defences: **independent** (a slip: asking again gets a fresh, usually right answer) and **persistent** (consistently wrong about particular questions: the same wrong answer every time, which a second question cannot catch). 200 units, seed 1, the baby's own checks as before (4 rounds, up to 4 per unit); the report counts a wrong fact as a **repeat** if it is a fact it was wrongly told (same unit, same numbers in the same order, in any phrasing) and as **damage elsewhere** otherwise.
+Every teacher-check result before this used a simulated teacher who is always right. `baby compare --teacher N --wrong P [--persistent] [--trusting]` makes the teacher wrong with probability P (the wrong answer is a random other number word). Two kinds of error, because they need different defenses: **independent** (a slip: asking again gets a fresh, usually right answer) and **persistent** (consistently wrong about particular questions: the same wrong answer every time, which a second question cannot catch). 200 units, seed 1, the baby's own checks as before (4 rounds, up to 4 per unit); the report counts a wrong fact as a **repeat** if it is a fact it was wrongly told (same unit, same numbers in the same order, in any phrasing) and as **damage elsewhere** otherwise.
 
-**What a wrong answer did before any defence.** At 5 % independent errors (15 wrong answers learned), unseen and beyond-range questions went from 100 % to 87.9 % right; at 5 % persistent errors (21 learned) to **80.7 %**. No wrong facts and no refuted units: the loss was coverage. Looking at the damaged units showed why: every one was a Times or Apart program that had become "fits most but not all of what I was taught" (a partial program, which only guesses), with exactly **one exception**. One wrong lesson against dozens turned an exact program into a guess-only one.
+**What a wrong answer did before any defense.** At 5 % independent errors (15 wrong answers learned), unseen and beyond-range questions went from 100 % to 87.9 % right; at 5 % persistent errors (21 learned) to **80.7 %**. No wrong facts and no refuted units: the loss was coverage. Looking at the damaged units showed why: every one was a Times or Apart program that had become "fits most but not all of what I was taught" (a partial program, which only guesses), with exactly **one exception**. One wrong lesson against dozens turned an exact program into a guess-only one.
 
-**Two defences.**
+**Two defenses.**
 1. **A settled program survives a few contradicting lessons** (always on). When the refit can only offer a partial program because of at most three contradicting lessons, and at most one in twenty, the established exact program is kept (`refit_in_place`, and `relearn_unit` for a full re-decision): one lesson against dozens that agree is an outlier, not a new law (a rule already tolerated one in twenty). It states facts only where the lessons it explains reach, and a contradiction outside that reach still withholds its guesses there (the `refuted` logic of the earlier step), so a genuine change of regime stays safe: the deceptive-kinds battery is unchanged (deceptive 520 / 200 / 0, genuine 4,671 / 39 / 0).
 2. **Skepticism** (**on by default since 2026-10-22**: `School::set_skeptical(false)` / `--trusting` turn it off). An answer to one of its own checks that contradicts a rule it has good evidence for (a rule, a selection or an exact program, held-back evidence above the bar, at least 8 facts, not refuted) is **held, not learned** (`Learned.disputed`); the caller asks the same question again. The same answer twice is believed (and the rule refuted properly); the rule's answer the second time means the first was a slip and it is dropped; a third version leaves it unsettled. Costs one more question per contradiction.
 
@@ -348,7 +348,7 @@ Every teacher-check result before this used a simulated teacher who is always ri
 
 ## The controlled comparison (Vision Entry 2): the baby against matched attention transformers (2026-10-21)
 
-`baby compare` (`compare.rs`, `transformer.rs`) and `tools/pytorch_baseline.py`. Two kinds of transformer, both trained on the **same lessons** as the baby and graded on the **same four question sets** (vocabulary and answers only from the training lessons, plus spare slots reserved for what is taught later: a fixed network cannot represent a new word otherwise, which favours the network):
+`baby compare` (`compare.rs`, `transformer.rs`) and `tools/pytorch_baseline.py`. Two kinds of transformer, both trained on the **same lessons** as the baby and graded on the **same four question sets** (vocabulary and answers only from the training lessons, plus spare slots reserved for what is taught later: a fixed network cannot represent a new word otherwise, which favors the network):
 - **A plain one written from scratch in this repo** (no dependencies; pre-LayerNorm encoder, multi-head attention, ReLU feed-forward, mean-pool, Adam; the backward pass is checked against finite differences), three sizes, one fixed recipe, **tuned for none**.
 - **A conventional PyTorch one** (`nn.TransformerEncoder`, CPU build 2.9.1, in a private virtual environment, not committed) with a **24-setting random search** over width, depth, learning rate, weight decay, dropout, feed-forward width and batch size. The settings are chosen **only on held-out facts of the training lessons** (all phrasings of 20 % of the facts), never on the test sets, and the cost of the search is charged to it. The baby has no search to pay for.
 
@@ -358,7 +358,7 @@ Every teacher-check result before this used a simulated teacher who is always ri
 
 | | teaching, energy above idle | never taught: right / **WRONG** | beyond the taught numbers: right / **WRONG** |
 |---|---|---|---|
-| **baby** | 0.25 / 0.32 / 0.33 J | 90.2 / **0**; 87.8 / **0**; 85.4 / **0** | 0 as fact, **100 % right as a labelled guess** |
+| **baby** | 0.25 / 0.32 / 0.33 J | 90.2 / **0**; 87.8 / **0**; 85.4 / **0** | 0 as fact, **100 % right as a labeled guess** |
 | plain transformer d=16 (6k params) | 5.2 / 3.2 / 3.0 J (9-21x) | 84.1 / **15.9**; 64.0 / **36.0**; 70.7 / **29.3** | 15-18 / **82-85** |
 | plain transformer d=32 (16k) | 5.3 / 3.6 / 3.3 J | 81.7 / **18.3**; 60.4 / **39.6**; 77.4 / **22.6** | 15-21 / **79-85** |
 | plain transformer d=64 (49k) | 10.9 / 10.7 / 10.9 J (33-44x) | 78.7 / **21.3**; 62.8 / **37.2**; 72.6 / **27.4** | 17-20 / **80-83** |
@@ -397,7 +397,7 @@ With a 0.9 confidence cut-off a transformer is still wrong on 4.9-15 % of never-
 | 600 | 3 | 7.26 J, 3.5 s | 829 J, 385 s | 25 | 114x | 111x | 99.7 / 0.3 |
 | 1,000 (43,023 lessons) | 1 | 14.4 J, 6.1 s | 3,659 J, 1,697 s | 45 | **253x** | **277x** | 100.0 / 0 |
 
-The baby's never-taught accuracy at these sizes is 89.4-91.9 % right with 8.1-10.6 % refused and 0 wrong; the transformers are 15.6-19.8 % right beyond the taught range (the baby's labelled guess: 100 %). So the large gap at 400-1,000 units is **real and robust**: 16-277x in time and 32-253x in energy, always far above the 9-10x of 60-200 units; how large depends mostly on how many epochs the transformer happens to need (5 to 45). The time ratio does not depend on the energy counter and agrees with it. One reading (seed 2, 400 units) is invalid and is shown as such.
+The baby's never-taught accuracy at these sizes is 89.4-91.9 % right with 8.1-10.6 % refused and 0 wrong; the transformers are 15.6-19.8 % right beyond the taught range (the baby's labeled guess: 100 %). So the large gap at 400-1,000 units is **real and robust**: 16-277x in time and 32-253x in energy, always far above the 9-10x of 60-200 units; how large depends mostly on how many epochs the transformer happens to need (5 to 45). The time ratio does not depend on the energy counter and agrees with it. One reading (seed 2, 400 units) is invalid and is shown as such.
 
 (d=64: 11.3, 23.4, 125 J at 20, 60, 200 units; 12 minutes at 400 units.) The baby's teaching cost is **flat at about 0.3 mJ per lesson** from 20 to 600 units (0.27, 0.32, 0.29, 0.29, 0.29); the transformer's per-lesson cost is not (5.4, 3.0, 2.9, 9.2, 57.7 mJ): it depends on how many epochs it needs before it answers every training lesson (20, 10, 5, 10, 40) and on how fast its embedding table grows with the vocabulary. Table rows are seed 1, one training run per size; "epochs until every lesson is right" can jump, which is why the repeats below matter.
 
@@ -405,7 +405,7 @@ The baby's never-taught accuracy at these sizes is 89.4-91.9 % right with 8.1-10
 - **It does not grow.** Over ten seeds at 20 units the refusal rate is 7.8 % on average (3.1, 6.2, 6.2, 6.2, 9.4, 6.2, 9.4, 9.4, 21.9, 0.0); over five seeds at 60 units 9.2 % (5.1, 5.1, 16.3, 7.1, 12.2); one seed each at 200, 600 and 1,000 units 9.0, 10.3, 10.6 %. Seed 1's small world was a lucky draw, and I had built an explanation on one number.
 - **All of it is the reach rule.** At every size 100 % of the refusals are "a number outside the range taught" (the box) or "numbers each inside the range but not together" (the corner of the staircase); none are routing, unmet words, or a rule failing. The corner share rises (0 to 2.0, 4.4, 6.9 % of all questions at 20 to 600 units) while the box share stays at 3-5 %.
 - **Where they are.** Every refused question, at 200 and at 1,000 units, lies within 0.25 range-widths of the taught range: one step above the top edge or corner of what its unit was taught. The scale generator holds out a random 20 % of each numeric unit's near facts; one that lands at the top of the range has no taught lesson at least as large in every operand. Careful mode must refuse it, because a cap or a wrap just above the taught maximum would look identical in the lessons.
-- **They are not wrong.** Every refused question carried a labelled guess (200 units: 124 of 124; 1,000 units: 736 of 736) and every guess was right (these worlds contain no regime changes; the invention battery's deceptive kinds show what the same guesses cost when they do: 79.5 % right at that distance).
+- **They are not wrong.** Every refused question carried a labeled guess (200 units: 124 of 124; 1,000 units: 736 of 736) and every guess was right (these worlds contain no regime changes; the invention battery's deceptive kinds show what the same guesses cost when they do: 79.5 % right at that distance).
 So the roughly 9 % is the price of "never state an unchecked top edge as a fact", paid on every holdout; it is not a defect that scales. What would reduce it, and at what cost: (a) the baby asking a teacher to confirm the corners: measured below (about 5-7 questions per numeric unit clear all of them), at the price of teacher time; (b) promoting small-distance guesses to facts, which would cost wrong facts exactly where a unit changes regime (79.5 % right at that distance in the deceptive kinds), so that is a decision for Daws about the honesty rule, not a tuning step. No code was changed for this.
 
 **Teacher checks, automatic (`baby compare --teacher UNITS [--rounds N --limit N]`).** The baby asks its own check questions (`check_myself`, up to 4 per unit per round); a simulated teacher that knows each unit's operation (`scale::teacher_truth`, tested against every question the generator itself makes, in words and digits) answers the ones that have an answer; the baby learns them (`learn_wondered`). Number-word worlds, simulated always-right teacher, 4 rounds.
@@ -424,14 +424,14 @@ About **5 to 7 check questions per numeric unit** (all asked within the first th
 3. **A program unit's per-round budget was eaten by its in-range "gap" questions**, so its frontier probe never got a turn (Apart: 800 of 2,720 stayed refused). The frontier now always gets at least two places per round.
 4. **Teaching more REDUCED coverage.** With 8 questions per round the beyond-range questions were 100 % stated as fact after round 5 and **88.7 % after round 6**. A unit with a perfectly good rule (`first apart second`, 100 % held back, no exceptions) said "only taught numbers from 0 to 5" again. The reach considered only the lessons that share an "operation word" with the question, and decided what counts as one by the glue heuristic (a word in at least 40 % of the unit's facts is template glue). As check answers add facts that threshold rises, so a template word like "equals", glue at 29 facts, was no longer glue at 77, and a question containing it was judged only against the lessons that contain it, which excluded every probe lesson (they are phrased without it). Replaced by a definition that does not depend on glue: **a lesson shows where a question lies if it asks for the same function** (a rule predicts with the sum of its words' weight vectors, so every phrasing of one operation has about the same total; a selection: the same sign; a program has one function, so all lessons count). Two intermediate attempts failed and are worth recording: using the rule's `all_ops` (every word it has met, zeros included) matches every lesson; using `active_ops` (words with weight) also fails, because template words like "what" and "is" carry 0.4 of the first operand's weight each, which a merged-family test (minus not vouched for by plus lessons) caught immediately.
 
-**What was left, a side effect it exposed, and its fix: learning erodes recognition elsewhere.** At 1,000 units the 178 never-taught questions still refused (2.6 %) were all "no kind of lesson I was taught is like this question". They are small unary units (about five facts) whose question template is shared with many other units. The right unit still wins (best unit equals true unit before and after) but its margin over the runner-up fell from **0.99 to 0.36** (0.24 after more rounds), under the recognition floor of 0.742, which was fixed when the baby was taught: as neighbouring units gain lessons they gain a little on the shared words (the smoothing term V/100 lets bigger units win shared words), and a small unit's margin shrinks. So the more it learned, the more a fixed floor refused what it still correctly recognised. Hand-scaling the floor (`FLOOR_SCALE`) showed the principle was safe (0 wrong, 0 of 984 traps answered). Two attempts to make it automatic:
+**What was left, a side effect it exposed, and its fix: learning erodes recognition elsewhere.** At 1,000 units the 178 never-taught questions still refused (2.6 %) were all "no kind of lesson I was taught is like this question". They are small unary units (about five facts) whose question template is shared with many other units. The right unit still wins (best unit equals true unit before and after) but its margin over the runner-up fell from **0.99 to 0.36** (0.24 after more rounds), under the recognition floor of 0.742, which was fixed when the baby was taught: as neighboring units gain lessons they gain a little on the shared words (the smoothing term V/100 lets bigger units win shared words), and a small unit's margin shrinks. So the more it learned, the more a fixed floor refused what it still correctly recognized. Hand-scaling the floor (`FLOOR_SCALE`) showed the principle was safe (0 wrong, 0 of 984 traps answered). Two attempts to make it automatic:
 - **A floor kept at a fixed fraction of the margin of the baby's own lessons failed** and was reverted: the lessons it is taught keep large margins while the unseen questions of the small units collapse (the floor only moved from 0.742 to 0.578).
-- **A floor kept at a fixed ratio to the leave-one-out margin works.** `Routing::scores_without` scores a lesson with its own contribution taken out of the table (mirroring `add_lesson` and `scores`), which is what an unseen question of a known unit looks like. At teaching time the ratio between the floor (set from rewordings, 0.742) and the 1st-percentile leave-one-out margin (0.50) is stored (`route_ratio`, saved with the school); afterwards `recalibrate_route` sets floor = ratio x the current leave-one-out p1, never above the teaching-time floor, over a sample of at most 2,000 lessons (about 0.1 s). It runs by itself after 200 new lessons or 2 % of the total, whichever is more (at the end of `learn` **and of `learn_wondered`**), and in `reorganise`. Measured: the leave-one-out margins and the real never-taught margins agree in the low tail (both have 1 % at 0.24), so it is a good model of unseen questions; at 1,000 units the floor falls from 0.742 to 0.356 by itself, never-taught refusals from 178 to **110 (97.4 to 98.4 % right)**, **0 wrong, 0 of 984 traps answered**; learning one new fact still costs 0.5 ms and answering is unchanged.
-- **Mistakes on the way.** My first trigger (20 % growth of the total number of lessons) never fired, because the check answers added only 6 % to the total, concentrated in 400 small units that each tripled; the margins that shrink belong to the small units whose neighbours grew, so the trigger is lessons added since the last calibration. And the check answers do not come through the end of `learn` (a confirmed answer is "not surprising", `learn` returns early and `learn_wondered` adds the lesson afterwards), so the trigger had to be there too. A test that taught 234 lessons that break a unit's rule hung for minutes (each forces a full re-fit): the test now teaches lessons that fit.
-- **What stays refused is by design.** The 110 left (1.6 %) are the weakest cluster, whose margin (0.24) is below the floor even after it fell: the original design recognises about 99 % of what it is asked (it was already above the leave-one-out p1 when the baby was taught), so the weakest tail is the price of refusing mixed or unfamiliar questions. Lowering the floor further trades that for a risk of mis-routing and is a policy choice, not a fix.
+- **A floor kept at a fixed ratio to the leave-one-out margin works.** `Routing::scores_without` scores a lesson with its own contribution taken out of the table (mirroring `add_lesson` and `scores`), which is what an unseen question of a known unit looks like. At teaching time the ratio between the floor (set from rewordings, 0.742) and the 1st-percentile leave-one-out margin (0.50) is stored (`route_ratio`, saved with the school); afterwards `recalibrate_route` sets floor = ratio x the current leave-one-out p1, never above the teaching-time floor, over a sample of at most 2,000 lessons (about 0.1 s). It runs by itself after 200 new lessons or 2 % of the total, whichever is more (at the end of `learn` **and of `learn_wondered`**), and in `reorganize`. Measured: the leave-one-out margins and the real never-taught margins agree in the low tail (both have 1 % at 0.24), so it is a good model of unseen questions; at 1,000 units the floor falls from 0.742 to 0.356 by itself, never-taught refusals from 178 to **110 (97.4 to 98.4 % right)**, **0 wrong, 0 of 984 traps answered**; learning one new fact still costs 0.5 ms and answering is unchanged.
+- **Mistakes on the way.** My first trigger (20 % growth of the total number of lessons) never fired, because the check answers added only 6 % to the total, concentrated in 400 small units that each tripled; the margins that shrink belong to the small units whose neighbors grew, so the trigger is lessons added since the last calibration. And the check answers do not come through the end of `learn` (a confirmed answer is "not surprising", `learn` returns early and `learn_wondered` adds the lesson afterwards), so the trigger had to be there too. A test that taught 234 lessons that break a unit's rule hung for minutes (each forces a full re-fit): the test now teaches lessons that fit.
+- **What stays refused is by design.** The 110 left (1.6 %) are the weakest cluster, whose margin (0.24) is below the floor even after it fell: the original design recognizes about 99 % of what it is asked (it was already above the leave-one-out p1 when the baby was taught), so the weakest tail is the price of refusing mixed or unfamiliar questions. Lowering the floor further trades that for a risk of mis-routing and is a policy choice, not a fix.
 
 **What this supports, and what it does not.**
-- **Supported:** (a) on unseen questions the baby is never wrong where every transformer is wrong 0.1-40 % of the time at most sizes, tuned or not (at 600 units the transformer reaches 0 wrong); (b) the baby extrapolates (a labelled guess, right every time) where a transformer with 30 times the lessons, or a tuned PyTorch one, stays at 14-28 % right and confidently wrong the rest: extrapolation does not come from scale or tuning here, it comes from the rule-learning mechanism; (c) the baby adds knowledge without forgetting anything, while a cheap fine-tune forgets a lot and a safe one costs 3-64 times more energy; (d) teaching from scratch costs it 9-44x less than the plain transformers on the curriculum, 9-253x less across 20-1,000 units, and 2-4 orders of magnitude less than the tuned PyTorch route (final training alone 57-506 J, the search 1.5-3.0 kJ).
+- **Supported:** (a) on unseen questions the baby is never wrong where every transformer is wrong 0.1-40 % of the time at most sizes, tuned or not (at 600 units the transformer reaches 0 wrong); (b) the baby extrapolates (a labeled guess, right every time) where a transformer with 30 times the lessons, or a tuned PyTorch one, stays at 14-28 % right and confidently wrong the rest: extrapolation does not come from scale or tuning here, it comes from the rule-learning mechanism; (c) the baby adds knowledge without forgetting anything, while a cheap fine-tune forgets a lot and a safe one costs 3-64 times more energy; (d) teaching from scratch costs it 9-44x less than the plain transformers on the curriculum, 9-253x less across 20-1,000 units, and 2-4 orders of magnitude less than the tuned PyTorch route (final training alone 57-506 J, the search 1.5-3.0 kJ).
 - **Against the simple story (kept in, on purpose):** (a) **on raw accuracy on unseen questions the transformer overtakes the baby** from 60 units on (98.5 to 100 % against 94.9 to 89.4 %), because the baby refuses about 8-11 % of unseen questions at every size (see below: that rate does **not** grow; seed 1's 3.1 % at 20 units was a low draw) while a big enough network learns the small-number tables from examples; at 600 and 1,000 units it is 100 % right and 0 wrong on unseen questions. (b) At adding a handful of facts the baby is only 2-4x cheaper than a forgetful fine-tune; what it does not do is forget. (c) **The energy ratio is not monotone**: 20x, 9x, 10x up to 200 units, then 32-253x at 400-1,000 units over three seeds; my first reading of three sizes, "the advantage shrinks with scale", was wrong and is withdrawn.
 - **Caveats on the whole comparison.** (1) The curriculum is tidy and rule-shaped: the baby's home ground; a transformer with far more data, digit-aware number encoding or a larger search might do better, and 24 settings is a small search. (2) For models this small, **PyTorch on this CPU is slower and costlier than my plain Rust** (per-operation overhead on tiny batches): the final PyTorch training alone cost 57-506 J against 3-11 J for the plain ones; I had worried the Rust was the slow side, which was wrong, and a GPU would not help models this small. (3) Energy: see the method note above; about plus or minus 30 %; the baby's own teaching cost is not in the counted ledger. (4) **My counted/priced estimates (45 nm figures) were far from the measurements** (transformer teaching: 39 mJ estimated against 3-5 J measured, about 100x; the older network answering: 0.8 uJ against 27 uJ), so ratios from the estimates alone are not to be trusted. (5) One world per row except table 1; one training run per size in table 3. (6) Everything is synthetic; nothing here says what happens on real language.
 
@@ -441,19 +441,19 @@ About **5 to 7 check questions per numeric unit** (all asked within the first th
 - **I got the energy meter wrong three times.** (1) The first figures were one idle reading at start, subtracted for the whole run; the package counter also counted the browser and the desktop (30-70 % of the busy CPU time), so numbers were inflated unevenly. (2) I then scaled the energy by this process's share of the CPU time: it made repeated runs agree but **under-counted** (the d=16 transformer read 2.3-2.8 J against a clean 3-5 J), because package power does not split by CPU time. (3) A baseline taken once goes stale: when the browser was closed after it was measured, later readings were smaller than the stale baseline and clamped to **0.00 J** (impossible values, three runs and a 705-second one). The giveaways were a PyTorch run at 0.00 J next to runs at 2 W and 5 W for similar work. The meter now re-measures the baseline before every measurement and only flags, never rescales, a busy machine; every table above was re-measured after that. Several commit messages and earlier lines of this file quoted the superseded figures.
 - **The zero reading came back after the fix**, once, in the repeat runs (seed 2, 400 units, a 38-second run): the baseline taken just before the run was higher than the draw during it because the background got quieter in between. The meter now takes the lower of the draw just before and just after, and a reading still at or below the baseline is reported as invalid (n/a), never as 0.00 J. I also found that the scale report never printed the meter's warning (only the other two reports did), so the absence of a warning in those repeat runs proves nothing about the machine being quiet; fixed. The repeats are consistent with each other (the baby's own energy at 400 and 600 units ranged 4.95-6.11 J and 7.26-10.9 J), which is the best evidence I have that they are usable.
 - The tuned PyTorch model was not better than the untuned plain ones; I had half expected "just tune it" to close the gap on unseen questions.
-- I claimed, from three sizes, that the baby's energy advantage was shrinking with scale and gave a reason (its cost per lesson was rising). Both were artefacts of noisy short readings; the per-lesson cost is flat and the ratio is not monotone.
+- I claimed, from three sizes, that the baby's energy advantage was shrinking with scale and gave a reason (its cost per lesson was rising). Both were artifacts of noisy short readings; the per-lesson cost is flat and the ratio is not monotone.
 
 ## First contact with real text: SVAMP word problems (2026-10-21)
 
-Everything before this was tidy synthetic lessons. `baby bridge` (`bridge.rs`) takes question/answer pairs somebody else wrote, says what the baby cannot read at all, teaches a share, grades the rest, and reports right / refused / **WRONG** / labelled-guess right and wrong by kind, why it refused, and every wrong fact by name. Corpus: **SVAMP** (arkilpatel/SVAMP, MIT licence, `SVAMP.json`, 339,970 bytes, 1,000 one-step arithmetic word problems built so that small wording changes flip the operation); downloaded with Daws's approval to scratch space, **not committed**. Kinds come from the file (Addition, Subtraction, Multiplication, Common-Division) and are used only as the units a teacher would give.
+Everything before this was tidy synthetic lessons. `baby bridge` (`bridge.rs`) takes question/answer pairs somebody else wrote, says what the baby cannot read at all, teaches a share, grades the rest, and reports right / refused / **WRONG** / labeled-guess right and wrong by kind, why it refused, and every wrong fact by name. Corpus: **SVAMP** (arkilpatel/SVAMP, MIT license, `SVAMP.json`, 339,970 bytes, 1,000 one-step arithmetic word problems built so that small wording changes flip the operation); downloaded with Daws's approval to scratch space, **not committed**. Kinds come from the file (Addition, Subtraction, Multiplication, Common-Division) and are used only as the units a teacher would give.
 
 **What it can read.** 971 of 1,000 problems (29 set aside: numbers or answers of more than four digits; decimals/negatives were rare). Only 351 have exactly two numbers; 491 have three and 155 four (distractors).
 
-**First run: it learned nothing, and said nothing wrong.** Every unit "remember, 0 % on held-back facts"; all 296 test questions refused (261 "memorise-only unit", 35 "a word it has never met"); **0 wrong**. With units found by `discover` it shattered 971 lessons into 159 units named after story words ("jerry", "storks", "salt"): discovery assumes operation words anchor a unit, and a story has dozens of words that look just as consistent.
+**First run: it learned nothing, and said nothing wrong.** Every unit "remember, 0 % on held-back facts"; all 296 test questions refused (261 "memorize-only unit", 35 "a word it has never met"); **0 wrong**. With units found by `discover` it shattered 971 lessons into 159 units named after story words ("jerry", "storks", "salt"): discovery assumes operation words anchor a unit, and a story has dozens of words that look just as consistent.
 
 **Why, measured before building anything.** (1) On the two-number problems the baby's own language *can* express the relations: `first apart second` explains 152 of 174 subtraction problems, "larger divided by smaller" 90 of 91 division problems; but the program search wanted a program that fits **every** lesson, and real data is a majority plus exceptions (e.g. "458 more girls than boys, 692 girls, how many pupils" typed Subtraction). (2) A program declined any question with a word not seen in that unit, and the same check zeroed the unit's own held-back score. (3) The search gave up if any lesson held more than two numbers.
 
-**What was built: partial programs.** When no exact program exists (and only then, so every earlier result is unchanged by construction), `ProgramRule::fit_partial_with` accepts the smallest expression that explains at least 80 % of at least 24 lessons, if it still passes an MDL test: the bits in the explained lessons minus the cost of naming each exception (log2 of the lessons plus the answer's bits) must exceed the bits of searching. A constant that fits the four-in-five of a primality table that is "no" fails it (a test). A partial program's answers are **always labelled guesses, never facts**, whose stated rate is its held-back score times the unit's **routing precision** (measured by 5-fold routing of its own lessons, only when a partial unit exists). Unmet words no longer block such a guess; a unit whose best way to learn is a partial program is taken at a guess bar of 0.6 instead of the fact bar. It is not library vocabulary, is not edge-checked like an exact rule, and is revisited whenever the library grows.
+**What was built: partial programs.** When no exact program exists (and only then, so every earlier result is unchanged by construction), `ProgramRule::fit_partial_with` accepts the smallest expression that explains at least 80 % of at least 24 lessons, if it still passes an MDL test: the bits in the explained lessons minus the cost of naming each exception (log2 of the lessons plus the answer's bits) must exceed the bits of searching. A constant that fits the four-in-five of a primality table that is "no" fails it (a test). A partial program's answers are **always labeled guesses, never facts**, whose stated rate is its held-back score times the unit's **routing precision** (measured by 5-fold routing of its own lessons, only when a partial unit exists). Unmet words no longer block such a guess; a unit whose best way to learn is a partial program is taken at a guess bar of 0.6 instead of the fact bar. It is not library vocabulary, is not edge-checked like an exact rule, and is revisited whenever the library grows.
 
 **Results (two-number problems, 3 seeds, random split; blocks split in brackets).**
 
@@ -462,29 +462,29 @@ Everything before this was tidy synthetic lessons. `baby bridge` (`bridge.rs`) t
 | held-back score of the program per kind | subtraction 88 %, addition 94 %, division 92 %, multiplication 70 % (24 lessons) |
 | **told each question's kind (oracle)** | guess right **67-90 %**, guess wrong 5-9 %, nothing 4-24 % |
 | **routed from the words alone** | only **49-62 %** of questions reach the unit of their own kind (the biggest kind alone is 51 %) |
-| labelled guesses made | 61-97 per ~100 questions; right 58-64 % of them; **wrong as a labelled guess 20-35 % of all questions** |
-| stated hit rate vs realised | 55.5 vs 61.9, 55.7 vs 62.2, 64.5 vs 63.9 (blocks: 74.0 vs 64.6, 54.6 vs 58.1) |
+| labeled guesses made | 61-97 per ~100 questions; right 58-64 % of them; **wrong as a labeled guess 20-35 % of all questions** |
+| stated hit rate vs realized | 55.5 vs 61.9, 55.7 vs 62.2, 64.5 vs 63.9 (blocks: 74.0 vs 64.6, 54.6 vs 58.1) |
 | **answers stated as fact** | **0 right, 0 wrong** (every answer is a guess) |
 | the whole file (three and four numbers included) | still nothing learned: more than 20 % of the lessons hold more than two numbers, so the tolerant search refuses; 0 wrong |
 
-**Reading it honestly.** The way of learning is sound (oracle 67-90 %, and 50 of 51 right in the first trial). The loss is routing. (*Corrected later the same day, see the section above: the "bag-of-words ceiling" I concluded here came from the naive-Bayes-style classifiers I had prototyped; a perceptron on the same words reaches 78 %.*) A prototype of three bag-of-words classifiers (naive Bayes with and without class prior, counts of one to five) topped out at 57-65 % on the same split. The stated rates are honest in aggregate (within 1-7 points on four of five splits) and over-confident by 9 points on one blocks split. Nothing is stated as a fact, so the WRONG column the project cares about stays at 0, but **20-35 % of all questions get a wrong labelled guess**: that is what it costs to guess at all when you cannot tell which kind a question is.
+**Reading it honestly.** The way of learning is sound (oracle 67-90 %, and 50 of 51 right in the first trial). The loss is routing. (*Corrected later the same day, see the section above: the "bag-of-words ceiling" I concluded here came from the naive-Bayes-style classifiers I had prototyped; a perceptron on the same words reaches 78 %.*) A prototype of three bag-of-words classifiers (naive Bayes with and without class prior, counts of one to five) topped out at 57-65 % on the same split. The stated rates are honest in aggregate (within 1-7 points on four of five splits) and over-confident by 9 points on one blocks split. Nothing is stated as a fact, so the WRONG column the project cares about stays at 0, but **20-35 % of all questions get a wrong labeled guess**: that is what it costs to guess at all when you cannot tell which kind a question is.
 
 **Mistakes and surprises (recorded as they happened).**
 - My first idea was that number words in the stories ("one", "two") broke the operand count. Measured: 1 of 351 two-number problems. Not it.
 - `--tsv` was already a boolean flag of another command and swallowed the file name; the option is `--pairs`.
-- A newline inside a JSON string survived into the query; the loader now normalises whitespace.
+- A newline inside a JSON string survived into the query; the loader now normalizes whitespace.
 - **A regression the long battery caught and the short ones did not:** `baby invent --careful --seeds 3 --rounds 2` read deceptive **309 / 411 / 0** where it had read **521 / 199 / 0**. A bisect (`NO_PARTIAL`, `NO_GUESSBAR` switches, since removed) showed the partial program itself. Cause: `capsum` (a sum capped at 30) used to be a plain-memory "open" unit until the library grew a piece that let `reconsider_open` find the exact program; a partial program counts as a settled program, so it was never revisited and stayed a guess. Fix: a partial program is an open unit. Now 520 / 200 / 0 (one answer differs: `wrapsum` guesses where it used to remember).
 - The 2 % label-noise row of `baby scale` reads never-taught 95.9 % (was 98.0 %): I built the previous commit separately and got the same 95.9 %, so it comes from the staircase reach of the previous step, not from partial programs. I had documented the staircase's cost at 60 and 200 units but had not measured it at 2 % noise.
 
 **Honest limits.** Four kinds from one adversarially built corpus; the kinds are the file's labels; a second look at 3-4-number problems (which numbers matter) has not started; the stated rate uses a single routing precision per unit, not one per question; discovery on real text is unsolved (159 units); nothing was tuned on SVAMP beyond the two thresholds above (0.8 allowance, 0.6 guess bar), which are mine.
 
-## Careful by default, labelled guesses, and what one correction does (2026-10-21; Daws's call, Vision Entry 7)
+## Careful by default, labeled guesses, and what one correction does (2026-10-21; Daws's call, Vision Entry 7)
 
-**The decision.** Daws chose `careful` as the default, and asked that it not make the baby timid: a scientist guesses, then hypothesis, theory, law; a guess that is wrong and corrected is learning, a *silent* wrong answer is the failure. So the honesty rule became: **WRONG (a fact stated and false) stays at 0; a labelled guess may be wrong; what is measured is whether guesses are calibrated and whether one correction fixes the next mistake.**
+**The decision.** Daws chose `careful` as the default, and asked that it not make the baby timid: a scientist guesses, then hypothesis, theory, law; a guess that is wrong and corrected is learning, a *silent* wrong answer is the failure. So the honesty rule became: **WRONG (a fact stated and false) stays at 0; a labeled guess may be wrong; what is measured is whether guesses are calibrated and whether one correction fixes the next mistake.**
 
 **What was built.**
 1. `careful` is on by default (`--permissive` opts out; `--careful` is accepted and does nothing; a saved school records `careful 0` only when permissive, and a file with no line loads careful).
-2. `Reply.guess`: beyond the range taught or checked, a trusted rule's value is offered as a *labelled guess* with its `stretch` (how far past the range, in widths of that range). It is never `answer`, so every harness still counts right/wrong on facts alone. The CLI prints `probably 42` with the reason on stderr. The scorecard reports, apart, how many of the refused had a guess and whether it was right. The must-refuse battery (negative results, unreadable numbers, unmet words, memorise-only units) gets no guess; it is a test.
+2. `Reply.guess`: beyond the range taught or checked, a trusted rule's value is offered as a *labeled guess* with its `stretch` (how far past the range, in widths of that range). It is never `answer`, so every harness still counts right/wrong on facts alone. The CLI prints `probably 42` with the reason on stderr. The scorecard reports, apart, how many of the refused had a guess and whether it was right. The must-refuse battery (negative results, unreadable numbers, unmet words, memorize-only units) gets no guess; it is a test.
 3. **A miss ends the guessing out there.** Each numeric unit now records the lessons its rule does not explain (`exceptions`) and reads its reach from the lessons it *does* explain. If an unexplained lesson lies outside what the explained ones span, the unit is `refuted`: it still speaks as fact inside its explained range, it no longer guesses beyond it, and what it was told wins over the refuted rule. `learn` now keeps a confirmed guess (it used to throw it away as "nothing to learn", so a confirmed guess never extended the reach).
 
 **Numbers (simulated always-right teacher; the invention battery).**
@@ -495,9 +495,9 @@ Everything before this was tidy synthetic lessons. `baby bridge` (`bridge.rs`) t
 
 **It keeps a record of its own guessing, and states it (step 4).** Each time a guess is checked (an answer it is told for a question it would have guessed at) it counts a hit or a miss in a bucket by distance (`stretch` under 0.25, to 0.5, to 1, to 2, over 2), and saves the counts. A guess now carries `rate = (hits + 1) / (tried + 2)` and `tried`; the CLI says "my guesses this far out have been right 94 % of the time, over 120 checked", or that too few have been checked to say. **Where its guesses at that distance have been wrong more often than right it withholds them** ("so I won't guess"); a unit test builds a hostile world of eight units that all saturate and shows the fifth unit's guess withheld after four misses, while a nearer distance is still offered. This is the "boldness adapts from its own record" part, in the same spirit as the bar it sets from the noise it measures.
 
-**Is the stated rate honest? (`baby invent --calibrate --seeds 6`: guess, be told the truth, learn, in random order over all unseen questions of the 33 kinds that have a mechanism.)** 1,436 guesses; **stated rate below the realised rate in every distance bucket** (96.8 % said vs 99.9 % right under 0.25; 87.6 vs 97.2; 86.0 vs 94.0; 77.5 vs 91.5), so it is under-confident (the prior (1, 1) makes early guesses humble), never over-confident. 8,884 questions were stated as fact in the same run, **0 of them wrong**. The withholding never triggered in this battery (hits far outnumber misses, because a miss turns a unit off after one).
+**Is the stated rate honest? (`baby invent --calibrate --seeds 6`: guess, be told the truth, learn, in random order over all unseen questions of the 33 kinds that have a mechanism.)** 1,436 guesses; **stated rate below the realized rate in every distance bucket** (96.8 % said vs 99.9 % right under 0.25; 87.6 vs 97.2; 86.0 vs 94.0; 77.5 vs 91.5), so it is under-confident (the prior (1, 1) makes early guesses humble), never over-confident. 8,884 questions were stated as fact in the same run, **0 of them wrong**. The withholding never triggered in this battery (hits far outnumber misses, because a miss turns a unit off after one).
 
-**A hole this found, and its fix (the corner).** The first version of that run stated **4 wrong facts out of 9,309**, all in `wrapsum` and `capsum`. The reach was a *box* (each operand's range on its own): two confirmed guesses, (20, 2) and (2, 20), stretched it to 20 on both axes, so (18, 18) counted as "checked" though nothing near that corner was. Confirmation, which I had just made extend the reach, was the cause. The reach is now a *staircase*: a question is covered only if some explained lesson is at least as large on every operand (`Remembered::uncovered_by`); otherwise it is a labelled guess. A test pins the corner (it failed first), and the old test that expected two edge probes to vouch for (20, 15) now needs the third probe, the corner, as it should.
+**A hole this found, and its fix (the corner).** The first version of that run stated **4 wrong facts out of 9,309**, all in `wrapsum` and `capsum`. The reach was a *box* (each operand's range on its own): two confirmed guesses, (20, 2) and (2, 20), stretched it to 20 on both axes, so (18, 18) counted as "checked" though nothing near that corner was. Confirmation, which I had just made extend the reach, was the cause. The reach is now a *staircase*: a question is covered only if some explained lesson is at least as large on every operand (`Remembered::uncovered_by`); otherwise it is a labeled guess. A test pins the corner (it failed first), and the old test that expected two edge probes to vouch for (20, 15) now needs the third probe, the corner, as it should.
 Cost of the stricter reach (measured, not hidden): the tidy scorecard's never-taught row 92.7 % to 90.2 % right (9.8 % refused, 4.9 % of the questions offered as a correct guess); `baby scale` never-taught 96.94 % to 94.90 % at 60 units and 90.99 % at 200 units, **WRONG 0.00 in every column** (clean and at 2 % and 5 % noise); careful recovery after 1 round: deceptive kinds' wrong facts **96 (original) to 4 to 0**, after 2 rounds deceptive 521 / 199 / 0 and genuine 4,668 / 42 / 0 (was 4,674 / 36 / 0).
 
 **Mistakes and surprises (recorded as they happened).**
@@ -544,7 +544,7 @@ Careful mode with no questions removes every wrong answer and costs more than ha
 - My first probes tested one operand at a time, so a wrapping sum survived the first round (96 wrong); the corner probe and a cap of two gap questions per unit (hundreds of untaught pairs had crowded the edge probes out) fixed that.
 - `tenfold` taught from 1 refused a question about 0: below the smallest taught number is as unchecked as above the largest. Added a floor probe.
 - **A third round made things worse, and tracing it found a library bug that has nothing to do with careful mode.** The library holds at most 8 functions but a battery has ~14 program units. Every refit of a unit re-added its program and evicted the oldest function, whose unit then refit and evicted the next, in a rotation; and because a unit is fitted with its own function excluded, it rediscovered
-  itself as a *rewrite through another unit's function*, so entries grew into nested equivalents (`a^2 + b^2` became `a^2 + (a - (a + b))^2`, then deeper). Dependents then lost their function and fell back to memory. Fix: **a unit contributes a given behaviour to the library once**, even after it is evicted (a test pins it); the clean battery is identical (8 seeds: 128/128 hidden, 66/72 stage-2),
+  itself as a *rewrite through another unit's function*, so entries grew into nested equivalents (`a^2 + b^2` became `a^2 + (a - (a + b))^2`, then deeper). Dependents then lost their function and fell back to memory. Fix: **a unit contributes a given behavior to the library once**, even after it is evicted (a test pins it); the clean battery is identical (8 seeds: 128/128 hidden, 66/72 stage-2),
   and round 3 now produces 0 wrong. It still gives back some coverage (4,306 of 4,710), because 8 slots remain fewer than the units that depend on them: open.
 - I first guessed the round-3 problem was answers too long to read back. That was a real but different bug (fixed, and worth having); the evidence for the real cause came from logging each library addition and eviction.
 
@@ -572,7 +572,7 @@ Two facts. **The ceiling is noise:** a correct rule cannot score above about one
 ("remainder" explained as "the bigger or smaller of the two") and answered anyway. The noisy sweeps (3 benign seeds) had not shown that; the clean adversarial battery did, which is why it was run before anything was built.
 
 **What it does now.** The baby measures the noise in its own lessons: lessons that say the same thing (the same content words in the same order, i.e. one fact in several phrasings) must agree, and the share that disagree with their group's vote estimates the share of wrong lessons. Its bar is
-`clamp(0.98 - 2.5 x noise, 0.8, 0.9)`: exactly 0.9 for a clean world (nothing changed there), 0.8 from about 7 % noise (a margin above the 72 % that failed). The bar lives in the school (saved in the file, re-measured by `reorganise`; a thread-local while learning, so schools and parallel tests cannot interfere).
+`clamp(0.98 - 2.5 x noise, 0.8, 0.9)`: exactly 0.9 for a clean world (nothing changed there), 0.8 from about 7 % noise (a margin above the 72 % that failed). The bar lives in the school (saved in the file, re-measured by `reorganize`; a thread-local while learning, so schools and parallel tests cannot interfere).
 `baby scale` now prints what it believes.
 
 **It measures well.** The baby's own estimate of the noise against the world's: 2.3 / 2.3 %, 5.5 / 5.5 %, 9.6 / 9.7 %, 14.0 / 14.2 % (words), 2.0 / 2.0, 5.1 / 5.1, 9.5 / 9.5, 14.6 / 14.9 % (digits).
@@ -583,7 +583,7 @@ Two facts. **The ceiling is noise:** a correct rule cannot score above about one
 | digits, 10 % noise (60 units) | 58 % | **97.0 %** / 93.7 % (0.25 % wrong on the beyond questions) |
 | words, 15 % noise | | 92.9 % / 97.4 % (0.05 % wrong on taught) |
 | digits, 15 % noise | | 66.7 % / 66.7 % (the floor of 0.8 is above what the data can reach) |
-| 200 units: words 10 %, digits 5 % | | 93 % / 93.5 %, and 98.5 % / 98.5 %; after `reorganise` 88.8 % and 98.7 % |
+| 200 units: words 10 %, digits 5 % | | 93 % / 93.5 %, and 98.5 % / 98.5 %; after `reorganize` 88.8 % and 98.7 % |
 | adversarial invention battery, 4 seeds, hidden / stage-2 kinds worked out; false inventions; wrong | | clean 64/64, 32/36; 5 % noise 61/64, 31/36; 10 % noise 51/64, 27/36; **0 false inventions, 0 wrong at all three** |
 
 Clean worlds are bit-for-bit unchanged (scorecard, the clean sweep to 200 units, the clean battery).
@@ -633,12 +633,12 @@ and makes it think again at once. This is the first place the baby chooses *what
 |---|---|
 | digit sum (taught on 0-15), 3 of 6 seeds where explanations compete | percent of unseen questions right: **asking 88.9 -> 100.0 after ONE question**; random numbers 88.9 -> 92.6 -> 92.6 -> 100 (three) |
 | digit sum, the other 3 seeds | **no question to ask** (66.7 %, 0 wrong): the unit holds `first mod 9` as its only explanation within its vocabulary, so nothing competes; a gap that only a second explanation could expose goes unseen (a known limit) |
-| four random codes, primality, xor (all 6 seeds) | **it asked nothing**, stayed at 0 % right and **0 wrong**: no competing explanations, so it invents no puzzle where there is none (the random teacher "improves" these only by memorising one fact per number) |
+| four random codes, primality, xor (all 6 seeds) | **it asked nothing**, stayed at 0 % right and **0 wrong**: no competing explanations, so it invents no puzzle where there is none (the random teacher "improves" these only by memorizing one fact per number) |
 
 **Mistakes on the way (recorded on purpose).**
 - **An ambiguous program entered the library.** The unit fitted `tens + units` while `(first + tens) mod 10` was still a live alternative, `grow_library` added it as vocabulary, and the unit's own explanation was then found as a single library function, hiding its ambiguity from `wonder`. A guess had become a building block.
   Only a settled program (no competing explanation) is now vocabulary; a test pins it.
-- **Cross-validation penalises hypotheses that rest on one fact.** After the baby asked "19" and was told 10 the unit still did not solve, because any fold that held 19 out was ambiguous again (80 % held back). Keeping the alternatives (answer where they agree) removes that cliff, and also
+- **Cross-validation penalizes hypotheses that rest on one fact.** After the baby asked "19" and was told 10 the unit still did not solve, because any fold that held 19 out was ambiguous again (80 % held back). Keeping the alternatives (answer where they agree) removes that cliff, and also
   raised the invention battery under 2 % noise from 56/72 to 32/36 stage-2 kinds (4 seeds, 89 %).
 - **Units left open were never revisited when the vocabulary grew.** Asking about one digit sum settled it and added a clean `digitsum` to the library, but a later wider digit-sum unit kept its stale state (76 %) while `wonder` searched with the new library and saw no ambiguity. A baby that gains vocabulary should look again at what it left open:
   `reconsider_open` re-fits numeric units that were left open, only when the library has actually changed. (My first version did it on every lesson and made the experiment take over 25 minutes.)
@@ -650,7 +650,7 @@ phrasings. "Which question" is chosen by how many different answers the hypothes
 
 ## Noise, finished: robust fitting and cross-checks (2026-10-20)
 
-The previous noise round left honesty solved and coverage open: with 2 % wrong lessons a few rule units fell below the bar and became memorise-only, so unseen questions were refused (55-62 % right). Closing that took six changes, three of which were
+The previous noise round left honesty solved and coverage open: with 2 % wrong lessons a few rule units fell below the bar and became memorize-only, so unseen questions were refused (55-62 % right). Closing that took six changes, three of which were
 wrong first.
 
 | 60 / 200 units, never-taught right (WRONG was 0.00 % in every cell) | before | after |
@@ -658,35 +658,35 @@ wrong first.
 | words, 2 % noise | 62 % / 56 % | **100 % / 97.7 %** |
 | digits, 2 % noise | 51 % | **100 %** (and 100 % at 200 units) |
 | words, 5 % noise | not measured | 96.9 % / 97.4 % |
-| after `reorganise`, 200 units, 2 % noise | 85.5 % | **98.0 %** |
+| after `reorganize`, 200 units, 2 % noise | 85.5 % | **98.0 %** |
 | invention battery, 2 % noise: hidden kinds / stage-2 kinds worked out | 46 of 96 / 12 of 54 (6 seeds) | **127 of 128 / 56 of 72** (8 seeds) |
 | invention battery, 5 % noise | | 118 of 128 / 51 of 72, 0 false inventions, 0 wrong |
-| clean worlds (every row of the sweep, 20 to 600 units) | 100 % | 100 % (unchanged), reorganise at 600 units 3.5 s (was 1.35 s) |
+| clean worlds (every row of the sweep, 20 to 600 units) | 100 % | 100 % (unchanged), reorganize at 600 units 3.5 s (was 1.35 s) |
 
 **1. Robust rule fit (`Quantity::fit_ridge_robust`).** Fit, find the lessons the rule misses by more than half a step, set the worst aside, refit; at most a tenth of the lessons, at most 12 rounds, a few per round. *First version wrong:* it protected a second rule hiding in the unit
 (six "times" lessons among sums, which must stay visible so the unit is split) by requiring each suspect's words to be "explained by other lessons", but the outliers skew the fit so that *no* lesson is well explained and nothing was ever set aside (it explained 11 of 36, same as the plain fit). The
 test is now relative to peers: a lesson is an outlier only if it misses by at least three times the *median* miss of the lessons sharing each of its words. Scattered mistakes qualify; every "times" lesson misses alike, so their median is as bad as they are and they stay. A test pins both.
-A greedy one-at-a-time version made `reorganise` 9x slower at 600 units (a merged family of thousands of lessons re-solved hundreds of times); it now caps the rounds.
+A greedy one-at-a-time version made `reorganize` 9x slower at 600 units (a merged family of thousands of lessons re-solved hundreds of times); it now caps the rounds.
 
 **2. Majority per input before building programs.** One corrupted phrasing of a fact gives the *same numbers with two answers*, which no program can fit, so a single wrong lesson made a kind unexplainable. The plurality of a fact's lessons decides; a tie drops the point.
 (Alone, this took hidden kinds from 46 to 93 of 96 under 2 % noise.)
 
 **3. Two witnesses.** If a rule unit's answer disagrees with what was taught *for that exact question* (voted across the phrasings of that fact), it declines ("my rule says X, but I was taught Y for this very question"). Two versions failed first: consulting memory's *similarity* match
-treated a neighbouring lesson as a witness and cut the clean school's never-taught score from 95.1 % to 75.6 % (the scorecard caught it); consulting only the exact lesson made a wrongly taught lesson its own single witness and refused 46 % of them. The check applies only to questions that were taught as written and uses the vote across their phrasings. Clean lessons never disagree, so it costs nothing there.
+treated a neighboring lesson as a witness and cut the clean school's never-taught score from 95.1 % to 75.6 % (the scorecard caught it); consulting only the exact lesson made a wrongly taught lesson its own single witness and refused 46 % of them. The check applies only to questions that were taught as written and uses the vote across their phrasings. Clean lessons never disagree, so it costs nothing there.
 
-**4. A split must make things better.** Noise pushed some units just under the 0.95 evidence that triggers `split`, discovery re-clustered them badly, and one group, named after the filler word "is", became a memorise-only unit that took good lessons out of working rules. A split now needs the extracted group *and* what stays behind to be under a real mechanism, checked before anything moves.
+**4. A split must make things better.** Noise pushed some units just under the 0.95 evidence that triggers `split`, discovery re-clustered them badly, and one group, named after the filler word "is", became a memorize-only unit that took good lessons out of working rules. A split now needs the extracted group *and* what stays behind to be under a real mechanism, checked before anything moves.
 
 **5. Merges use the reliability bar.** A part had to be 95 % right on held-back facts to merge, and a 15-lesson unit with one wrong lesson cannot clear that. Merge candidates and parts now use the same 90 % bar as everything else.
 
-**6. Routing smoothing scales with the vocabulary.** The routing score penalised a unit by ln(lessons + 1) for each word it lacks, so a tiny unit that had never seen a rare word was penalised far less than the big merged family that had seen it rarely, and won the question. Additive smoothing with a vocabulary term fixes it, but the constant matters:
-V/2 (textbook) broke the small clean world (reworded 100 -> 93.9 %), V/20 broke 600 clean units (96.9 % routed right), V/100 keeps both exact. **This exposed an old hidden weakness:** after `reorganise`, 600 *clean* units were only 89.7 % right on rewordings (merged families diluted their own words), and the earlier sweeps never printed coverage after reorganising.
+**6. Routing smoothing scales with the vocabulary.** The routing score penalized a unit by ln(lessons + 1) for each word it lacks, so a tiny unit that had never seen a rare word was penalized far less than the big merged family that had seen it rarely, and won the question. Additive smoothing with a vocabulary term fixes it, but the constant matters:
+V/2 (textbook) broke the small clean world (reworded 100 -> 93.9 %), V/20 broke 600 clean units (96.9 % routed right), V/100 keeps both exact. **This exposed an old hidden weakness:** after `reorganize`, 600 *clean* units were only 89.7 % right on rewordings (merged families diluted their own words), and the earlier sweeps never printed coverage after reorganizing.
 V/100 makes it 100 %.
 
 **Mistakes in the harness:** the "two attributes at once" trap sometimes picked the *same* unit's attribute, a legitimate question with a stray word, and counted as an answered trap. Fixed.
 
 **What is left.** (a) At 5 % noise some facts have *two of three* phrasings corrupted (about 0.4 % of facts); the majority is wrong and nothing can know. 7 such answers remain in the digit world (0.04-0.2 % of taught and reworded questions); unseen questions stay at 0 wrong. (b) A gap in the taught numbers that
 only one explanation in the vocabulary can see is still believed: under noise the library lost the explanation that would have objected, and `first mod 9` explained a digit sum taught on 0-15 with 8 and 9 missing (9 wrong answers once, in one seed of six; it did not recur on the final code, but nothing structural prevents it). (c) Only label noise was tested (2 % and 5 %),
-not ambiguous entities, misspellings that land on other words, or noise correlated across phrasings. (d) `reorganise` is 3.5 s at 600 units (1.35 s before the robust fit).
+not ambiguous entities, misspellings that land on other words, or noise correlated across phrasings. (d) `reorganize` is 3.5 s at 600 units (1.35 s before the robust fit).
 
 ## Can the baby invent its own way to learn something? (2026-10-20)
 
@@ -707,7 +707,7 @@ number plus a bias) covers every linear one. What failed was exactly the four ne
 **Step 2: the harder kinds found two honesty bugs that the easy ones could not.**
 - **`tensdigit` (the tens digit of a number taught up to 15) was "explained" by `half(half(first - 1)) div 2` with 92 % held-back evidence, and was wrong on half the unseen numbers: 60 WRONG answers over 20 seeds.** The taught numbers have only two answers (0 and 1)
   so many expressions fit, and held-back accuracy cannot tell them apart. The project already had the principle ("when the data cannot say which one is meant, nothing should be built on the guess") for splitting but not for building. A built program
-  is now trusted only if its smallest fit is unique *in behaviour over 0 to 30*, not just on the taught range (60 -> 42 WRONG).
+  is now trusted only if its smallest fit is unique *in behavior over 0 to 30*, not just on the taught range (60 -> 42 WRONG).
 - I tried to catch what remained (a gap in the taught numbers at exactly 8 and 9, where `floor(a/8)` and the real `a div 10` part ways) with **version-space agreement**: keep near-minimal alternatives and answer only where they agree, first by enumerating
   one more size, then by small edits of the found program. Both were wrong turns. The first made every run 7x slower, the second 3 minutes 45 seconds per run and *worse* (8 of 16 hidden kinds, because legitimate programs abstained), and thinking it through the alternatives
   would not have fixed the case anyway (small edits of `floor(a/8)` mostly still say 1 at 9). Reverted. The real cause was that the true explanation needed a constant the vocabulary could not build cheaply, so a larger-constant coincidence won by Occam.
@@ -719,7 +719,7 @@ number plus a bias) covers every linear one. What failed was exactly the four ne
 **Step 3: a library, learned from experience.** Two kinds of thing the baby keeps after it has learned something, both small and bounded:
 - **Constants.** An integer of at least 3 among the coefficients of a rule it learned becomes a one-piece terminal for later searches. "Plus ten" and "ten times" taught it a `10` that the base language could only make in nine pieces.
 - **Functions.** A program it built for a reliable unit (not a plain operation on the two numbers) becomes callable as one piece, however large it was, and is inlined into whatever program uses it, so saved programs stay plain expressions. At most 6 constants and 8 functions
-  (oldest dropped), behaviourally deduplicated, grown only from units that clear the 90 % bar, saved in the school file.
+  (oldest dropped), behaviorally deduplicated, grown only from units that clear the 90 % bar, saved in the school file.
 
 | 20 seeds | no library | with the library | library, taught in the wrong order |
 |---|---|---|---|
@@ -748,19 +748,19 @@ Number words are never "glue" (see the noise section). `baby scale --digits` add
 ## Does learning stay light when the world gets big? (2026-10-20)
 
 Everything before this was measured on 13 units and 792 lessons. `baby scale` (`scale.rs`) generates a much larger synthetic world and measures it: 20 to 600 units (60% fact units, then rules,
-selects and built expressions across nine semantics), vocabularies of 1,000 to 10,000 subjects shared across units, six overlapping phrasing styles, label noise, misspelt questions, and traps that must be refused.
+selects and built expressions across nine semantics), vocabularies of 1,000 to 10,000 subjects shared across units, six overlapping phrasing styles, label noise, misspelled questions, and traps that must be refused.
 `--sweep 20,60,200,600` runs each size in its own process so peak memory is honest. Same seed throughout. One laptop core.
 
 **What the first run found** (before any change; WRONG was 0.00 % everywhere, all 467 traps refused):
 
-| units | lessons | teach | one new fact | going back over everything (`reorganise`) |
+| units | lessons | teach | one new fact | going back over everything (`reorganize`) |
 |---|---|---|---|---|
 | 20 | 828 | 4.6 s | 4.7 ms | 1.6 s |
 | 60 | 2,520 | 13.2 s | 11.3 ms | 9.4 s |
 | 200 | 8,580 | 41.8 s | **40.1 ms** | **99.9 s** |
 
-Learning one lesson grew with the whole world (O(lessons): every `learn` recomputed the word weights and the routing table from every lesson, and cloned every lesson to find the next fact number), and reorganising
-was roughly O(units^2). At 200 units quality had also slipped (3 of 18 comparison units had mislabelled themselves, rewordings 97.5 %, never-taught 94.8 %) with WRONG still 0.
+Learning one lesson grew with the whole world (O(lessons): every `learn` recomputed the word weights and the routing table from every lesson, and cloned every lesson to find the next fact number), and reorganizing
+was roughly O(units^2). At 200 units quality had also slipped (3 of 18 comparison units had mislabeled themselves, rewordings 97.5 %, never-taught 94.8 %) with WRONG still 0.
 
 **What changed, each measured or tested:**
 
@@ -769,10 +769,10 @@ was roughly O(units^2). At 200 units quality had also slipped (3 of 18 compariso
    A lesson that only corrects an answer no longer rebuilds anything. Result: **a new fact costs 0.4 ms at every size from 20 to 600 units** (was 40 ms at 200). Answering also got cheaper: 85 -> 57 counted operations
    per question (159x fewer than the slow way, was 106x), same answers.
 2. **Cross-validation folds that cannot be peeked through.** Memory matches by *set* of words, so the swapped twin of a commutative fact ("which is bigger two or three" / "three or two") held in another fold let `remember` look perfect
-   and tie with `select`; the cheaper one won and the unit became memorise-only. Facts that share a bag of words now go in one fold. A seed-sweep test pins it (it failed on seed 10 before the fix).
+   and tie with `select`; the cheaper one won and the unit became memorize-only. Facts that share a bag of words now go in one fold. A seed-sweep test pins it (it failed on seed 10 before the fix).
 3. **Stratified folds for merges.** A unit of five lessons was judged on whatever a random split left it: it could join a rule family on only 17 of 24 seeds. Each part's facts are now spread over the folds
    (24 of 24 seeds, and multiplication is rejected on 24 of 24).
-4. **Merging by set, not by pair.** `reorganise` tested every pair and started over after every merge; each merge then re-ran cross-validation on the whole growing family. Profiling (not guessing) showed the merge test cost 20-30 ms
+4. **Merging by set, not by pair.** `reorganize` tested every pair and started over after every merge; each merge then re-ran cross-validation on the whole growing family. Profiling (not guessing) showed the merge test cost 20-30 ms
    and the re-learning *after* it 6.9 s for 564 lessons. Now a whole set of rule units is tested at once ("does one rule fit every part?"), halved only when it does not, and the merged unit is settled from the evidence that justified the merge.
    **99.9 s -> 0.32 s at 200 units, 1.35 s at 600.**
 5. **The network is only tried where it can matter** (cheap mechanisms show some structure, 25 % up to the bar). It was trained and cross-validated for every unit that was a plain table and never won. Teaching 25,776 lessons:
@@ -780,7 +780,7 @@ was roughly O(units^2). At 200 units quality had also slipped (3 of 18 compariso
 
 **Clean world after the changes** (final sweep): 
 
-| units | lessons | teach | peak MB | new fact | repeat lesson | answer | reorganise | file | mechanism right | reworded / never taught | WRONG | traps answered |
+| units | lessons | teach | peak MB | new fact | repeat lesson | answer | reorganize | file | mechanism right | reworded / never taught | WRONG | traps answered |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 20 | 828 | 0.08 s | 5.5 | 0.38 ms | 0.65 ms | 6 us | 0.03 s | 33 KB | 100 % | 100 / 100 % | 0.00 | 0 |
 | 60 | 2,520 | 0.35 s | 8.8 | 0.64 ms | 0.66 ms | 10 us | 0.09 s | 97 KB | 100 % | 100 / 100 % | 0.00 | 0 |
@@ -793,7 +793,7 @@ A 10,000-subject vocabulary (200 units) behaves the same (0.9 s to teach, 21 MB,
 
 - **My first generator made rewordings that used a word the unit had never been taught** ("what is bafoba sedavubi" where "what" never appeared in that unit). The baby refused 30 % of them. I first read that as a weakness; it is the
   guard that closed the "code for five" bluff working as designed. The generator was wrong; a test now pins that every reworded question uses only words its unit was taught.
-- **I attributed the 3 mislabelled units to scale.** They were a CV flaw (change 2) that scale merely made frequent: at 20 and 60 units the luck happened to hold.
+- **I attributed the 3 mislabeled units to scale.** They were a CV flaw (change 2) that scale merely made frequent: at 20 and 60 units the luck happened to hold.
 - **A test failed after change 2 and I first suspected the change.** It was a test that passed on seed 1 by luck (the small unit joined the family on 17 of 24 seeds with the old folds, 18 with the new); the real flaw was
   variance in the merge test (change 3). Leave-one-out predictions were perfect, 5-fold ones were not: the clue.
 - The "settled" shortcut and the network trial were tuned on a clean world; label noise (below) found them wanting.
@@ -803,7 +803,7 @@ A 10,000-subject vocabulary (200 units) behaves the same (0.9 s to teach, 21 MB,
 | 2 % noise, 60 / 200 units | round 1 (clean-world code) | after the 90 % bar + settled fixes | after voting memory + order + number words |
 |---|---|---|---|
 | taught, right / WRONG | 91.0 / 1.87 % | 82.3 / 0.20 % | **100.0 / 0.00 %** (both sizes) |
-| lessons taught *wrongly*, answered with the truth | (mislabelled, see below) | 40 % | **100 %**, repeated the wrong lesson 0 times |
+| lessons taught *wrongly*, answered with the truth | (mislabeled, see below) | 40 % | **100 %**, repeated the wrong lesson 0 times |
 | reworded, WRONG | 2.50 % | 0.83 % | **0.00 %** |
 | never taught, right / WRONG | 77.3 / 6.12 % | 62.2 / 0.00 % | 62.2 and 55.5 / **0.00 %** |
 | beyond the taught range, WRONG | 9.18 % | 0.00 % | **0.00 %** |
@@ -816,7 +816,7 @@ What each step was:
 2. **Voting memory.** Memory used to answer from the single closest lesson, so one wrong phrasing out of three won. Now every lesson with the question's content words votes, weighted by closeness; the plurality answers, a tie refuses.
    Voters need only 0.3 closeness (a wordier phrasing of the same fact scores about 0.45 and must be heard) but something must be close (0.5). Wrongly taught facts are now corrected by their own other phrasings, which is redundancy the
    baby had all along.
-3. **Memory ignored word order and repeated operands, so the same trap came back a fourth time.** In memorise-only numeric units "two nidovubi five" (a negative result) retrieved "five nidovubi two", and "three times three" retrieved
+3. **Memory ignored word order and repeated operands, so the same trap came back a fourth time.** In memorize-only numeric units "two nidovubi five" (a negative result) retrieved "five nidovubi two", and "three times three" retrieved
    "three times two" because the content words were compared as a *set*. Content words are now compared as a *sequence*, repeats kept. And "glue" (words ignored by the fill-the-blank guard) used to be any word in a tenth of a unit's
    facts, which made number words glue; it is now two fifths of the facts, and a number word is never glue ("one" is in over 40 % of the times facts and is not "what is"). Each of those was found by printing the wrong answers
    (`SCALE_WRONG=1`), not by reasoning: the examples named the cause every time.
@@ -825,7 +825,7 @@ What each step was:
 40 % repeated and 40 % refused. It now grades against the truth and counts repeats separately.
 
 **What noise still costs is coverage, not honesty.** Never-taught and beyond-range questions are refused much more (55-62 % right instead of 100 %): a few wrong lessons skew the *exact* least-squares fit, so rule units fall to 70-89 %
-held-back, miss the 90 % bar and become memorise-only, and the 3 program units that need an exact expression cannot find one. A **robust fit** (drop lessons that disagree *only if their operator word is otherwise consistent*, so scattered
+held-back, miss the 90 % bar and become memorize-only, and the 3 program units that need an exact expression cannot find one. A **robust fit** (drop lessons that disagree *only if their operator word is otherwise consistent*, so scattered
 noise is ignored while a polluting second rule is still caught by split) would recover that, and is the remaining noise work. Noisy units that are not settled still cost 80-250 ms a lesson (a new fact in a settled fact unit stays 0.5 ms).
 
 **Honest limits.** Still synthetic and tidy in structure: made-up words, number words 0-10, four phrasings per fact, a vocabulary with no frequency distribution (no Zipf), no ambiguity between entities and words, no
@@ -835,7 +835,7 @@ far less regular ones. 600 units / 26,000 lessons / 10,000 words is a long way f
 
 ## Learning is light (2026-10-20)
 
-Daws: training is enormously intensive today, and learning with Adaptive Learning should be light enough that nearly anyone can do it, with no data centre. That is
+Daws: training is enormously intensive today, and learning with Adaptive Learning should be light enough that nearly anyone can do it, with no data center. That is
 testable at this scale. `baby cost` (one core of this laptop, no GPU; the CPU's energy counter is off limits here, so the measures are time and memory):
 
 | | cost |
@@ -861,10 +861,10 @@ Three things make learning light here, and each was measured, not assumed:
 A lesson's identity is now its words *in order*; the same 60 lessons now cost 0.18 ms each. (That bug could also have corrupted order-sensitive units like subtraction; it did not in the data, but would have.)
 
 Honest limits, and they are large: 800 tidy lessons is not the world. **Nothing here says how this grows with millions of real sentences**, whether the pen and the cross-validation still stay this cheap
-when lessons are noisy and overlapping, or whether a language with huge vocabulary needs more than a handful of rules. Time and memory on a laptop are an honest proxy for "needs no data centre" at this scale,
+when lessons are noisy and overlapping, or whether a language with huge vocabulary needs more than a handful of rules. Time and memory on a laptop are an honest proxy for "needs no data center" at this scale,
 and no more than that.
 
-## Reorganising over time: merge and split (2026-10-20)
+## Reorganizing over time: merge and split (2026-10-20)
 
 Discovery should not be a one-off. `baby sleep` now also looks again at how the lessons are grouped, in both directions:
 
@@ -872,7 +872,7 @@ Discovery should not be a one-off. `baby sleep` now also looks again at how the 
   go to the unit that builds exactly the same expression, or to a unit of their own. Test: six multiplication lessons put under `sum` by mistake were taken out and went to `times`; `sum` was itself again.
 - **Merge**: two units that were taught separately merge if a rule, or a rule with a setting per word, is right for **each** of them on facts held back. Test: a unit `added` ("what is a added to b") taught on the side was folded into the rule family.
 
-On the real school this merged the five rule-like units (sum, minus, after, double, half) into one, so there are 9 units, the same 9 that discovery found from unlabelled lessons; what the merged rule learned takes 586 bytes. Scorecard unchanged:
+On the real school this merged the five rule-like units (sum, minus, after, double, half) into one, so there are 9 units, the same 9 that discovery found from unlabeled lessons; what the merged rule learned takes 586 bytes. Scorecard unchanged:
 100% / 100% / 95.1% / 100%, 0% wrong, every nonsense question still refused.
 
 Three bugs on the way: (1) the first split moved *every* healthy group out, including the big correct one, and left the original unit empty (the largest now stays); (2) after merging, the recognition floor was still
@@ -892,7 +892,7 @@ So I taught it to forget what is already explained (`baby sleep --compact`). A u
 without, and every word it needs; a unit of facts keeps two phrasings of each. Then comes the part that took three tries:
 
 **The promise: it must still answer every lesson it was ever taught, kept or not, and never answer wrongly.** First version: the file fell to 47% but "taught" dropped to 96.3%, rewordings to 88.6%.
-Two causes. (1) I tested whether the rule still worked but not whether the baby still *recognised* the question: the router had lost examples of how each unit is phrased. Compaction now
+Two causes. (1) I tested whether the rule still worked but not whether the baby still *recognized* the question: the router had lost examples of how each unit is phrased. Compaction now
 re-checks every lesson it let go and puts back any it can no longer answer, until it can answer all of them. (2) That check covered only the lessons let go, and the recognition floor was
 recalibrated from them, so the *kept* lessons of two tiny units (which have weaker routing scores) fell below it. The floor is now set from every lesson it was ever taught, with room below it.
 
@@ -914,8 +914,8 @@ of general language would compress to, and facts (the part that grows with the w
 
 ## Lessons that fit nothing: the pen (2026-10-20)
 
-Pushing on Adaptive Learning: `baby learn "query" answer` no longer needs the unit named. If the baby recognises a kind of lesson it joins that unit; if not, the lesson waits in a **pen**.
-When enough gather (at least six lessons of at least five different facts) the same discovery used on a heap of unlabelled lessons looks at the pen, and a group that follows one rule
+Pushing on Adaptive Learning: `baby learn "query" answer` no longer needs the unit named. If the baby recognizes a kind of lesson it joins that unit; if not, the lesson waits in a **pen**.
+When enough gather (at least six lessons of at least five different facts) the same discovery used on a heap of unlabeled lessons looks at the pen, and a group that follows one rule
 opens a unit by itself, named after the words that were new to it. A real session, nothing named:
 
 ```
@@ -931,7 +931,7 @@ And a new phrasing of something it already knows: six lessons "what is a multipl
 
 **The same trap, a third time.** My first pen joined the "N less than ten" lessons to unit `apart`, because the expression it built for them was identical to apart's. It is the minus/apart trap again:
 for a number below ten, `ten - n` and `|n - ten|` agree on every lesson, so the search picked `apart` (enumerated first) and the baby would have answered "ten less than three" with 7 instead of refusing.
-Two repairs, both general: an expression only counts as *the* explanation if exactly one behaviour fits the lessons (two expressions that agree on every pair of numbers from 0 to 10, like `a x b` and `b x a`, are one; `second - first` and `first apart second` are two),
+Two repairs, both general: an expression only counts as *the* explanation if exactly one behavior fits the lessons (two expressions that agree on every pair of numbers from 0 to 10, like `a x b` and `b x a`, are one; `second - first` and `first apart second` are two),
 and the same test guards suggestions. A test pins both directions: "N less than ten" is ambiguous, multiplication is not.
 
 Honest limits: the pen needs six lessons of five facts before it acts; it can only open a unit for a kind that one rule explains (anything else stays waiting); names are the group's new words; and joining an existing unit needs
@@ -949,7 +949,7 @@ hands the baby **792 lessons with no grouping at all** (questions and answers, s
 3. **One rule.** Two groups of number questions merge only if a mechanism with a setting *per operation word* (a rule, a selection) is right for **each group** on facts
    held back, or both built the very same expression. "plus" and "minus" merge (a rule has a weight for each word); "times" and "plus" do not.
 
-Result, identical on seeds 1 to 5, from 792 unlabelled lessons:
+Result, identical on seeds 1 to 5, from 792 unlabeled lessons:
 
 ```
 found unit             lessons   made of (the units the teacher would have named)
@@ -965,7 +965,7 @@ for/code                    27   code 27
 
 Each fact kind came out pure, the five rule-like kinds (sum, minus, after, double, half) correctly became one family with a setting per word, `compare`
 needed its own mechanism, and `times` and `apart`, each of which needs an expression built for it, stayed separate. Its scorecard is
-**identical to the baby the teacher organised**: right 100% / 100% / 95.1% / 100% (taught, reworded, never taught, beyond the range), refused the rest, **0% wrong**.
+**identical to the baby the teacher organized**: right 100% / 100% / 95.1% / 100% (taught, reworded, never taught, beyond the range), refused the rest, **0% wrong**.
 
 Three mistakes on the way, because they are the useful part:
 
@@ -973,9 +973,9 @@ Three mistakes on the way, because they are the useful part:
   spread: an operation word spans dozens of different facts, a thing being asked about spans one or two. Anchors now need at least four distinct facts.
 - **The "same facts" shortcut was unsafe for numbers.** "Five minus two" and "how far apart are five and two" are both three: for the bigger number first, `a - b`
   and `|a - b|` agree on every lesson, so the two groups were merged into one unit built on `|a - b|`, and the discovered baby answered **"three minus five"
-  with "two"**. The organised baby correctly refused. The scorecard had not asked that question; I found it by asking. Two repairs: the same-facts test now keeps
+  with "two"**. The organized baby correctly refused. The scorecard had not asked that question; I found it by asking. Two repairs: the same-facts test now keeps
   the order of the numbers and must hold both ways round (a group merely *including* another's facts is a different unit); and a single built expression is not
-  a licence to merge, because it ignores which operation word was used. A test pins "three minus five" and "two minus nine" as refused.
+  a license to merge, because it ignores which operation word was used. A test pins "three minus five" and "two minus nine" as refused.
 - **A small group was swallowed.** Six "after" lessons joined 144 comparison lessons because the *overall* held-back score stayed above 95%: the error was
   entirely the small group. A merge now has to hold for each group separately.
 
@@ -1013,7 +1013,7 @@ ratios are what to trust) on 2,592 questions (taught, reworded, never taught, be
 |---|---:|---:|---:|---:|---:|---:|
 | the slow way | 8,977 | 6,126 | 45.0 nJ | 99.7% | 0.3% | 0% |
 | **what the baby does** | **85** | **89** | **0.80 nJ** | **99.7%** | 0.3% | **0%** |
-| one small network | 7,104 | 7,104 | 388 nJ | (memorises; cannot work out a new sum) | | |
+| one small network | 7,104 | 7,104 | 388 nJ | (memorizes; cannot work out a new sum) | | |
 
 **106x fewer operations, 69x fewer words moved, about 56x less estimated energy, the same answers.** Training dropped from 12.3 s to
 4.6 s as well (one seed). Where the savings come from:
@@ -1029,12 +1029,12 @@ ratios are what to trust) on 2,592 questions (taught, reworded, never taught, be
    do the sums.
 
 It took two honest corrections to get "the same answers" and not just "fewer operations":
-- **First version: 94.2% right** (5.8% refused). The "is this a kind of question I recognise?" check compared the raw score with a floor, and raw scores grow
-  with the number of words, so a three-word question like "one plus zero" looked less recognisable than a long one, though it is unmistakably a sum. The fix
+- **First version: 94.2% right** (5.8% refused). The "is this a kind of question I recognize?" check compared the raw score with a floor, and raw scores grow
+  with the number of words, so a three-word question like "one plus zero" looked less recognizable than a long one, though it is unmistakably a sum. The fix
   is to measure how decisively one unit beats the next (the margin), which does not depend on length.
 - **Then 99.3% (not 99.7%)**: ten questions, all one reworded phrasing ("what is after five"). The floor was set so that 95% of rewordings are
-  recognised, i.e. the least decisive 5% were turned away on purpose. I made it a 99% floor and re-ran the battery of 22 unanswerable questions: all still
-  refused. The floor is a dial (lower recognises more, risks more), not a law.
+  recognized, i.e. the least decisive 5% were turned away on purpose. I made it a 99% floor and re-ran the battery of 22 unanswerable questions: all still
+  refused. The floor is a dial (lower recognizes more, risks more), not a law.
 
 Honesty about this: these are counted operations, not a meter (the CPU's energy counter is still off limits here). The comparison "one small network" is the
 older single-network baby, not a clever alternative. Savings of this size come from an inefficient baseline: the first design compared against everything.
@@ -1043,7 +1043,7 @@ older single-network baby, not a clever alternative. Savings of this size come f
 
 The baby now keeps every lesson it has been taught, so it can go on learning. `baby learn "query" answer [--unit NAME]` adds a lesson, works out again how
 that unit is best learned from *all* its lessons, and saves. With `--unit` it joins that unit or opens one of that name; without, it joins the unit the
-question resembles if it recognises a kind of lesson and refuses (saying why) if not, rather than guessing. Fewer than five facts in a unit: it only
+question resembles if it recognizes a kind of lesson and refuses (saying why) if not, rather than guessing. Fewer than five facts in a unit: it only
 remembers, because that is not enough evidence to trust anything else.
 
 A real session:
@@ -1073,13 +1073,13 @@ sees a "twin" and is a little optimistic about remembering); and the other units
 `baby school` unifies everything that worked. A curriculum of 13 **units** (capital, color, sound, opposite: facts; sum, minus, after,
 double, half: arithmetic-like rules; compare: pick the bigger or smaller; times, apart: forms that had to be *built*; code: an arbitrary
 mapping) is taught. The teacher groups the lessons and never says how to learn them. For each unit the baby holds back facts, tries five
-mechanisms (remember, rule, select, program, network), and keeps what generalises. A question then goes through this pipeline
+mechanisms (remember, rule, select, program, network), and keeps what generalizes. A question then goes through this pipeline
 (`baby ask`):
 
 1. **What the user taught it** (`baby teach`): looked up first, any word, no weights.
 2. **Spelling**: a word one or two letters from exactly one word it knows is taken to be that word, and it says so.
 3. **A word it has never met**: it says so and asks to be taught.
-4. **Which unit?** By a precomputed table of how telling each word's shape is for each unit (every number is a number); if no unit beats the next by enough, it says it doesn't recognise the kind of question.
+4. **Which unit?** By a precomputed table of how telling each word's shape is for each unit (every number is a number); if no unit beats the next by enough, it says it doesn't recognize the kind of question.
 5. **That unit's mechanism answers**, or declines: the rule, selection and program decline on words and shapes they have not learned; remembering
    declines unless the *word that fills the blank* matches what it was taught.
 
@@ -1098,7 +1098,7 @@ unrelated chat ("tell me a joke"), numbers off the line ("five times five", "thr
 phrasings it was not taught ("two multiplied by four"). Those last two are refused although a person could answer them: the safe failure.
 
 **A bluff the scorecard missed, then found.** My first unified version answered "what is the code for five" with "three" (the code for
-*one*), claiming it was recalled. The code unit is memorise-only, and its matching was dominated by the glue words ("code", "for"),
+*one*), claiming it was recalled. The code unit is memorize-only, and its matching was dominated by the glue words ("code", "for"),
 while number words turn up all over the curriculum and so carry little weight. The first scorecard had passed because it only asked
 questions of a certain style; the check that caught it was asking for every code from zero to ten and comparing with the truth.
 The fix: a word that appears across several different facts of a unit is glue; every other word of a question must match the
@@ -1116,7 +1116,7 @@ Honest limits:
 query -> 8 word slots -> reader -> tanh hidden layer (64) -> softmax over 95 answer words -> one word
 ```
 
-(The reader is `concat` by default, the original; `--reader bag` is smaller and generalises better, see "Position-free readers".
+(The reader is `concat` by default, the original; `--reader bag` is smaller and generalizes better, see "Position-free readers".
 The numbers in this section describe the original `concat` baby.)
 
 - **16,271 parameters** (about 65 KB as floats; the readable text file is 185 KB). **14,272 multiply-adds per query.**
@@ -1126,7 +1126,7 @@ The numbers in this section describe the original `concat` baby.)
 
 ## Its world
 
-Six kinds of tiny question, each with one-word answers, in four phrasings (`src/data.rs`): colour of things, animal sounds,
+Six kinds of tiny question, each with one-word answers, in four phrasings (`src/data.rs`): color of things, animal sounds,
 opposites, capitals, addition and subtraction up to 5 (number words). The data is generated in code from a seed, so every result is
 reproducible. Phrasings 0-2 are for training. Phrasing 3 is a recombination of words the baby has already seen ("new-phrase"
 test). For arithmetic, 15% of whole sums are held out in every phrasing ("new-sum" test: did it learn the rule or the table?).
@@ -1142,7 +1142,7 @@ Per family (seed 1, shuffled), new phrasing: sound 100, add 100, sub 100, color 
 
 What this teaches us, in order of confidence:
 
-1. **It memorises perfectly and generalises where position lines up.** Every family that fails on the new phrasing is one where
+1. **It memorizes perfectly and generalizes where position lines up.** Every family that fails on the new phrasing is one where
    the key word lands in a slot it never occupied in training (read the templates in `src/data.rs`: "the opposite of X" puts X in
    slot 3; the training phrasings put it in slots 0, 2 and 5). Sound, add and sub succeed because their held-out phrasing keeps the
    words in familiar slots. This is the architecture's fault, not the data's: embeddings glued side by side tie every word to a
@@ -1150,7 +1150,7 @@ What this teaches us, in order of confidence:
    and the baby gives us a yardstick for it.
 2. **It learned the table, not the rule, for sums.** Held-out sums land far below the training accuracy and swing 6-44% between
    seeds (only 32 test items, so noisy), and subtraction is the weakest.
-3. **Curriculum may help a little.** Introducing the families in stages (colour/sound, then opposites, then capitals, then sums,
+3. **Curriculum may help a little.** Introducing the families in stages (color/sound, then opposites, then capitals, then sums,
    with the earlier ones kept in the mix) scored about 6 points higher on new phrasing across four seeds. That is a hint, not a
    finding: four seeds, noisy, and the curriculum run also takes fewer gradient steps early on. BabyLM found ordering tricks
    mostly don't help, so this deserves a bigger, fairer test before anyone believes it.
@@ -1179,9 +1179,9 @@ What counting showed:
 - **Answering one question costs ~14,000 multiply-adds, about 0.8 microjoules (estimated), and 91% of that is memory traffic, not
   arithmetic.** Even a 63 KB network is a data-movement problem. A 7-billion-parameter model does ~500,000x more arithmetic per
   token and cannot keep its weights in cache at all, so each word it reads is priced as DRAM (640 pJ vs ~50 here).
-- **One single-lesson learning step costs ~12x a question (9.9 uJ), and the optimiser is most of it.** Adam touches all 16k
+- **One single-lesson learning step costs ~12x a question (9.9 uJ), and the optimizer is most of it.** Adam touches all 16k
   parameters and keeps two extra numbers for each, which is 70% of that step's arithmetic and two thirds of its memory traffic. In a
-  batch of 16 it shrinks to ~12%. So the optimiser matters exactly when updates are small and frequent, which is what *learning*
+  batch of 16 it shrinks to ~12%. So the optimizer matters exactly when updates are small and frequent, which is what *learning*
   is. (Plain SGD is cheaper per update but needed more updates or care: no clear win without tuning; see below.)
 - **Implementation is a real lever.** A dot product written as eight independent sums instead of one lets the compiler use SIMD with
   no unsafe code and no special flags: **32 us -> 13 us per question (2.5x), same network, same answers.**
@@ -1194,7 +1194,7 @@ sudo chmod a+r /sys/class/powercap/intel-rapl:0/energy_uj
 
 ## Learning instead of training (2026-10-15)
 
-`baby life` gives a newborn baby (it knows its *words*, no *facts*) the same lessons in the same order, one at a time: colours and
+`baby life` gives a newborn baby (it knows its *words*, no *facts*) the same lessons in the same order, one at a time: colors and
 sounds, then opposites, capitals, sums, over two "days". It tries each question, is told the right word, and has to cope. Five ways:
 
 | method | what it does |
@@ -1229,7 +1229,7 @@ What it says (with the caveats that matter):
    then consolidate into the weights. The store shrinks from a peak of ~60 entries to 42.
 4. **Consolidation moves facts but loses the store's flexibility.** Rewording scores fall from 97% (store) to 56% (after sleep),
    the same as a batch-trained network. The knowledge moved into weights; the position-free reading did not move with it. If the
-   network read words the way the store does, consolidation would keep the generalisation. This is the strongest hint so far for
+   network read words the way the store does, consolidation would keep the generalization. This is the strongest hint so far for
    what to change in the network.
 5. **Replay is not enough here** (82% retained at 103 mJ): a small rehearsal buffer protects most of the past but not all, and
    it costs more than retraining per percentage point kept once sleeping is available.
@@ -1239,10 +1239,10 @@ the ranking between replay and sleep could move; the retrain baseline is a delib
 pipeline would fine-tune with replay (which is what `replay`/`sleep` approximate); the energy figures are a model, not a meter;
 this world is tiny and tidy.
 
-Optimiser check (3 seeds): with plain SGD (lr 0.05-0.2) retrain needed ~338 mJ vs 366 mJ with Adam, only 8% less, because in
-batches of 16 the optimiser is a small share of the work. SGD made single-lesson learning (replay) need more updates, and at low
+Optimizer check (3 seeds): with plain SGD (lr 0.05-0.2) retrain needed ~338 mJ vs 366 mJ with Adam, only 8% less, because in
+batches of 16 the optimizer is a small share of the work. SGD made single-lesson learning (replay) need more updates, and at low
 learning rates sleeping never consolidated (the store kept everything and did the answering). So: no free win from dropping Adam
-at this scale, but the *shape* of the cost (an optimiser that touches everything to learn one thing) is the target for something
+at this scale, but the *shape* of the cost (an optimizer that touches everything to learn one thing) is the target for something
 smarter, such as updating only the rows a lesson actually involves.
 
 ## Position-free readers (2026-10-19)
@@ -1250,7 +1250,7 @@ smarter, such as updating only the rows a lesson actually involves.
 The `life` results pointed at the reader: the store read *sets* of words and shrugged off rewording; the network glued each word to
 its slot and did not. So the network now has three readers (`--reader concat|bag|bigram`, see `src/net.rs`): the original
 `concat`; `bag`, the average of the words' embeddings (position-free, order-blind); and `bigram`, the bag plus hashed pairs of
-neighbouring words (the fastText recipe: position-free, keeps local order). Gradients of all three are checked numerically in tests.
+neighboring words (the fastText recipe: position-free, keeps local order). Gradients of all three are checked numerically in tests.
 
 Batch training, four seeds (`baby train --reader R`):
 
@@ -1282,11 +1282,11 @@ What it says:
    probably because the lessons now share parts instead of each owning its slot (a hypothesis; not isolated).
 3. **Sums are still not learned.** The bag's 31-50% on never-taught sums is mostly *commutativity*: I checked, and for three of the
    four seeds it equals exactly the share of held-out additions whose swapped twin ("two plus three" after "three plus two") was in
-   training, with subtraction at 0%. The bigram reader, which can tell the order, got 0%: it memorised pair patterns. At this size
-   and with ~100 examples, **none of the readers learns the addition rule**. That gap (memorising versus abstracting) is the central
+   training, with subtraction at 0%. The bigram reader, which can tell the order, got 0%: it memorized pair patterns. At this size
+   and with ~100 examples, **none of the readers learns the addition rule**. That gap (memorizing versus abstracting) is the central
    open problem for Adaptive Learning.
 4. **The price is honesty about the unknown.** The old reader said "not sure" (confidence under 0.5) to "capital of atlantis". The
-   bag answers *paris*, confidently, and also "what color is a zebra" -> green, "opposite of purple" -> slow. It generalises by
+   bag answers *paris*, confidently, and also "what color is a zebra" -> green, "opposite of purple" -> slow. It generalizes by
    association (a lone "banana" -> yellow is a nice one), and the same association makes it guess boldly when it should abstain.
    The store and a simple rule ("a word I have never met: say so and ask to be taught") are the obvious fixes, and a good first
    test of a surprise-gated learner.
@@ -1345,7 +1345,7 @@ memory, not the network: consolidating them ("sleep" for new words and answers) 
 
 TransientVision Entry 4: the deviation may be deeper than architecture, perhaps not even tokens. The word readers carry a fixed word
 list (a small cousin of the industry's token habit). `--reader letters` has none: a question is turned into hashed pieces of its own
-spelling (the whole word, 3- and 4-letter groups with word-boundary marks, pairs of neighbouring words) and their embeddings are
+spelling (the whole word, 3- and 4-letter groups with word-boundary marks, pairs of neighboring words) and their embeddings are
 averaged. Any word at all has a reading, including one it never met, and a misspelling keeps most of its pieces.
 Gradients are checked numerically like the others (31 tests).
 
@@ -1353,21 +1353,21 @@ Misspellings: the same questions with one spelling mistake (drop, swap or replac
 letters; **"typo-key" is the word that carries the meaning** ("peru", "banana", "three"), which is where it matters. Mean of 3 seeds,
 right answers %:
 
-| trained with misspelt copies of each question | concat | bag | **letters** |
+| trained with misspelled copies of each question | concat | bag | **letters** |
 |---|---:|---:|---:|
 | none | 11 | 10 | **37** |
 | 2 copies | 14 | 12 | **44** |
 | 4 copies | 14 | 12 | **48** |
 | 8 copies | 15 | 12 | **61** |
 
-(typo-key accuracy; no misspelt *word* used for testing ever appears in training, in any question). The word readers cannot learn
+(typo-key accuracy; no misspelled *word* used for testing ever appears in training, in any question). The word readers cannot learn
 from misspellings they will be tested on, because each misspelling is simply a new unknown word: they stay at 10-15% however much
-they see. The letters reader generalises to spellings it never met, and improves as it meets more noise. Along the way:
+they see. The letters reader generalizes to spellings it never met, and improves as it meets more noise. Along the way:
 
 - **My first explanation was wrong.** I guessed the letters reader wasn't robust because the whole-word piece always appears next
   to its letter groups so the network had no reason to lean on the groups. Removing the whole-word piece changed nothing (64-67% vs
   64-65% on any-word typos). Rejected.
-- **My first augmentation result was inflated.** The same misspelt word ("pru") could appear in training in one template and in the
+- **My first augmentation result was inflated.** The same misspelled word ("pru") could appear in training in one template and in the
   test in another, which helped the word readers unfairly (bag appeared to reach 42-51%). Filtering so that test misspellings never
   appear in training dropped the bag back to 12% and left the letters reader on top. Worth remembering: this kind of leak is easy
   and invisible.
@@ -1403,7 +1403,7 @@ Accuracy on the overheard questions / on rewordings it never overheard, mean of 
 What it says, honestly:
 
 1. **Choosing helps a lot against not choosing**: curious needs about half the answers random does (197 vs 429) and reaches about the
-   same accuracy as a teacher-corrected stream, without anyone judging its mistakes. At a stricter match (0.7) it also generalises
+   same accuracy as a teacher-corrected stream, without anyone judging its mistakes. At a stricter match (0.7) it also generalizes
    to rewordings better per answer (73% vs 69% at 143 answers).
 2. **But novelty is not correctness.** It stops at 93/86% because everything left *looks* familiar, including facts it has
    confused with similar ones. The stream baby is told when it is wrong, so it finishes at 100/93%.
@@ -1416,15 +1416,15 @@ What it says, honestly:
 
 ## Rules, not tables (2026-10-19)
 
-Every network so far memorised sums. Given "three plus two" it learned the pair, and "three plus one" was a stranger. `src/quantity.rs`
+Every network so far memorized sums. Given "three plus two" it learned the pair, and "three plus one" was a stranger. `src/quantity.rs`
 is a small unit with the two things a rule needs: a **number line**, learned the way a child gets one (taught to count: "what comes
 after three? four"), and an **operator** per word, three learned numbers each, so a question's prediction is
 `a*first + b*second + c` summed over its words. It is fitted on the same sums the networks see. `baby rules`, 5 seeds, right answers on sums:
 
 | mechanism | taught | reworded | never taught (same numbers) | beyond the taught range (up to ten) |
 |---|---:|---:|---:|---:|
-| bag network (memorises) | 100% | 100% | 39% | 5% |
-| letters network (memorises) | 100% | 100% | 33% | 5% |
+| bag network (memorizes) | 100% | 100% | 39% | 5% |
+| letters network (memorizes) | 100% | 100% | 33% | 5% |
 | **quantity rule (fitted)** | 100% | 100% | **100%** | **100%** |
 
 What the rule learned about words (nobody told it): `plus` -> (1.00, 1.00, 0.00), `minus` -> (1.00, -1.00, 0.00), and `what`, `is`,
@@ -1494,7 +1494,7 @@ Mean of 3 seeds, held-back accuracy %:
 
 ```
 unit       remember   rule  select  program  network   chose
-capital          0%     0%      0%       0%       0%   remember 3/3   <- nothing here generalises; it can only memorise this
+capital          0%     0%      0%       0%       0%   remember 3/3   <- nothing here generalizes; it can only memorize this
 sum             57%   100%     26%     100%      57%   rule 3/3
 compare         83%    21%    100%       0%      86%   select 3/3
 after            0%   100%      0%     100%       0%   rule 3/3
@@ -1502,7 +1502,7 @@ double           0%   100%      0%     100%       0%   rule 3/3
 half             0%   100%      0%     100%       0%   rule 3/3
 times           62%     5%     19%     100%      62%   program 3/3
 apart           55%     0%      2%     100%      56%   program 3/3
-code             0%     4%      0%       0%       0%   remember 3/3   <- nothing here generalises
+code             0%     4%      0%       0%       0%   remember 3/3   <- nothing here generalizes
 ```
 
 | system (each unit counting equally) | reworded | new items | beyond what it was taught |
@@ -1524,7 +1524,7 @@ What it says:
    No single mechanism everywhere comes close on new and beyond-range questions.
 2. **It builds a mechanism, not only chooses one.** For `times` the search wrote `(first x second)`; for `apart`, `(first apart
    second)`; for `after`, `(first + 1)`; for `half`, `half(first)`. Before `program` existed, `times` and `apart` were flagged as
-   memorise-only (answers beyond what it was taught: 33% and 4%); now 100%.
+   memorize-only (answers beyond what it was taught: 33% and 4%); now 100%.
 3. **It did not "explain" what has no explanation.** On `code` (a fixed random-looking mapping) and `capital` the search found
    nothing, and the held-back test would have rejected a coincidence anyway.
 4. **I took the convenient operation away to check it was not handed the answer.** `apart` is a primitive in the search. Without it
@@ -1537,7 +1537,7 @@ What it says:
 Honesty about how much this is:
 - **The language is mine.** The search composes add, subtract, multiply, max, min, absolute difference, halve, the first and second
   numbers, and the constants 1 and 2, up to seven pieces. It finds forms inside that space. Division with remainders, three
-  numbers, or conditions are outside it; a unit needing them would be flagged memorise-only, as `times` was before.
+  numbers, or conditions are outside it; a unit needing them would be flagged memorize-only, as `times` was before.
 - **The number line is taught**, and the units are given by the teacher.
 - **Search cost grows fast with size.** The size limit of seven is what keeps the search instant (a few milliseconds per unit here).
 - **"Beyond what it was taught" works only when the baby has seen the numbers somewhere** (the counting lessons put six to ten on the line).
@@ -1547,7 +1547,7 @@ The road there before `program`, because the dead ends are the useful part:
   let common words through: nothing changed.
 - **Real cause:** the data cannot say whether "what" or "after" does the work (two of the three phrasings contain both), and a
   minimum-effort fit gave "what" a third of the credit. The fix is a prior: a word that turns up all over everything else is a poor
-  suspect (pulled towards zero), and an operation word belongs to one kind of lesson.
+  suspect (pulled toward zero), and an operation word belongs to one kind of lesson.
 - **First fix over-corrected:** I defined "all over" by frequency, which called "plus" common (there are many sums) and killed sums
   (0%). The right notion is **spread across units**, not frequency.
 - **Misrouting (5%):** "zero plus six" went to `after`, because "six" happened to occur only in that unit's lessons. Matching by
@@ -1560,7 +1560,7 @@ The road there before `program`, because the dead ends are the useful part:
 | learns from interaction, not a fixed dataset | yes, in small: `teach`, `life`, `curious` |
 | internals change in real time | yes: the store instantly; the weights during `sleep` |
 | doesn't learn what it already knows | yes: only ~1/3 to 1/2 of lessons trigger learning |
-| knows what it doesn't know | yes (familiarity, calibrated thresholds, "?" with a reason; flags units where nothing generalises) |
+| knows what it doesn't know | yes (familiarity, calibrated thresholds, "?" with a reason; flags units where nothing generalizes) |
 | chooses what to learn | partly: `curious` chooses what to ask, not what to explore |
 | not tied to a token list | partly: the letters reader and spelling assumptions; answers still come from a fixed list |
 | one system, honest about its limits | **yes**: `baby school`/`ask` run units, mechanisms and refusals together; 0% wrong on the scorecard, with a stated list of what it refuses |
@@ -1574,5 +1574,5 @@ The road there before `program`, because the dead ends are the useful part:
 1. ~~Does learning stay light when the world gets bigger?~~ Answered for clean lessons up to 600 units (see the scale section; learning one lesson is flat at ~0.5 ms). Label noise is solved at 2 % and 5 % (robust fitting, cross-checks); open: other noise kinds, a Zipf-shaped vocabulary, discovery at scale, and the pen with thousands of waiting lessons.
 2. **Compress what it keeps without forgetting anything**: a compact binary format, and the phrasings of a fact stored as templates plus facts.
 3. **Incremental and exact updates**, sparse updates, small integers, and the real energy meter to replace time and memory as the measure.
-4. **Let it propose its own mechanisms** when nothing generalises (the units that stay "memorise only").
+4. **Let it propose its own mechanisms** when nothing generalizes (the units that stay "memorize only").
 5. ~~Digits~~ done; ~~a richer space to build rules in~~ done (floor-divide, remainder, a learned library). It now also asks questions (see "It asks what it wants to know"). Still open: discover the number line without counting lessons; mechanisms of a different *kind* (not an expression); the baby adapting its own numeric knobs (folds, search effort, thresholds) from what it measures; asking about rules, selections and facts.

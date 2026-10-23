@@ -2,7 +2,7 @@
 // Copyright (C) 2026 DawsMacs
 //! One baby. It is taught a curriculum of *units* of lessons; for each unit it works out, from evidence, how to learn it (see
 //! `mechanisms.rs`); a question is sent to the unit it resembles, answered with that unit's mechanism, and refused when the
-//! baby has no business answering: a kind of question it was never taught, a unit where it could only ever memorise, a word it
+//! baby has no business answering: a kind of question it was never taught, a unit where it could only ever memorize, a word it
 //! has never met, or something its mechanism does not understand. Every answer, and every refusal, says where it came from.
 //!
 //! It keeps every lesson it was ever taught, so it can go on learning after school: a new lesson joins a unit (or opens one),
@@ -72,8 +72,8 @@ impl SchoolUnit {
         self.evidence.iter().cloned().fold(0.0, f64::max)
     }
 
-    /// True when nothing it tried generalised: the baby can only repeat what it was told in this unit.
-    pub fn memorise_only(&self) -> bool {
+    /// True when nothing it tried generalized: the baby can only repeat what it was told in this unit.
+    pub fn memorize_only(&self) -> bool {
         self.best_evidence() < 0.8
     }
 
@@ -110,7 +110,7 @@ impl SchoolUnit {
 /// unit (they cancel in the margin between the best unit and the runner-up, which is all that is ever used):
 ///   score(u) = sum over known words t of ln(1 + 2 * count(t, u))  -  (number of known words) * ln(lessons(u) + 1 + V / 100),
 /// with V the number of distinct words: additive smoothing, (count + 1/2) / (lessons + 1 + V / 100). With a small constant instead of V / 2 a tiny
-/// unit that never saw a rare word was penalised far less for that than a big unit that had seen it rarely, so a 15-lesson unit won
+/// unit that never saw a rare word was penalized far less for that than a big unit that had seen it rarely, so a 15-lesson unit won
 /// questions about words that only the big merged unit knew. (V / 2 is the textbook choice and V / 20 both hurt: the first a small clean world, the second 600 units, where they blur the units apart; V / 100 keeps both exact, before and after merging.)
 #[derive(PartialEq, Debug)]
 struct Routing {
@@ -164,7 +164,7 @@ impl Routing {
 
     /// Learn the corrections (`delta`) from the table's mistakes: each sample is (its unit, the shape of its question), scored the way an unseen question
     /// of that unit would be (itself taken out of the table), and whenever the right unit does not win by a margin the words of the question are moved
-    /// towards the right unit and away from the winner (a perceptron on top of the counts). The corrections are averaged over the epochs.
+    /// toward the right unit and away from the winner (a perceptron on top of the counts). The corrections are averaged over the epochs.
     fn refine(&mut self, samples: &[(usize, Vec<String>)], epochs: usize) {
         self.delta.clear();
         let units = self.lessons.len();
@@ -411,7 +411,7 @@ pub struct School {
     weights: Weights,
     routing: Routing,
     line: NumberLine,
-    /// How clearly one unit must beat the next for a question to count as a recognisable kind: learned from rewordings.
+    /// How clearly one unit must beat the next for a question to count as a recognizable kind: learned from rewordings.
     pub route_floor: f32,
     /// The floor as it was when the baby was taught, the ratio of that floor to the leave-one-out margin measured then (0: unknown), and how many
     /// lessons there were when the floor was last set. See `recalibrate_route`.
@@ -469,7 +469,7 @@ pub struct Wonder {
 pub struct Reply {
     /// Stated as fact: inside what it was taught, or has had checked. Every harness counts right/wrong on this alone.
     pub answer: Option<String>,
-    /// Offered as a labelled guess when `answer` is None: a rule it trusts, applied beyond what it was taught or has had checked.
+    /// Offered as a labeled guess when `answer` is None: a rule it trusts, applied beyond what it was taught or has had checked.
     /// Never counted as an answer; scored apart.
     pub guess: Option<Guess>,
     pub unit: Option<usize>,
@@ -526,7 +526,7 @@ pub enum Outcome {
     Penned { pen: usize, report: PenReport },
 }
 
-/// What reorganising changed.
+/// What reorganizing changed.
 pub struct Reorg {
     /// (kept unit, unit folded into it)
     pub merged: Vec<(String, String)>,
@@ -611,14 +611,14 @@ fn all_items(units: &[SchoolUnit]) -> Vec<Item> {
 }
 
 impl School {
-    /// Teach a curriculum. `thrifty` skips the network wherever cheaper mechanisms already generalise.
+    /// Teach a curriculum. `thrifty` skips the network wherever cheaper mechanisms already generalize.
     pub fn train(world: &World, seed: u64, thrifty: bool) -> School {
         let names: Vec<String> = UNITS.iter().map(|s| s.to_string()).collect();
         School::from_items(&world.train, names, Some(&world.reworded), seed, thrifty)
     }
 
     /// Teach any lessons that are already grouped into named units. `calibration` (rewordings of lessons) sets how decisive a
-    /// question must be to be recognised; without it the floor comes from the lessons' own margins, more cautiously.
+    /// question must be to be recognized; without it the floor comes from the lessons' own margins, more cautiously.
     pub fn from_items(train: &[Item], names: Vec<String>, calibration: Option<&[Item]>, seed: u64, thrifty: bool) -> School {
         let t0 = std::time::Instant::now();
         let baby = mechanisms::learn_items(train, names.len(), seed, thrifty);
@@ -651,7 +651,7 @@ impl School {
         let routing = Routing::build(&units, &line);
         let library_seen = weights.lib.to_lines();
         let mut school = School { units, weights, routing, line, route_floor: f32::NEG_INFINITY, route_base: f32::NEG_INFINITY, route_ratio: 0.0, calibrated_lessons: 0, seed, library_seen, bar, careful: true, skeptical: true, disputed: Vec::new(), guess_record: [(0, 0); 5], repair_failed: Vec::new(), selector: None, guess_scale: [1.0, 1.0], told_since_retrain: 0, cheap_guessers: false, old_law: Default::default(), selector_examples: Vec::new(), route_precision: Vec::new(), pen: Vec::new() };
-        // How decisive must a question be to count as a recognisable kind? Learned from rewordings of lessons it was taught.
+        // How decisive must a question be to count as a recognizable kind? Learned from rewordings of lessons it was taught.
         let own: Vec<&Item> = train.iter().collect();
         let (queries, safety): (Vec<&str>, f32) = match calibration {
             Some(c) => (c.iter().map(|i| i.query.as_str()).collect(), 0.25),
@@ -659,7 +659,7 @@ impl School {
         };
         let mut best: Vec<f32> = queries.iter().map(|q| school.route(q, &mut Ledger::default()).1).collect();
         best.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        // Keep 99% recognisable (the floor is a dial: lower recognises more, risks more).
+        // Keep 99% recognizable (the floor is a dial: lower recognizes more, risks more).
         let p1 = best[(best.len() as f32 * 0.01) as usize];
         school.route_floor = if calibration.is_some() { p1 - safety * p1.abs() } else { p1 * safety };
         school.route_base = school.route_floor;
@@ -681,7 +681,7 @@ impl School {
     }
 
     /// The unit a question most resembles, and by how much it beats the runner-up. (The margin, not the raw score: a raw score grows
-    /// with the number of words, so a short question like "one plus zero" would look less recognisable than a long one.)
+    /// with the number of words, so a short question like "one plus zero" would look less recognizable than a long one.)
     pub fn route(&self, q: &str, ledger: &mut Ledger) -> (usize, f32) {
         let features = if self.routing.pure { routing_features(q, &self.line) } else { shape(q, &self.line) };
         let s = self.routing.scores(&features, ledger);
@@ -710,7 +710,7 @@ impl School {
         self.units.iter().map(|u| u.lessons.len()).sum()
     }
 
-    /// How clearly the baby recognises a question it was NOT taught, estimated on its own lessons: the 1st-percentile margin of best unit over
+    /// How clearly the baby recognizes a question it was NOT taught, estimated on its own lessons: the 1st-percentile margin of best unit over
     /// runner-up, each lesson routed with itself taken out of the table (a sample of at most 2,000, at an even stride, so the cost is bounded).
     fn loo_margin_p1(&self) -> f32 {
         let margins = self.loo_margins();
@@ -733,10 +733,10 @@ impl School {
         margins
     }
 
-    /// Keep the recognition floor where it was relative to how clearly the baby recognises what it was not taught. Learning in one unit lowers
+    /// Keep the recognition floor where it was relative to how clearly the baby recognizes what it was not taught. Learning in one unit lowers
     /// the margin of small units that share words with it (the right unit still wins, by less), and a floor fixed at teaching time then turns
-    /// recognised questions into "no kind of lesson is like this". The floor is the ratio measured at teaching time times the leave-one-out
-    /// margin now, and never above what it was at teaching time. Runs by itself after enough new lessons (see `maybe_recalibrate_route`), and in `reorganise`.
+    /// recognized questions into "no kind of lesson is like this". The floor is the ratio measured at teaching time times the leave-one-out
+    /// margin now, and never above what it was at teaching time. Runs by itself after enough new lessons (see `maybe_recalibrate_route`), and in `reorganize`.
     pub fn recalibrate_route(&mut self) {
         if self.route_ratio > 0.0 {
             let now = self.loo_margin_p1();
@@ -748,7 +748,7 @@ impl School {
     }
 
     /// After enough new lessons: 200, or 2 % of what it knew when the floor was last set, whichever is more. (The margins that shrink belong to
-    /// small units whose neighbours grew, so the total can grow by only a few percent while they lose most of their margin: a threshold on total
+    /// small units whose neighbors grew, so the total can grow by only a few percent while they lose most of their margin: a threshold on total
     /// growth of a fifth never fired.)
     fn maybe_recalibrate_route(&mut self) {
         let added = self.total_lessons().saturating_sub(self.calibrated_lessons);
@@ -849,7 +849,7 @@ impl School {
             // the reach is): a wrap that shows itself only with both numbers large lies inside the box
             asked.iter().enumerate().any(|(k, v)| hull.get(k).map_or(false, |&(lo, hi)| *v < lo || *v > hi)) || unit.remember.uncovered_by(&candidates, &value, &skip, &asked).is_some()
         });
-        // (what is left out of the reach is recorded with the exceptions: both are lessons that do not vouch for their neighbours)
+        // (what is left out of the reach is recorded with the exceptions: both are lessons that do not vouch for their neighbors)
         for &i in &unproven {
             if !exceptions.contains(&i) {
                 exceptions.push(i);
@@ -1228,14 +1228,14 @@ impl School {
         self.ask_with(q, &mut Ledger::default(), None)
     }
 
-    /// Answer, counting the work. With a `NaiveRouter` it does everything the slow way (and skips the "recognisable kind" check,
+    /// Answer, counting the work. With a `NaiveRouter` it does everything the slow way (and skips the "recognizable kind" check,
     /// which belongs to the table), so the two can be compared on cost.
     pub fn ask_with(&self, q: &str, ledger: &mut Ledger, naive: Option<&NaiveRouter>) -> Reply {
         self.ask_in(q, ledger, naive, None)
     }
 
     /// (diagnosis) Answer as if the question had been routed to the unit called `unit`: separates how good a unit's way of learning is from
-    /// how well the baby recognises which unit a question belongs to.
+    /// how well the baby recognizes which unit a question belongs to.
     pub fn ask_as(&self, q: &str, unit: &str) -> Option<Reply> {
         let u = self.units.iter().position(|x| x.name == unit)?;
         Some(self.ask_in(q, &mut Ledger::default(), None, Some(u)))
@@ -1267,8 +1267,8 @@ impl School {
         }
         for c in 0..2 {
             if n[c] >= 10 && stated[c] > 0.0 {
-                let realised = (hits[c] as f32 + 1.0) / (n[c] as f32 + 2.0);
-                self.guess_scale[c] = (realised / (stated[c] / n[c] as f32)).min(1.0);
+                let realized = (hits[c] as f32 + 1.0) / (n[c] as f32 + 2.0);
+                self.guess_scale[c] = (realized / (stated[c] / n[c] as f32)).min(1.0);
             }
         }
     }
@@ -1438,7 +1438,7 @@ impl School {
                 match answer {
                     Some(a) => {
                         let how = match unit.chosen {
-                            Mech::Remember if unit.memorise_only() => {
+                            Mech::Remember if unit.memorize_only() => {
                                 said("recalled, not worked out: nothing I tried could work these out, so I only remember what I was told")
                             }
                             Mech::Remember => said("recalled from what I was taught"),
@@ -1455,7 +1455,7 @@ impl School {
                     }
                     None => {
                         let why = match unit.chosen {
-                            Mech::Remember => "I only memorise this kind of thing and nothing I was taught is close enough",
+                            Mech::Remember => "I only memorize this kind of thing and nothing I was taught is close enough",
                             _ => "I couldn't work it out: it has a word or a shape I haven't learned how to handle",
                         };
                         Reply { guess: None, answer: None, unit: Some(u), how: said(why) }
@@ -1587,7 +1587,7 @@ impl School {
 
     /// An established exact program meets a fresh exact fit that also explains the few lessons it contradicts (one to three: a wrong answer from a teacher,
     /// or the truth at a point the old law had guessed). Nothing in the lessons says which; the fresh fit is adopted only as a REPAIR: the contradicting
-    /// lessons are marked unproven so they do not vouch for their neighbours, and the law it replaced stays a competing explanation (`repair_veto`), so where
+    /// lessons are marked unproven so they do not vouch for their neighbors, and the law it replaced stays a competing explanation (`repair_veto`), so where
     /// the two part ways it is a guess until later lessons separate them. (Refusing the rebuild outright was tried: it breaks the case where the contradiction
     /// is the truth, and the data cannot tell the two cases apart.)
     /// Found by the adaptive exam's wrong-teacher tier: one wrongly told 28 -> 8 swapped the tens digit for a coincidence that stated 19 -> 9 as fact.
@@ -1717,7 +1717,7 @@ impl School {
         true
     }
 
-    /// What would it like to be told? For each unit of numbers that it can only memorise because the lessons leave several explanations
+    /// What would it like to be told? For each unit of numbers that it can only memorize because the lessons leave several explanations
     /// equally good, the questions (in the unit's own phrasing and number style) whose answers would settle which is meant. Nothing is
     /// asked about units that have no explanation at all: an arbitrary table has no hypotheses to tell apart.
     pub fn wonder(&self) -> Vec<Wonder> {
@@ -2007,7 +2007,7 @@ impl School {
         out
     }
 
-    /// Take the answer to a question it wondered about, and think again about how that unit is learned, now: a unit that can only memorise is
+    /// Take the answer to a question it wondered about, and think again about how that unit is learned, now: a unit that can only memorize is
     /// otherwise looked at again only every tenth new fact.
     pub fn learn_wondered(&mut self, query: &str, answer: &str, unit: &str) -> Result<Learned, String> {
         mechanisms::set_reliable(self.bar);
@@ -2033,9 +2033,9 @@ impl School {
             // Think the unit through again, now: unless it is a settled exact rule, selection or program (nothing to decide: a surprising answer was already
             // taken in by `learn`, a confirming one only extends where it may state facts), which looks again only every `SETTLED_RETHINK_EVERY` lessons.
             // (Re-deciding is a cross-validation of every mechanism: it was most of the energy of a stream of told answers, 1.8 J each.)
-            // (A unit that can only memorise, and is known not to be workable out, follows the rule `refit_in_place` has for it: look again every ten facts.)
+            // (A unit that can only memorize, and is known not to be workable out, follows the rule `refit_in_place` has for it: look again every ten facts.)
             let facts = self.units[u].facts();
-            let skip = (self.settled_exact(u) && facts % SETTLED_RETHINK_EVERY != 0) || (self.memorise_only_known(u) && facts % 10 != 0);
+            let skip = (self.settled_exact(u) && facts % SETTLED_RETHINK_EVERY != 0) || (self.memorize_only_known(u) && facts % 10 != 0);
             if !skip {
                 timed("wondered:relearn_unit", || self.relearn_unit(u));
             } else if !learned.surprised {
@@ -2063,8 +2063,8 @@ impl School {
             && !matches!(&unit.state, Fitted::Program(None) | Fitted::Remember(_) | Fitted::Network(_))
     }
 
-    /// Is unit `u` one that only memorises, because nothing it tried reaches the bar (and it has enough facts to have been tested)?
-    fn memorise_only_known(&self, u: usize) -> bool {
+    /// Is unit `u` one that only memorizes, because nothing it tried reaches the bar (and it has enough facts to have been tested)?
+    fn memorize_only_known(&self, u: usize) -> bool {
         let unit = &self.units[u];
         unit.chosen == Mech::Remember && unit.best_evidence() < mechanisms::reliable() && unit.facts() >= 10 && matches!(unit.state, Fitted::Remember(_))
     }
@@ -2078,7 +2078,7 @@ impl School {
     }
 
     /// Teach it one more lesson, after school. With `unit` it joins that unit (or opens one of that name); without, it joins the
-    /// unit the question resembles, if it recognises a kind at all. Then the unit's way of learning is worked out again.
+    /// unit the question resembles, if it recognizes a kind at all. Then the unit's way of learning is worked out again.
     pub fn learn(&mut self, query: &str, answer: &str, unit: Option<&str>) -> Result<Learned, String> {
         mechanisms::set_reliable(self.bar);
         let tokens = tokenize(query);
@@ -2216,14 +2216,14 @@ impl School {
     /// Look again at how the lessons are grouped. A unit that is no longer fully explained (its newer lessons stopped following one
     /// rule) is taken apart if its lessons separate into groups that each ARE explained; two units that were taught separately but
     /// are right for each other's lessons under one rule, or a rule per word, become one.
-    pub fn reorganise(&mut self) -> Reorg {
-        let report = self.reorganise_inner();
+    pub fn reorganize(&mut self) -> Reorg {
+        let report = self.reorganize_inner();
         self.settle_all_reach();
         self.recalibrate_route();
         report
     }
 
-    fn reorganise_inner(&mut self) -> Reorg {
+    fn reorganize_inner(&mut self) -> Reorg {
         // the noise in its lessons may have changed since it was taught: measure again, and use the bar that goes with it
         self.bar = mechanisms::bar_for_noise(mechanisms::estimate_noise(&self.units.iter().map(|u| u.lessons.clone()).collect::<Vec<_>>()));
         mechanisms::set_reliable(self.bar);
@@ -2423,7 +2423,7 @@ impl School {
         crate::discover::can_merge_many(&parts, &self.weights, self.seed)
     }
 
-    /// Set the recognition floor from the table as it is now: low enough that every lesson it holds is recognised, with room below
+    /// Set the recognition floor from the table as it is now: low enough that every lesson it holds is recognized, with room below
     /// for phrasings it has not seen (those are less decisive than taught ones).
     fn recalibrate_floor(&mut self) {
         let mut margins: Vec<f32> = all_items_ref(&self.units).into_iter().map(|l| self.route(&l.query, &mut Ledger::default()).1).collect();
@@ -2445,7 +2445,7 @@ impl School {
 
     // ---- going on learning without being told where things belong ----
 
-    /// Teach it one more lesson without saying which unit it belongs to. If it recognises a kind of lesson it joins that unit.
+    /// Teach it one more lesson without saying which unit it belongs to. If it recognizes a kind of lesson it joins that unit.
     /// If not, it goes to the pen; and when enough pen lessons gather to be a kind of their own, a unit opens by itself.
     pub fn learn_anywhere(&mut self, query: &str, answer: &str) -> Result<Outcome, String> {
         mechanisms::set_reliable(self.bar);
@@ -2457,8 +2457,8 @@ impl School {
             return Err(format!("I only read plain whole numbers, not '{bad}': a lesson with a sign, decimal, fraction or percent would be stored wrongly"));
         }
         let unmet = tokens.iter().any(|w| !self.knows(w));
-        let recognised = !unmet && self.route(query, &mut Ledger::default()).1 >= self.route_floor;
-        if recognised {
+        let recognized = !unmet && self.route(query, &mut Ledger::default()).1 >= self.route_floor;
+        if recognized {
             return self.learn(query, answer, None).map(Outcome::Placed);
         }
         match self.pen.iter_mut().find(|(q, _)| lesson_key(q) == lesson_key(query)) {
@@ -2618,7 +2618,7 @@ impl School {
             }
         }
         // The promise: it must still answer EVERY lesson it was ever taught, kept or let go. Check, and put back whatever it can no
-        // longer answer (typically a phrasing the table or the memory only recognised because of that lesson), until it can.
+        // longer answer (typically a phrasing the table or the memory only recognized because of that lesson), until it can.
         loop {
             for u in 0..self.units.len() {
                 if self.units[u].chosen == Mech::Remember {
@@ -2628,7 +2628,7 @@ impl School {
                 }
             }
             self.rebuild_tables();
-            // Recognition floor: low enough that EVERYTHING it was taught, kept or let go, is recognised.
+            // Recognition floor: low enough that EVERYTHING it was taught, kept or let go, is recognized.
             let mut margins: Vec<f32> =
                 all_items_ref(&self.units).into_iter().chain(removed.iter()).map(|l| self.route(&l.query, &mut Ledger::default()).1).collect();
             margins.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -3049,7 +3049,7 @@ mod tests {
     }
 
     #[test]
-    fn in_a_memorise_only_unit_it_never_answers_a_fact_it_was_not_taught() {
+    fn in_a_memorize_only_unit_it_never_answers_a_fact_it_was_not_taught() {
         let s = trained();
         let nums = crate::data::NUM;
         let (mut right, mut refused) = (0, 0);
@@ -3098,7 +3098,7 @@ mod tests {
         assert_eq!(s.units.len(), units + 1, "six lessons of one new kind should have opened a unit by themselves");
         assert!(s.pen.is_empty());
         let opened = s.units.last().unwrap();
-        assert_ne!(opened.chosen, Mech::Remember, "it should have found something that generalises: {:?}", opened.chosen);
+        assert_ne!(opened.chosen, Mech::Remember, "it should have found something that generalizes: {:?}", opened.chosen);
         assert_eq!(s.ask("what is eight less than ten").answer.as_deref(), Some("two"));
     }
 
@@ -3128,7 +3128,7 @@ mod tests {
         let sum = s.units.iter().find(|u| u.name == "sum").unwrap();
         assert!(sum.best_evidence() < 0.95, "pollution should show: {}", sum.best_evidence());
         let times_before = s.units.iter().find(|u| u.name == "times").unwrap().lessons.len();
-        let report = s.reorganise();
+        let report = s.reorganize();
         assert!(!report.split.is_empty(), "the multiplication lessons should have been taken out");
         let sum = s.units.iter().find(|u| u.name.starts_with("sum")).unwrap();
         assert!(sum.best_evidence() >= 0.95, "sum is itself again: {}", sum.best_evidence());
@@ -3193,7 +3193,7 @@ mod tests {
             s.learn(&format!("what is {a} added to {b}"), crate::data::NUM[n(a) + n(b)], Some("added")).unwrap();
         }
         assert_eq!(s.units.len(), units + 1);
-        let report = s.reorganise();
+        let report = s.reorganize();
         assert!(report.merged.iter().any(|(_, gone)| gone == "added"), "'added' should have been folded into the rule family: {:?}", report.merged);
         assert!(s.units.len() <= units, "{} units after merging (had {units})", s.units.len());
         assert_eq!(s.ask("what is five added to three").answer.as_deref(), Some("eight"));
@@ -3260,7 +3260,7 @@ mod tests {
     fn a_fresh_fit_that_explains_a_wrongly_told_lesson_is_a_repair_with_the_old_law_kept_as_a_rival() {
         // The tens digit (settled), then 28 -> 8 told wrongly (true: 2). `b apart ((a + b) mod 10)` also says 8 there and is the tens digit until the digits sum past
         // nine, so a fresh exact fit offers it. It used to replace the settled law outright and 19 was stated as 9 (found by the adaptive exam's wrong-teacher tier).
-        // The fresh fit is now adopted only as a repair: the wrong lesson does not vouch for its neighbours, and where the old law disagrees it is a guess.
+        // The fresh fit is now adopted only as a repair: the wrong lesson does not vouch for its neighbors, and where the old law disagrees it is a guess.
         let mut s = numbers_school(|a| a / 10, 14);
         s.set_careful(true);
         s.weights.lib.learn_constant(3);
@@ -3377,7 +3377,7 @@ mod tests {
         assert_eq!(s.ask("what is 7 zork 9").answer.as_deref(), Some("16"));
         let r = s.ask("what is 20 zork 15");
         assert!(r.answer.is_none() && r.how.contains("state it as fact"), "{}", r.how);
-        assert_eq!(r.guess.map(|g| g.answer).as_deref(), Some("35"), "the hazardous value is now only ever a labelled guess");
+        assert_eq!(r.guess.map(|g| g.answer).as_deref(), Some("35"), "the hazardous value is now only ever a labeled guess");
         // it asks about the edge; the first probe refutes the rule
         let checks = s.check_myself(3);
         let asked: Vec<&str> = checks.iter().map(|c| c.question.as_str()).collect();
@@ -3395,7 +3395,7 @@ mod tests {
         s.learn("what is 24 zork 12", "30", Some("zork")).unwrap();
         assert_eq!(s.units[0].chosen, Mech::Program, "{}", s.describe_unit_open(0));
         assert!(!s.units[0].refuted, "it explains everything it was told now");
-        // a labelled guess, no longer withheld, and the right one; never stated as fact beyond what was checked
+        // a labeled guess, no longer withheld, and the right one; never stated as fact beyond what was checked
         for q in ["what is 20 zork 15", "what is 28 zork 17", "what is 5 zork 29"] {
             let r = s.ask(q);
             assert!(r.answer.is_none(), "{q}: not a fact unchecked");
@@ -3636,13 +3636,13 @@ mod tests {
     }
 
     #[test]
-    fn beyond_what_it_was_taught_it_offers_a_labelled_guess_never_a_fact_and_still_refuses_what_it_must() {
+    fn beyond_what_it_was_taught_it_offers_a_labeled_guess_never_a_fact_and_still_refuses_what_it_must() {
         let s = School::train(&kinds::world(1), 1, true); // careful, as by default
         // inside what it was taught: a fact, no guess
         let r = s.ask("what is two times three");
         assert_eq!(r.answer.as_deref(), Some("six"));
         assert!(r.guess.is_none());
-        // beyond it: not a fact, a labelled guess, and the guess says how far out it is
+        // beyond it: not a fact, a labeled guess, and the guess says how far out it is
         let r = s.ask("what is seven times one");
         assert!(r.answer.is_none(), "a guess must never be counted as an answer");
         let g = r.guess.expect("a rule it trusts, applied past the taught numbers, is offered as a guess");
@@ -3653,7 +3653,7 @@ mod tests {
         let r = s.ask("what is 17 plus 25");
         assert!(r.answer.is_none());
         assert_eq!(r.guess.map(|g| g.answer).as_deref(), Some("42"));
-        // the must-refuse battery gets no guess either: no unreadable numbers, no negative results, no unmet words, nothing it only memorises
+        // the must-refuse battery gets no guess either: no unreadable numbers, no negative results, no unmet words, nothing it only memorizes
         for q in [
             "three minus five",
             "two minus nine",
@@ -3682,8 +3682,8 @@ mod tests {
         let mut s = sums_school(|a, b| (a + b).min(30));
         s.set_careful(true);
         let r = s.ask("what is 20 zork 15");
-        assert_eq!(r.guess.map(|g| g.answer).as_deref(), Some("35"), "a labelled guess, wrong");
-        // told the truth about a neighbour (an ordinary `learn`, not a check it asked for)
+        assert_eq!(r.guess.map(|g| g.answer).as_deref(), Some("35"), "a labeled guess, wrong");
+        // told the truth about a neighbor (an ordinary `learn`, not a check it asked for)
         s.learn("what is 24 zork 12", "30", Some("zork")).unwrap();
         // (it now builds the law that fits everything it was told, min(first + second, 30): the guess there is now the right one, still not a fact;
         // when no small program fits the contradictions it may not even guess there: `a_contradiction_that_no_small_program_explains...`)
@@ -3724,7 +3724,7 @@ mod tests {
         // inside the box those two stretch, but nothing near (18, 18) was ever checked: the rule says 36, the truth is 30
         let r = s.ask("what is 18 zork 18");
         assert!(r.answer.is_none(), "stated as fact, and false: {:?}", r.answer);
-        assert_eq!(r.guess.map(|g| g.answer).as_deref(), Some("36"), "a labelled guess instead");
+        assert_eq!(r.guess.map(|g| g.answer).as_deref(), Some("36"), "a labeled guess instead");
         // what is covered stays covered
         assert_eq!(s.ask("what is 20 zork 1").answer.as_deref(), Some("21"));
         assert_eq!(s.ask("what is 7 zork 9").answer.as_deref(), Some("16"));
@@ -3938,7 +3938,7 @@ mod tests {
         assert_eq!(s.ask("what is 4 plus 5").answer.as_deref(), Some("9"), "plus was taught that far");
         let r = s.ask("what is 5 minus 1");
         assert!(r.answer.is_none(), "minus was only taught to 3: {:?}", r.answer);
-        assert_eq!(r.guess.map(|g| g.answer).as_deref(), Some("4"), "a labelled guess instead");
+        assert_eq!(r.guess.map(|g| g.answer).as_deref(), Some("4"), "a labeled guess instead");
         assert_eq!(s.ask("what is 3 minus 2").answer.as_deref(), Some("1"));
     }
 
@@ -3965,7 +3965,7 @@ mod tests {
             let r = s.ask(q);
             assert!(r.answer.is_none() && r.guess.is_none(), "{q:?} must stay refused: {:?} {:?}", r.answer, r.guess);
         }
-        // and what it knows is recognised
+        // and what it knows is recognized
         assert_eq!(s.ask("what is 7 zork3 4").answer.as_deref(), Some("11"));
         // the calibration survives saving and loading
         let dir = std::env::temp_dir().join(format!("route_calibration_{}", std::process::id()));
@@ -3977,11 +3977,11 @@ mod tests {
     }
 
     #[test]
-    fn leaving_a_lesson_out_can_only_make_it_harder_to_recognise() {
+    fn leaving_a_lesson_out_can_only_make_it_harder_to_recognize() {
         let s = capped_units(8);
         let m = s.loo_margins();
         assert!(!m.is_empty());
-        // the same lessons routed normally (each is in the table, so it is recognised at least as well)
+        // the same lessons routed normally (each is in the table, so it is recognized at least as well)
         let mut plain: Vec<f32> = s.units.iter().flat_map(|u| u.lessons.iter().map(|l| s.route(&l.query, &mut Ledger::default()).1)).collect();
         plain.sort_by(|a, b| a.partial_cmp(b).unwrap());
         let median = |v: &[f32]| v[v.len() / 2];
@@ -4200,7 +4200,7 @@ mod tests {
             s.learn(&format!("what is {n} less than ten"), a, Some("lessthan")).unwrap();
         }
         let last = s.learn("six less than ten", "four", Some("lessthan")).unwrap();
-        assert_ne!(last.now, Mech::Remember, "with seven facts it should have found something that generalises: {:?}", last.now);
+        assert_ne!(last.now, Mech::Remember, "with seven facts it should have found something that generalizes: {:?}", last.now);
         assert_eq!(s.ask("what is eight less than ten").answer.as_deref(), Some("two"));
     }
 }

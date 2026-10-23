@@ -9,7 +9,7 @@
 //!
 //! A richer way of building things is only worth having if it does not start "explaining" what has no explanation, so a second set
 //! of kinds must stay unexplained: arbitrary tables (a random code for every number) and structured things the language cannot
-//! express (digit sums, primes). Those must end up memorised and must never be answered. The whole experiment reports both.
+//! express (digit sums, primes). Those must end up memorized and must never be answered. The whole experiment reports both.
 
 use crate::kinds::{Item, World};
 use crate::rng::Rng;
@@ -610,7 +610,7 @@ pub fn run_careful(seed: u64, rounds: usize, per_unit: usize) -> CarefulResult {
     res
 }
 
-/// One labelled guess from a careful baby: how far past the taught range it was, and whether it was right.
+/// One labeled guess from a careful baby: how far past the taught range it was, and whether it was right.
 pub struct GuessRow {
     pub deceptive: bool,
     pub stretch: f32,
@@ -619,7 +619,7 @@ pub struct GuessRow {
 
 /// Calibration of guesses: teach the battery, stay careful, and for every unseen question (never taught + beyond the taught numbers) of a kind
 /// that has a mechanism, record the guess it offers (if any). Genuine kinds and deceptive kinds (a rule that changes regime outside the lessons)
-/// are kept apart; a guess may be wrong, but it must be wrong *labelled* and less often where it says it is less sure.
+/// are kept apart; a guess may be wrong, but it must be wrong *labeled* and less often where it says it is less sure.
 pub fn run_guesses(seed: u64) -> Vec<GuessRow> {
     let b = battery(seed);
     let school = School::from_items(&b.world.train, b.names.clone(), Some(&b.world.reworded), seed, true); // careful is the default

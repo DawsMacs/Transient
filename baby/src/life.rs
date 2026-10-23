@@ -176,7 +176,7 @@ impl Learner {
         (((1 + heard) as f32) / ((1 + df[id]) as f32)).ln().max(0.0) + 0.05
     }
 
-    /// The baby's answer to a query: (word, confidence). The store answers first when it recognises the question.
+    /// The baby's answer to a query: (word, confidence). The store answers first when it recognizes the question.
     pub fn answer(&mut self, ids: &[usize], key: &[usize]) -> (usize, f32) {
         if self.strategy.uses_store() {
             let (df, heard) = (&self.df, self.heard);

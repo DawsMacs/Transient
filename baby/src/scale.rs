@@ -13,7 +13,7 @@
 //!   entities         size of the shared vocabulary that fact units draw their subjects from (so words overlap across units)
 //!   facts_per_unit   how many facts each fact unit holds
 //!   noise            fraction of taught lessons whose answer is wrong (label noise)
-//!   typos            fraction of test questions with one word misspelt
+//!   typos            fraction of test questions with one word misspelled
 //!
 //! Every unit gets its own operator or attribute word (so units are told apart by a word, as "plus" and "minus" are), and phrasings
 //! are drawn from six shared styles built from a small pool of filler words, so the overlap between units is heavy.
@@ -47,8 +47,8 @@ pub struct ScaleWorld {
     pub world: World,
     /// Queries whose taught answer was deliberately made wrong, with the answer they should have had.
     pub corrupted: HashMap<String, String>,
-    /// Misspelt rewordings and the answer they should have had.
-    pub misspelt: Vec<(String, String)>,
+    /// Misspelled rewordings and the answer they should have had.
+    pub misspelled: Vec<(String, String)>,
     /// Questions that must never be answered: (query, why it is a trap).
     pub must_refuse: Vec<(String, &'static str)>,
 }
@@ -295,11 +295,11 @@ pub fn generate(c: &Config) -> ScaleWorld {
         }
     }
 
-    // Misspelt rewordings: one word missing a letter. The truth is the unmisspelt answer; refusing is fine, answering wrongly is not.
-    let mut misspelt = Vec::new();
+    // Misspelled rewordings: one word missing a letter. The truth is the unmisspelled answer; refusing is fine, answering wrongly is not.
+    let mut misspelled = Vec::new();
     for it in &w.reworded {
         if rng.uniform() < c.typos {
-            misspelt.push((misspell(&it.query, &mut rng), it.answer.clone()));
+            misspelled.push((misspell(&it.query, &mut rng), it.answer.clone()));
         }
     }
 
@@ -333,7 +333,7 @@ pub fn generate(c: &Config) -> ScaleWorld {
         }
         must_refuse.push((fill("what is {A} {0} {1} {2}", attr, &[num("two", "2"), num("three", "3"), num("four", "4")]), "too many operands"));
     }
-    ScaleWorld { names, expect, sems, world: w, corrupted, misspelt, must_refuse }
+    ScaleWorld { names, expect, sems, world: w, corrupted, misspelled, must_refuse }
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------
@@ -474,7 +474,7 @@ pub fn run(c: &Config, reorg: bool, grade_cap: usize) -> Vec<(&'static str, f64)
     let (never, _) = grade(&school, &sw.world.new_items, grade_cap);
     let (beyond, _) = grade(&school, &sw.world.beyond, grade_cap);
     let mut typo = Tally::default();
-    for (q, truth) in sample(&sw.misspelt, grade_cap) {
+    for (q, truth) in sample(&sw.misspelled, grade_cap) {
         typo.add(truth, &school.ask(q).answer);
     }
     println!("    taught                {}", taught_clean.show());
@@ -485,7 +485,7 @@ pub fn run(c: &Config, reorg: bool, grade_cap: usize) -> Vec<(&'static str, f64)
     println!("    never taught          {}", never.show());
     println!("    beyond the taught range {}", beyond.show());
     if typo.n() > 0 {
-        println!("    one word misspelt     {}", typo.show());
+        println!("    one word misspelled     {}", typo.show());
     }
     let mut trap_by: std::collections::BTreeMap<&str, (usize, usize)> = std::collections::BTreeMap::new();
     for (q, why) in &sw.must_refuse {
@@ -577,9 +577,9 @@ pub fn run(c: &Config, reorg: bool, grade_cap: usize) -> Vec<(&'static str, f64)
     // Tidying up.
     if reorg {
         let t = Instant::now();
-        let r = school.reorganise();
+        let r = school.reorganize();
         let secs = t.elapsed().as_secs_f64();
-        println!("  reorganising: {:.2} s, {} merges, {} splits; {} units now", secs, r.merged.len(), r.split.len(), school.units.len());
+        println!("  reorganizing: {:.2} s, {} merges, {} splits; {} units now", secs, r.merged.len(), r.split.len(), school.units.len());
         let (re2, _) = grade(&school, &sw.world.reworded, 1000);
         let (nv2, _) = grade(&school, &sw.world.new_items, 1000);
         println!("    after it: reworded {}   never taught {}", re2.show(), nv2.show());

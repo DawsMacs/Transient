@@ -168,8 +168,8 @@ fn apply(op: Op, x: f32, y: f32) -> f32 {
     }
 }
 
-/// How many genuinely different behaviours these expressions have: two that agree on every pair of numbers from 0 to 10 are one.
-fn behaviours(exprs: &[Expr]) -> usize {
+/// How many genuinely different behaviors these expressions have: two that agree on every pair of numbers from 0 to 10 are one.
+fn behaviors(exprs: &[Expr]) -> usize {
     let mut seen: HashSet<Vec<i32>> = HashSet::new();
     for e in exprs {
         // As wide as the numbers it will meet (taught small, asked large): two expressions that agree on 0-10 but part ways at 20 are two.
@@ -198,7 +198,7 @@ fn behaviours(exprs: &[Expr]) -> usize {
 pub struct Library {
     pub consts: Vec<i32>,
     pub funcs: Vec<Func>,
-    /// (unit, behaviour) pairs already contributed, kept even after the function is evicted: a unit that refits to an equivalent program (or to a
+    /// (unit, behavior) pairs already contributed, kept even after the function is evicted: a unit that refits to an equivalent program (or to a
     /// rewrite of it through another unit's function) adds nothing. Without this a library with fewer slots than program units thrashes: each
     /// refit re-adds its unit and evicts another, whose unit refits and evicts the next, and the entries grow into nested equivalents.
     contributed: Vec<(usize, Vec<i32>)>,
@@ -659,7 +659,7 @@ impl ProgramRule {
                     first = Some(ProgramRule { expr: c.expr.clone(), arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work, alts: Vec::new(), partial: None, repaired: Vec::new(), before: None, rebuilt: false });
                 }
                 if !count_all {
-                    return (first, behaviours(&hit_exprs), hit_exprs);
+                    return (first, behaviors(&hit_exprs), hit_exprs);
                 }
             }
             if seen.insert(fingerprint(&c.vals)) {
@@ -667,7 +667,7 @@ impl ProgramRule {
             }
         }
         if first.is_some() {
-            return (first, behaviours(&hit_exprs), hit_exprs);
+            return (first, behaviors(&hit_exprs), hit_exprs);
         }
         for size in 2..=MAX_SIZE {
             let mut made: Vec<Cand> = Vec::new();
@@ -682,7 +682,7 @@ impl ProgramRule {
                         first = Some(ProgramRule { expr: Expr::Half(Box::new(c.expr.clone())), arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work, alts: Vec::new(), partial: None, repaired: Vec::new(), before: None, rebuilt: false });
                     }
                     if !count_all {
-                        return (first, behaviours(&hit_exprs), hit_exprs);
+                        return (first, behaviors(&hit_exprs), hit_exprs);
                     }
                 }
                 if seen.insert(fingerprint(&scratch)) {
@@ -700,7 +700,7 @@ impl ProgramRule {
                         for &op in ops {
                             work += 1;
                             if work > WORK_BUDGET {
-                                return (first, behaviours(&hit_exprs), hit_exprs);
+                                return (first, behaviors(&hit_exprs), hit_exprs);
                             }
                             scratch.clear();
                             scratch.extend(l.vals.iter().zip(&r.vals).map(|(x, y)| apply(op, *x, *y)));
@@ -715,7 +715,7 @@ impl ProgramRule {
                                     first = Some(ProgramRule { expr, arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work, alts: Vec::new(), partial: None, repaired: Vec::new(), before: None, rebuilt: false });
                                 }
                                 if !count_all {
-                                    return (first, behaviours(&hit_exprs), hit_exprs);
+                                    return (first, behaviors(&hit_exprs), hit_exprs);
                                 }
                             }
                             if made.len() < CAP_PER_LEVEL && seen.insert(fingerprint(&scratch)) {
@@ -734,7 +734,7 @@ impl ProgramRule {
                         for r in rights {
                             work += 1;
                             if work > WORK_BUDGET {
-                                return (first, behaviours(&hit_exprs), hit_exprs);
+                                return (first, behaviors(&hit_exprs), hit_exprs);
                             }
                             scratch.clear();
                             if f.arity == 1 {
@@ -753,7 +753,7 @@ impl ProgramRule {
                                     first = Some(ProgramRule { expr: expr.clone(), arity, line: NumberLine::from_counting(&counting_lessons()), vocab: vocab.clone(), work, alts: Vec::new(), partial: None, repaired: Vec::new(), before: None, rebuilt: false });
                                 }
                                 if !count_all {
-                                    return (first, behaviours(&hit_exprs), hit_exprs);
+                                    return (first, behaviors(&hit_exprs), hit_exprs);
                                 }
                             }
                             if made.len() < CAP_PER_LEVEL && seen.insert(fingerprint(&scratch)) {
@@ -765,7 +765,7 @@ impl ProgramRule {
             }
             levels[size] = made;
             if first.is_some() {
-                return (first, behaviours(&hit_exprs), hit_exprs);
+                return (first, behaviors(&hit_exprs), hit_exprs);
             }
             if work > WORK_BUDGET {
                 break;
@@ -812,9 +812,9 @@ impl ProgramRule {
     /// ones on which the explanations give the most different answers, then the smallest numbers). None if one explanation fits, or none.
     pub fn ambiguity(items: &[Item], lib: &Library) -> Option<Ambiguity> {
         let own = items.first().map_or(NO_ORIGIN, |i| i.unit);
-        let (found, behaviours, hits) = ProgramRule::search(items, &OPS, true, &lib.without(own), 0.0);
+        let (found, behaviors, hits) = ProgramRule::search(items, &OPS, true, &lib.without(own), 0.0);
         let rule = found?;
-        if behaviours < 2 {
+        if behaviors < 2 {
             return None;
         }
         let arity = rule.arity;
@@ -917,7 +917,7 @@ mod tests {
     }
 
     #[test]
-    fn a_unit_contributes_a_behaviour_to_the_library_once_even_after_it_is_evicted() {
+    fn a_unit_contributes_a_behavior_to_the_library_once_even_after_it_is_evicted() {
         let mut lib = Library::default();
         let sumsq = Expr::from_text("(add (mul A A) (mul B B))").unwrap();
         let bloated = Expr::from_text("(add (mul A A) (mul (sub A (add A B)) (sub A (add A B))))").unwrap();
@@ -947,8 +947,8 @@ mod tests {
         let before = ProgramRule::fit_trusted_with(&items, &lib);
         assert!(before.is_some(), "after round 2 probes");
         items.push(mk(96, 48));
-        let (found, behaviours, hits) = ProgramRule::search_pub(&items, &lib);
-        println!("DEBUG found {:?} behaviours {behaviours} hits {}", found.as_ref().map(|f| f.expr.show()), hits.len());
+        let (found, behaviors, hits) = ProgramRule::search_pub(&items, &lib);
+        println!("DEBUG found {:?} behaviors {behaviors} hits {}", found.as_ref().map(|f| f.expr.show()), hits.len());
         let after = ProgramRule::fit_trusted_with(&items, &lib);
         assert!(after.is_some(), "after the (96, 48) probe: found {:?}", found.map(|f| (f.expr.show(), f.work)));
     }

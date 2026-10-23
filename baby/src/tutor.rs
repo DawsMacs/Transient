@@ -17,7 +17,7 @@ pub struct Prompt {
     pub unit: String,
     pub question: String,
     pub why: String,
-    /// What the baby would say now: a fact, a labelled guess, or nothing.
+    /// What the baby would say now: a fact, a labeled guess, or nothing.
     pub would_say: String,
     /// Set when this is the second look at an answer that contradicted a rule: what the rule says and what the person said.
     pub confirming: Option<(String, String)>,

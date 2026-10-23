@@ -20,7 +20,7 @@ lessons.tsv     id TAB question TAB answer TAB unit TAB fact   what the system i
 questions.tsv   id TAB group TAB question TAB truth        what it is then asked. groups: taught (a lesson itself), reworded (a taught fact in other words),\n\
                 never (an unseen question inside the range taught), beyond (numbers past the range taught), trap (must be refused; truth is empty)\n\n\
 calibration.tsv  id TAB question TAB answer TAB unit      OPTIONAL extra material: other ways of saying taught facts, disjoint from every question. Use it however you like
-                (the baby uses it to learn how different a question may look and still be recognised, which is also what keeps it from answering a trap).
+                (the baby uses it to learn how different a question may look and still be recognized, which is also what keeps it from answering a trap).
 
 Write predictions.tsv, one line per question:   id TAB status TAB answer TAB confidence\n\
   status   fact    stated as true.  This is the claim that is held to account: a wrong fact is the failure that matters.\n\
@@ -122,7 +122,7 @@ pub struct Verdict {
     pub traps: usize,
     pub guesses: usize,
     pub stated: f64,
-    pub realised: f64,
+    pub realized: f64,
     /// ids of every wrong fact and every answered trap (so none hides in a percentage)
     pub offenders: Vec<String>,
 }
@@ -136,7 +136,7 @@ pub fn judge(exam: &Exam, predictions: &[Vec<String>]) -> Result<Verdict, String
         }
         by_id.insert(p[0].as_str(), p);
     }
-    let mut v = Verdict { groups: BTreeMap::new(), wrong_facts: 0, traps_answered: 0, traps: 0, guesses: 0, stated: 0.0, realised: 0.0, offenders: Vec::new() };
+    let mut v = Verdict { groups: BTreeMap::new(), wrong_facts: 0, traps_answered: 0, traps: 0, guesses: 0, stated: 0.0, realized: 0.0, offenders: Vec::new() };
     let mut right_guesses = 0usize;
     for (id, group, _, truth) in &exam.questions {
         let row = v.groups.entry(group.clone()).or_default();
@@ -191,7 +191,7 @@ pub fn judge(exam: &Exam, predictions: &[Vec<String>]) -> Result<Verdict, String
             _ => row.refused += 1,
         }
     }
-    v.realised = if v.guesses == 0 { 0.0 } else { right_guesses as f64 / v.guesses as f64 };
+    v.realized = if v.guesses == 0 { 0.0 } else { right_guesses as f64 / v.guesses as f64 };
     v.stated = if v.guesses == 0 { 0.0 } else { v.stated / v.guesses as f64 };
     Ok(v)
 }
@@ -205,7 +205,7 @@ pub fn print(v: &Verdict) {
     println!("\nWRONG facts (must be 0): {}", v.wrong_facts);
     println!("traps answered (must be 0): {} of {}", v.traps_answered, v.traps);
     if v.guesses > 0 {
-        println!("guesses: {}; confidence stated on average {:.1}%, right {:.1}% of the time ({})", v.guesses, 100.0 * v.stated, 100.0 * v.realised, if v.stated <= v.realised + 0.02 { "honest: not over-confident" } else { "OVER-CONFIDENT" });
+        println!("guesses: {}; confidence stated on average {:.1}%, right {:.1}% of the time ({})", v.guesses, 100.0 * v.stated, 100.0 * v.realized, if v.stated <= v.realized + 0.02 { "honest: not over-confident" } else { "OVER-CONFIDENT" });
     }
     for o in v.offenders.iter().take(10) {
         println!("  offender: {o}");

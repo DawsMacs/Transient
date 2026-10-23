@@ -317,7 +317,7 @@ pub fn readable(problems: Vec<Problem>) -> (Vec<Problem>, Vec<(&'static str, usi
 }
 
 /// How a problem is split between teaching and testing. Variations of one story sit next to each other in SVAMP, so a random split lets the
-/// baby be tested on a near-copy of what it was taught; `Blocks` holds out whole runs of neighbouring problems instead.
+/// baby be tested on a near-copy of what it was taught; `Blocks` holds out whole runs of neighboring problems instead.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Split {
     Random,
@@ -335,7 +335,7 @@ pub fn split(problems: &[Problem], how: Split, test_share: f32, seed: u64) -> (V
             }
         }
         Split::Blocks => {
-            // runs of 12 neighbouring problems, every k-th run held out
+            // runs of 12 neighboring problems, every k-th run held out
             let every = ((1.0 / test_share).round() as usize).max(2);
             for (i, p) in problems.iter().enumerate() {
                 if (i / 12) % every == (seed as usize) % every { test.push(p.clone()) } else { train.push(p.clone()) }
@@ -351,7 +351,7 @@ pub fn split(problems: &[Problem], how: Split, test_share: f32, seed: u64) -> (V
 pub enum Units {
     /// the file's own kinds are the units (a teacher groups the lessons and never says how to learn them)
     ByKind,
-    /// the baby finds the units itself from the unlabelled lessons
+    /// the baby finds the units itself from the unlabeled lessons
     Discover,
 }
 
@@ -367,7 +367,7 @@ pub struct Tally {
     pub stated: f64,
 }
 
-/// What would have happened had the baby been told each test problem's kind (the file's) instead of recognising it from the words.
+/// What would have happened had the baby been told each test problem's kind (the file's) instead of recognizing it from the words.
 pub struct Oracle {
     /// of the test questions, how many it routed to the unit of the file's own kind
     pub routed_right: usize,
@@ -407,7 +407,7 @@ fn reason_class(how: &str) -> String {
         ("I only read plain whole numbers", "a number it cannot read"),
         ("won't state it as fact", "a number beyond what it was taught (a guess, if one was offered)"),
         ("they disagree", "its rule and what it was taught disagree"),
-        ("I only memorise this kind of thing", "a memorise-only unit with no close lesson"),
+        ("I only memorize this kind of thing", "a memorize-only unit with no close lesson"),
         ("I couldn't work it out", "it has a word or shape it cannot handle"),
         ("not sure enough", "a network not sure enough"),
     ] {
@@ -418,7 +418,7 @@ fn reason_class(how: &str) -> String {
     "other".into()
 }
 
-/// Teach on `train`, grade on `test`. The kind of each test problem is the file's, used only to organise the report.
+/// Teach on `train`, grade on `test`. The kind of each test problem is the file's, used only to organize the report.
 pub fn run(train: &[Problem], test: &[Problem], units: Units, seed: u64) -> Report {
     let (items, names): (Vec<Item>, Vec<String>) = match units {
         Units::ByKind => {
@@ -534,7 +534,7 @@ pub struct SelectReport {
     pub taught_two: usize,
     pub taught_many: usize,
     /// of the many-number lessons, how many a unit's own program explains with exactly one pair (the labels the selector learned from)
-    pub labelled: usize,
+    pub labeled: usize,
     pub two: Tally,
     pub many: Tally,
     /// of the many-number test problems whose program-consistent pair is unique: how often the selector kept exactly that pair (and how many there were)
@@ -572,7 +572,7 @@ pub fn run_select(train: &[Problem], test: &[Problem], seed: u64) -> SelectRepor
     let (mut checked, _, _) = teach_selecting(&fit, seed, &line);
     checked.calibrate_guesses(&held.iter().map(|p| (p.query.clone(), p.answer.clone())).collect::<Vec<_>>());
     let scale = checked.guess_scales();
-    let (mut school, school_a, labelled) = teach_selecting(train, seed, &line);
+    let (mut school, school_a, labeled) = teach_selecting(train, seed, &line);
     school.set_guess_scales(scale);
     let used = |p: &Problem| -> Option<Vec<usize>> {
         let e = school_a.unit_expression(&p.kind)?;
@@ -580,7 +580,7 @@ pub fn run_select(train: &[Problem], test: &[Problem], seed: u64) -> SelectRepor
         crate::selector::used_pair(&p.query, truth, &line, &|a, b| e.eval(a, b))
     };
     let (taught_two, taught_many) = (train.iter().filter(|p| numbers_in_text(&p.query) <= 2).count(), train.iter().filter(|p| numbers_in_text(&p.query) > 2).count());
-    let mut rep = SelectReport { taught_two, taught_many, labelled, two: Tally::default(), many: Tally::default(), kept_right: (0, 0), oracle_routing: (0, 0), scale };
+    let mut rep = SelectReport { taught_two, taught_many, labeled, two: Tally::default(), many: Tally::default(), kept_right: (0, 0), oracle_routing: (0, 0), scale };
     for p in test {
         let r = school.ask(&p.query);
         let t = if numbers_in_text(&p.query) <= 2 { &mut rep.two } else { &mut rep.many };
@@ -604,7 +604,7 @@ pub fn run_select(train: &[Problem], test: &[Problem], seed: u64) -> SelectRepor
 
 /// The two-step teaching: units from the lessons with at most two numbers; from their programs, the one pair of numbers that turns each many-number lesson
 /// into its answer (where there is exactly one); a selector learned from those; and the baby taught again with the unused numbers of those lessons blanked.
-/// Returns the school, the first-step school (whose programs gave the labels) and how many lessons were labelled.
+/// Returns the school, the first-step school (whose programs gave the labels) and how many lessons were labeled.
 fn teach_selecting(train: &[Problem], seed: u64, line: &crate::quantity::NumberLine) -> (crate::school::School, crate::school::School, usize) {
     use crate::school::School;
     let (few, many): (Vec<&Problem>, Vec<&Problem>) = train.iter().partition(|p| numbers_in_text(&p.query) <= 2);
@@ -618,25 +618,25 @@ fn teach_selecting(train: &[Problem], seed: u64, line: &crate::quantity::NumberL
     let first: Vec<Item> = few.iter().enumerate().map(|(i, p)| item(i, p, p.query.clone())).collect();
     let school_a = School::from_items(&first, names.clone(), None, seed, true);
     let mut examples: Vec<(String, Vec<usize>)> = Vec::new();
-    let mut labelled: Vec<(&Problem, Vec<usize>)> = Vec::new();
+    let mut labeled: Vec<(&Problem, Vec<usize>)> = Vec::new();
     for p in &many {
         let Some(e) = school_a.unit_expression(&p.kind) else { continue };
         let Some(truth) = p.answer.parse::<f32>().ok() else { continue };
         if let Some(pair) = crate::selector::used_pair(&p.query, truth, line, &|a, b| e.eval(a, b)) {
             examples.push((p.query.clone(), pair.clone()));
-            labelled.push((p, pair));
+            labeled.push((p, pair));
         }
     }
     let selector = crate::selector::Selector::train(&examples, line);
     let mut second = first.clone();
     let mut fact = first.len();
-    for (p, pair) in &labelled {
+    for (p, pair) in &labeled {
         second.push(item(fact, p, crate::selector::keep_only(&p.query, pair, line)));
         fact += 1;
     }
     let mut school = School::from_items(&second, names, None, seed, true);
     school.set_selector(selector, examples);
-    (school, school_a, labelled.len())
+    (school, school_a, labeled.len())
 }
 
 /// The same questions, asked as a stream: first all of them with nothing learned (static), then again in the same order, each asked and then told its true
@@ -693,7 +693,7 @@ pub fn run_online(train: &[Problem], test: &[Problem], seed: u64, window: usize)
 
 pub fn print_select(r: &SelectReport) {
     let pct = |a: usize, b: usize| if b == 0 { 0.0 } else { 100.0 * a as f64 / b as f64 };
-    println!("taught on {} lessons with at most two numbers, then {} lessons with more numbers ({} of them with exactly one pair of numbers that a unit's program turns into the answer: the labels the selector learned from)\n", r.taught_two, r.taught_many, r.labelled);
+    println!("taught on {} lessons with at most two numbers, then {} lessons with more numbers ({} of them with exactly one pair of numbers that a unit's program turns into the answer: the labels the selector learned from)\n", r.taught_two, r.taught_many, r.labeled);
     println!("  {:<28} {:>5} {:>8} {:>8} {:>8} {:>13} {:>13}", "tested on", "n", "fact", "WRONG", "refused", "guess right", "guess wrong");
     for (name, t) in [("two numbers or fewer", &r.two), ("more than two numbers", &r.many)] {
         println!("  {:<28} {:>5} {:>7.1}% {:>7.1}% {:>7.1}% {:>12.1}% {:>12.1}%", name, t.n, pct(t.right, t.n), pct(t.wrong, t.n), pct(t.refused, t.n), pct(t.guess_right, t.n), pct(t.guess_wrong, t.n));
@@ -735,7 +735,7 @@ pub fn print(report: &Report, total: usize) {
     let made = report.all.guess_right + report.all.guess_wrong;
     if made > 0 {
         println!(
-            "\nit made {made} labelled guesses; the hit rate it stated for them averaged {:.1}%, and {:.1}% were right",
+            "\nit made {made} labeled guesses; the hit rate it stated for them averaged {:.1}%, and {:.1}% were right",
             100.0 * report.all.stated / made as f64,
             100.0 * report.all.guess_right as f64 / made as f64
         );
@@ -744,7 +744,7 @@ pub fn print(report: &Report, total: usize) {
         let o = &report.oracle;
         let p = |x: usize| 100.0 * x as f64 / o.n as f64;
         println!(
-            "\nIF IT WERE TOLD EACH QUESTION'S KIND (the oracle: isolates the way of learning from recognising the kind), {} questions: right as fact {:.1}%, WRONG as fact {:.1}%, guess right {:.1}%, guess wrong {:.1}%, nothing {:.1}%\nrouting alone: {:.1}% of the questions went to the unit of their own kind",
+            "\nIF IT WERE TOLD EACH QUESTION'S KIND (the oracle: isolates the way of learning from recognizing the kind), {} questions: right as fact {:.1}%, WRONG as fact {:.1}%, guess right {:.1}%, guess wrong {:.1}%, nothing {:.1}%\nrouting alone: {:.1}% of the questions went to the unit of their own kind",
             o.n, p(o.right), p(o.wrong), p(o.guess_right), p(o.guess_wrong), p(o.refused), p(o.routed_right)
         );
     }

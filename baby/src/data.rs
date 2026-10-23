@@ -67,7 +67,7 @@ pub struct Dataset {
     pub item_test: Vec<Example>,
     /// The training questions with one spelling mistake in one word: does it still understand?
     pub typo_test: Vec<Example>,
-    /// Same, but the misspelt word is always the one that carries the meaning (the thing asked about, or a number).
+    /// Same, but the misspelled word is always the one that carries the meaning (the thing asked about, or a number).
     pub typo_entity_test: Vec<Example>,
 }
 
@@ -227,7 +227,7 @@ pub fn entity_words() -> std::collections::HashSet<String> {
 }
 
 /// Sums and differences outside the range the baby is ever taught (operands up to ten, results up to ten, at least one operand
-/// above five), in all four phrasings. A rule extends to these; a memorised table cannot, because it never met the words.
+/// above five), in all four phrasings. A rule extends to these; a memorized table cannot, because it never met the words.
 pub fn extrapolation() -> Vec<Example> {
     let templates = |f: Family| -> [&'static str; 4] {
         specs().into_iter().find(|s| s.family == f).map(|s| s.templates).unwrap()
@@ -255,7 +255,7 @@ pub fn extrapolation() -> Vec<Example> {
     out
 }
 
-/// One spelling mistake: drop a letter, swap two neighbours, or replace a letter.
+/// One spelling mistake: drop a letter, swap two neighbors, or replace a letter.
 fn misspell(word: &str, rng: &mut Rng) -> String {
     let chars: Vec<char> = word.chars().collect();
     loop {
@@ -280,7 +280,7 @@ fn misspell(word: &str, rng: &mut Rng) -> String {
     }
 }
 
-/// The same questions with one misspelt word each (a word of four letters or more; shorter questions are left out).
+/// The same questions with one misspelled word each (a word of four letters or more; shorter questions are left out).
 pub fn typos_of(examples: &[Example], seed: u64, only: Option<&std::collections::HashSet<String>>) -> Vec<Example> {
     let mut rng = Rng::new(seed);
     let mut out = Vec::new();

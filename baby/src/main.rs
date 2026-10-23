@@ -4,7 +4,7 @@
 //!
 //!   baby school [--seed N] [--out PATH]     TEACH THE BABY (the unified one): units of lessons, each learned the way evidence says
 //!   baby learn  "what is two multiplied by three" six --unit times    keep learning AFTER school: add a lesson, re-work how that unit is learned
-//!   baby discover [--seed N] [--out PATH]   hand it a heap of UNLABELLED lessons: it finds the units itself, then is scored like the others
+//!   baby discover [--seed N] [--out PATH]   hand it a heap of UNLABELED lessons: it finds the units itself, then is scored like the others
 //!   baby tutor [--school FILE] [--rounds N] [--limit N] [--out FILE]   the baby asks what it wants checked, you answer (Enter skips, q quits; `question => answer` teaches it something of your own)
 //!   baby exam write DIR [--units N --seed N] | score DIR PREDICTIONS.tsv | run DIR [--out FILE] | adapt-write DIR [--wrong P --repeat F] | adapt-run DIR | adapt-drive DIR COMMAND...   the entry exam: plain files and a line protocol any system can be taught and judged by (Novice's bar)
 //!   baby bridge (--svamp FILE | --pairs FILE) [--units kind|discover] [--split random|blocks] [--numbers N] [--select] [--test F] [--seed N]   REAL TEXT: what does the baby make of problems somebody else wrote?
@@ -25,7 +25,7 @@
 //!   baby eval   [--model PATH]              score a saved baby on the held-out sets
 //!   baby teach  "capital of atlantis" poseidonis    tell it something new; it remembers instantly (no weight change)
 //!   baby know   [--seeds K]                 does it know what it doesn't know? three signals compared
-//!   baby rules  [--seeds K]                 rules, not tables: a quantity unit vs memorised sums, and the baby choosing between them
+//!   baby rules  [--seeds K]                 rules, not tables: a quantity unit vs memorized sums, and the baby choosing between them
 //!   baby kinds  [--seeds K]                 five units of lessons: the baby picks how to learn each one, from evidence
 //!   baby curious [--seeds K]                a baby that chooses what to ask the teacher, versus being drip-fed
 //!   baby life   [options]                   LEARN instead of train: lessons one at a time, five ways of coping, charged in joules
@@ -186,7 +186,7 @@ fn cmd_train(a: &Args) {
     // Optionally let it meet misspellings while learning (never the exact ones used for testing).
     let typo_aug: u64 = a.get("typo-aug", 0);
     if typo_aug > 0 {
-        // No misspelt *word* used in testing may appear in training, in any question: the test must be about spellings it never met.
+        // No misspelled *word* used in testing may appear in training, in any question: the test must be about spellings it never met.
         let clean: std::collections::HashSet<String> = ds.train.iter().flat_map(|e| data::tokenize(&e.query)).collect();
         let test_misspellings: std::collections::HashSet<String> = ds
             .typo_test
@@ -538,14 +538,14 @@ fn cmd_school(a: &Args) {
     school.set_careful(!a.flag("permissive"));
     println!("  {:<9} {:<9} {:>9}   built / note", "unit", "learns by", "held back");
     for u in &school.units {
-        let note = match (u.program(), u.memorise_only()) {
+        let note = match (u.program(), u.memorize_only()) {
             (Some(p), _) => p,
-            (None, true) => "memorise only: nothing here can be worked out".to_string(),
+            (None, true) => "memorize only: nothing here can be worked out".to_string(),
             (None, false) => String::new(),
         };
         println!("  {:<9} {:<9} {:>8.0}%   {}", u.name, u.chosen.name(), 100.0 * u.best_evidence(), note);
     }
-    println!("\nrecognises a kind of question when one kind of lesson beats the next by at least {:.2}\n", school.route_floor);
+    println!("\nrecognizes a kind of question when one kind of lesson beats the next by at least {:.2}\n", school.route_floor);
     print_scorecard(&school, &world);
     match school.save(&out) {
         Ok(()) => println!("taught in {:.1}s, saved {out} (try: baby ask \"how far apart are two and nine\")", started.elapsed().as_secs_f32()),
@@ -945,7 +945,7 @@ fn cmd_rules(a: &Args) {
         }
     }
     let n = seeds as f64;
-    let names = ["bag network (memorises)", "letters network (memorises)", "quantity rule (fitted)", "the baby's own choice"];
+    let names = ["bag network (memorizes)", "letters network (memorizes)", "quantity rule (fitted)", "the baby's own choice"];
     for (i, name) in names.iter().enumerate() {
         println!("{:<30} {:>7.0}% {:>9.0}% {:>13.0}% {:>15.0}%", name, 100.0 * acc[i][0] / n, 100.0 * acc[i][1] / n, 100.0 * acc[i][2] / n, 100.0 * acc[i][3] / n);
     }
@@ -1020,7 +1020,7 @@ fn cmd_kinds(a: &Args) {
         println!(
             "  {:<9} {:>8.0}% {:>6.0}% {:>7.0}% {:>7.0}% {:>7.0}%   {}{}",
             units[u], 100.0 * evidence[u][0] / n, 100.0 * evidence[u][1] / n, 100.0 * evidence[u][2] / n, 100.0 * evidence[u][3] / n, 100.0 * evidence[u][4] / n, picks.join(", "),
-            if best < 0.8 { "   <- nothing here generalises; it can only memorise this" } else { "" }
+            if best < 0.8 { "   <- nothing here generalizes; it can only memorize this" } else { "" }
         );
     }
     println!("\nExpressions the search built (seed 1):");
@@ -1142,7 +1142,7 @@ fn cmd_effort(a: &Args) {
     let t = std::time::Instant::now();
     let _full = school::School::train(&world, seed, false);
     let full_secs = t.elapsed().as_secs_f32();
-    println!("  thrifty (a network is only tried where cheaper ways did not already generalise): {thrifty_secs:.1}s");
+    println!("  thrifty (a network is only tried where cheaper ways did not already generalize): {thrifty_secs:.1}s");
     println!("  full (every mechanism cross-validated for every unit):                             {full_secs:.1}s\n");
 
     let sets: [(&str, &Vec<kinds::Item>); 4] =
@@ -1199,7 +1199,7 @@ fn cmd_effort(a: &Args) {
     net_l.macs = net_ops as u64;
     net_l.words_read = net_ops as u64;
     net_l.ws_bytes = (cfg.n_params() * 4) as u64;
-    println!("  {:<24} {:>16.0} {:>12.0} {:>12}   (answers only what it memorised, and can't work out a new sum)", "one small network", net_ops, net_ops, fmt_joules(em.joules(&net_l)));
+    println!("  {:<24} {:>16.0} {:>12.0} {:>12}   (answers only what it memorized, and can't work out a new sum)", "one small network", net_ops, net_ops, fmt_joules(em.joules(&net_l)));
     // Fitting a rule: nudging it 800 times against solving it exactly (a different way of computing the same thing).
     {
         let sums: Vec<data::Example> = world
@@ -1279,15 +1279,15 @@ fn cmd_discover(a: &Args) {
     for u in &school.units {
         println!("  {:<22} {:<9} {:>8.0}%   {}", u.name, u.chosen.name(), 100.0 * u.best_evidence(), u.program().unwrap_or_default());
     }
-    let labelled = school::School::train(&world, seed, true);
+    let labeled = school::School::train(&world, seed, true);
     let sets: [(&str, &Vec<kinds::Item>); 4] =
         [("taught", &world.train), ("reworded", &world.reworded), ("never taught", &world.new_items), ("beyond the taught range", &world.beyond)];
-    println!("\nThe same questions put to the baby that found its own units, and to the one the teacher organised:\n");
-    println!("  {:<24} {:>22} {:>22}", "", "found its own units", "organised by the teacher");
+    println!("\nThe same questions put to the baby that found its own units, and to the one the teacher organized:\n");
+    println!("  {:<24} {:>22} {:>22}", "", "found its own units", "organized by the teacher");
     println!("  {:<24} {:>7} {:>7} {:>6} {:>7} {:>7} {:>6}", "questions", "right", "refused", "WRONG", "right", "refused", "WRONG");
     for (name, set) in sets {
         let mut cells = Vec::new();
-        for s in [&school, &labelled] {
+        for s in [&school, &labeled] {
             let (mut right, mut refused, mut wrong) = (0usize, 0usize, 0usize);
             for it in set.iter() {
                 match s.ask(&it.query).answer {
@@ -1349,7 +1349,7 @@ fn cmd_sleep(a: &Args) {
         println!("note: {s}");
     }
     println!("{} lesson(s) still waiting in the pen", report.left);
-    let reorg = school.reorganise();
+    let reorg = school.reorganize();
     for (from, to, n) in &reorg.split {
         println!("took {n} lessons out of unit '{from}' (they stopped following its rule) into unit '{to}'");
     }
@@ -1426,7 +1426,7 @@ fn cmd_scale(a: &Args) {
         }
         println!("wrong columns: taught/reworded/never/beyond (WRONG %, must be 0 without noise):");
         for r in &rows {
-            println!("  {:>5} units: {:.2} / {:.2} / {:.2} / {:.2}  after reorganising {:.2}", get(r, "units").unwrap_or(0.0), get(r, "taught_wrong").unwrap_or(0.0), get(r, "reworded_wrong").unwrap_or(0.0), get(r, "never_wrong").unwrap_or(0.0), get(r, "beyond_wrong").unwrap_or(0.0), get(r, "reorg_wrong").unwrap_or(f64::NAN));
+            println!("  {:>5} units: {:.2} / {:.2} / {:.2} / {:.2}  after reorganizing {:.2}", get(r, "units").unwrap_or(0.0), get(r, "taught_wrong").unwrap_or(0.0), get(r, "reworded_wrong").unwrap_or(0.0), get(r, "never_wrong").unwrap_or(0.0), get(r, "beyond_wrong").unwrap_or(0.0), get(r, "reorg_wrong").unwrap_or(f64::NAN));
         }
         return;
     }
@@ -1681,12 +1681,12 @@ fn cmd_cost(a: &Args) {
     );
 
     let t = std::time::Instant::now();
-    let r = school.reorganise();
+    let r = school.reorganize();
     let rs = t.elapsed().as_secs_f64();
     let t = std::time::Instant::now();
     let c = school.compact();
     println!(
-        "  going back over everything: reorganising ({} merges, {} splits) {:.2} s; forgetting what is explained ({} of {} lessons kept) {:.2} s",
+        "  going back over everything: reorganizing ({} merges, {} splits) {:.2} s; forgetting what is explained ({} of {} lessons kept) {:.2} s",
         r.merged.len(), r.split.len(), rs, c.after, c.before, t.elapsed().as_secs_f64()
     );
     println!("\n  peak memory over all of it: {:.1} MB.", peak_memory_kb() as f64 / 1024.0);
@@ -1794,7 +1794,7 @@ fn main() {
                 for seed in 1..=seeds {
                     rows.extend(invent::run_guesses(seed));
                 }
-                println!("labelled guesses from the careful baby on unseen questions, {seeds} seeds ({} guesses). stretch = how far past the taught range, in widths of that range", rows.len());
+                println!("labeled guesses from the careful baby on unseen questions, {seeds} seeds ({} guesses). stretch = how far past the taught range, in widths of that range", rows.len());
                 println!("{:<14} {:>22} {:>22}", "stretch", "genuine kinds", "deceptive kinds");
                 println!("{:<14} {:>22} {:>22}", "", "guesses  right", "guesses  right");
                 let edges = [0.0f32, 0.25, 0.5, 1.0, 2.0, f32::MAX];

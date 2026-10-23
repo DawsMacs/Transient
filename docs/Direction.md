@@ -56,8 +56,8 @@ A separate, private project (a chat client with a small offline model) shares so
   77 GB/s). Design for arithmetic done per byte read, and for knowledge that lives in storage instead of RAM.
 - **RAM is small, storage is large, compute is comparatively plentiful, heat and battery cap sustained work.**
 - **Weights can hold only so much.** A model stores roughly 2 bits of facts per parameter; a 0.6B model is about 150 MB of
-  facts. So facts belong in stores and the model's job is understanding, language and judgement. This is a design principle.
-- **Architecture ideas earn trust by scaling behaviour.** Many look strong at 10-100M parameters. We compare how quality improves
+  facts. So facts belong in stores and the model's job is understanding, language and judgment. This is a design principle.
+- **Architecture ideas earn trust by scaling behavior.** Many look strong at 10-100M parameters. We compare how quality improves
   with size and with bytes read per token, so a good small result can be believed and a bad one explained.
 - **Hardware and tooling are part of the design.** Ideas that run on ordinary matrix multiplies travel further than ones needing
   exotic kernels, so each idea is also costed in the kernels it needs.
@@ -74,7 +74,7 @@ A separate, private project (a chat client with a small offline model) shares so
 | Ultra-low-bit weights | Ternary / BitNet-style | Far fewer bytes per token, cheap arithmetic | Training natively at that precision |
 | Non-autoregressive generation | Diffusion language models | Many tokens per weight read | Quality and control |
 | Adaptive compute | Early exit, mixture of depths, think only when needed | Effort where it matters | Routing cost |
-| Fast weights | The model updates part of itself on context | Private, lasting personalisation | Stability, forgetting |
+| Fast weights | The model updates part of itself on context | Private, lasting personalization | Stability, forgetting |
 | System design | Router, specialists, verifier, stores and tools designed together | Matches the "many cheap steps" arithmetic | How much is architecture, how much engineering |
 | Slow thinking | Asynchronous background work: research, verify, rehearse, overnight | Uses the one thing the cloud cannot give: unmetered time | What tasks benefit and how to present results |
 
@@ -159,4 +159,4 @@ Triton/CUDA for GPU kernels on rented machines. Rule: choose per layer from a mi
 - What does the name mean, and should it shape the design? (Not known; not guessing.)
 - Rust-first is decided; open: nightly toolchain or stable-with-FFI for the first kernels?
 - Budget and acceptability of rented GPUs, and what data may be uploaded.
-- ~~Public or private?~~ Decided 2026-10-20: public, AGPL-3.0-or-later (see `../README.md`, Licence).
+- ~~Public or private?~~ Decided 2026-10-20: public, AGPL-3.0-or-later (see `../README.md`, License).

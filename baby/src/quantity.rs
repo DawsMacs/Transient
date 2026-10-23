@@ -2,7 +2,7 @@
 // Copyright (C) 2026 DawsMacs
 //! A unit that learns a rule instead of a table.
 //!
-//! Every network so far memorised sums: given "three plus two" it learned the pair, and "three plus one" was a stranger. A rule
+//! Every network so far memorized sums: given "three plus two" it learned the pair, and "three plus one" was a stranger. A rule
 //! needs something a table lacks: a notion of *quantity*. This unit has two parts, both learned from experience:
 //!
 //!   1. A number line, built the way a child gets one, by being taught to count: "what comes after three? four". Each word's value
@@ -144,7 +144,7 @@ impl Quantity {
         Quantity::fit_penalized(train, line, epochs, lr, &|_| 0.0)
     }
 
-    /// As `fit`, with a pull towards zero on chosen words. Examples alone cannot always say which of two words that always turn
+    /// As `fit`, with a pull toward zero on chosen words. Examples alone cannot always say which of two words that always turn
     /// up together does the work ("what comes after four" / "what is after four"); a word that is common in everything else
     /// the baby has been taught is a poor suspect, so such words are pulled harder (`decay(word)` per update).
     pub fn fit_penalized(train: &[Example], line: NumberLine, epochs: usize, lr: f32, decay: &dyn Fn(&str) -> f32) -> Quantity {
@@ -263,7 +263,7 @@ impl Quantity {
 
     /// Fit the same rule by solving it exactly instead of nudging it thousands of times. The model is linear in the operator weights,
     /// so the best fit is the solution of one small system of equations (ridge regression); no learning rate, no number of passes,
-    /// and the same answer every time. `ridge(word)` is how hard to pull a word's weights towards zero (common filler words are
+    /// and the same answer every time. `ridge(word)` is how hard to pull a word's weights toward zero (common filler words are
     /// poor suspects). Returns the rule and the arithmetic operations spent.
     pub fn fit_ridge(train: &[Example], line: NumberLine, ridge: &dyn Fn(&str) -> f64) -> (Quantity, u64) {
         Quantity::fit_ridge_mode(train, line, ridge, None)

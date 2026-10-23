@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-only
 # Copyright (C) 2026 DawsMacs
-"""A deliberately naive system for the entry exam, in a different language from the baby: it memorises every lesson word for word, states a fact when the
+"""A deliberately naive system for the entry exam, in a different language from the baby: it memorizes every lesson word for word, states a fact when the
 question is an exact repeat of a lesson, and refuses everything else. It exists to show that `baby exam score` judges a foreign system, and to give the
 floor that coverage is compared against: a system worth building passes the same honesty rules and covers more.
 

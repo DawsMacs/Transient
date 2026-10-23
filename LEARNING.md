@@ -7,7 +7,7 @@ untested. Pessimism below is terrain: it tells us what to measure first and neve
 ## 1. The reframe
 
 Mainstream practice runs one pipeline: pretrain on a huge corpus, post-train, freeze the weights, serve them. "Training" is an event
-that happens once, in a data centre, for everyone. Transient does not have to inherit that. Learning can instead be a *continuous,
+that happens once, in a data center, for everyone. Transient does not have to inherit that. Learning can instead be a *continuous,
 budgeted process with several mechanisms on different timescales*, running on the owner's own hardware, where the unit that matters
 is capability gained per joule, per byte read and per token seen. The size of the data is one input to that; how learning is
 implemented is the lever Daws is betting on.
@@ -30,7 +30,7 @@ implemented is the lever Daws is betting on.
 
 - **The nanoGPT speedrun** **[SOURCED]**: training GPT-2-small (124M) to the same validation loss went from 45 minutes on 8 H100s
   (llm.c baseline) to ~3 minutes (Jan 2025) to ~2 min 20 s (Oct 2025), and one early variant reached the same loss on 0.75B tokens
-  instead of 10B. Same task, same model class: better optimiser (Muon), modernised architecture, better kernels and schedules. A
+  instead of 10B. Same task, same model class: better optimizer (Muon), modernized architecture, better kernels and schedules. A
   >10x cut in both time and tokens from implementation alone. (Caveat: a tuned benchmark at small scale; how much transfers
   upward is a separate question.)
 - **BabyLM** **[SOURCED]**: under a 100M-word budget, winners (LTG-BERT) beat models trained on trillions of words on the
@@ -51,20 +51,20 @@ Instead of one weight-update mechanism, several, matched to how fast and how per
 |-----------|-----------|--------------------------|
 | **Instant** (zero gradients) | Write to a store: facts, preferences, episodes, corrections; retrieve later | Plain engineering (offline knowledge dumps, a personal diary) |
 | **Seconds-minutes** | In-context learning and fast weights: a small memory module updated while reading (Titans, test-time training layers) | Promising; critiques exist (a Titans re-implementation analysis; a 2026 paper whose title says test-time training with KV binding is secretly linear attention; I have read neither) **[SOURCED titles only]** |
-| **Hours (overnight)** | Sparse consolidation: replay the day's experiences into a small set of parameters (memory-slot or adapter updates), with rehearsal of old behaviour | Sparse memory finetuning and self-distillation reduce forgetting **[SOURCED]**; sleep-style consolidation is a conceptual match, not an established result in LMs |
+| **Hours (overnight)** | Sparse consolidation: replay the day's experiences into a small set of parameters (memory-slot or adapter updates), with rehearsal of old behavior | Sparse memory finetuning and self-distillation reduce forgetting **[SOURCED]**; sleep-style consolidation is a conceptual match, not an established result in LMs |
 | **Self-directed** | The model writes its own training examples and update directives, rewarded by later performance (SEAL) | Early research, NeurIPS 2025 **[SOURCED]** |
-| **Rare** | Base training: language, reasoning, judgement; possibly distilled from a teacher once, possibly shared | The standard pipeline, kept for what must live in weights |
+| **Rare** | Base training: language, reasoning, judgment; possibly distilled from a teacher once, possibly shared | The standard pipeline, kept for what must live in weights |
 
 Google's Nested Learning / HOPE work frames this same idea as a "continuum memory system": banks that update at different
 frequencies, fast ones for the immediate, slow ones for stable knowledge **[SOURCED, secondary summaries]**.
 
 Design principle that falls out: **put each kind of knowledge at the cheapest timescale that does the job.** Facts about the world
-and about Daws go in stores; habits and style go in slow, sparse updates; only language and judgement need the expensive base.
+and about Daws go in stores; habits and style go in slow, sparse updates; only language and judgment need the expensive base.
 
 ## 5. Levers for learning efficiently on small hardware
 
 1. **Objective:** distillation signals over hard labels; on-policy samples with judge or verifier feedback; self-generated data.
-2. **Optimiser and schedule:** Muon-style optimisers and tuned schedules (the speedrun) **[SOURCED]**; low-precision training
+2. **Optimizer and schedule:** Muon-style optimizers and tuned schedules (the speedrun) **[SOURCED]**; low-precision training
    **[MEMORY]**.
 3. **Data engineering:** quality filtering, recombination, pruning, deduplication, multiple epochs, synthetic data from a teacher.
 4. **Sparse and local updates:** memory layers or adapters so each lesson touches few parameters, which also limits forgetting.
@@ -77,7 +77,7 @@ and about Daws go in stores; habits and style go in slow, sparse updates; only l
 7. **Architecture co-design:** an architecture whose knowledge lives in sparse tables (memory layers, Engram-style) is *also* one
    that is cheap to update sparsely. The inference design and the learning design should be chosen together.
 8. **Local learning rules:** predictive coding, target propagation and similar methods avoid storing the whole graph and
-   parallelise by layer; early and unproven for language **[SOURCED]**. A long-horizon watch item.
+   parallelize by layer; early and unproven for language **[SOURCED]**. A long-horizon watch item.
 
 ## 6. How to measure learning (so we can tell if an idea works)
 

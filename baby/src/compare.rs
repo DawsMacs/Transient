@@ -6,7 +6,7 @@
 //! What "matched" means here, stated plainly so the comparison cannot be quietly tilted: both read the same word lists from the same training
 //! lessons; both are graded on the same four question sets (taught, reworded, never taught, beyond the taught numbers); the transformer's
 //! vocabulary and answer words come only from the training lessons (it can say nothing it was never taught); every size is trained until it
-//! answers every training lesson, or until the epoch budget runs out, with the same optimiser and no tuning per size. The baby keeps its own
+//! answers every training lesson, or until the epoch budget runs out, with the same optimizer and no tuning per size. The baby keeps its own
 //! way of saying "I don't know"; the transformer is graded twice, always answering and answering only when its probability is at least 0.9.
 
 use crate::data::tokenize;
@@ -25,7 +25,7 @@ pub struct Grade {
     pub right: usize,
     pub refused: usize,
     pub wrong: usize,
-    /// of the refused, how many had a labelled guess that was right (the baby only)
+    /// of the refused, how many had a labeled guess that was right (the baby only)
     pub guess_right: usize,
     pub n: usize,
 }
@@ -37,7 +37,7 @@ impl Grade {
 }
 
 /// Real energy, if the counter is readable: joules above idle for a closure, and its wall time. The counter is the whole CPU package, so
-/// whatever else the machine does is counted too. Two defences, both learned from mistakes (see `baby/README.md`): the idle baseline is
+/// whatever else the machine does is counted too. Two defenses, both learned from mistakes (see `baby/README.md`): the idle baseline is
 /// **re-measured right before every measurement** (the lowest of three one-second readings; a baseline taken once at the start goes stale
 /// when the background changes, and clamped later readings to 0.00 J), and every run records how much of the busy CPU time went to OTHER
 /// processes, so a reading taken on a busy machine is flagged (`warning`). The energy is NOT scaled by CPU share: that was tried and it
@@ -456,7 +456,7 @@ pub fn run_scale(seed: u64, counts: &[usize], sizes: &[usize], layers: usize, ep
     let meter = Meter::new();
     let em = EnergyModel::default();
     println!("{}\n", if meter.available() { "Energy is MEASURED (CPU package, above idle) and counted (45 nm estimate)." } else { "Energy is counted only." });
-    println!("right / refused / WRONG, percent of each set; for the baby, in brackets, the share of its refusals that came with a right labelled guess\n");
+    println!("right / refused / WRONG, percent of each set; for the baby, in brackets, the share of its refusals that came with a right labeled guess\n");
     println!(
         "{:>6} {:>8}  {:<27} {:>8} {:>6} {:>11} {:>10}   {:>18} {:>19} {:>27}",
         "units", "lessons", "learner", "time", "epochs", "est. energy", "MEASURED", "reworded", "never taught", "beyond the taught numbers"
@@ -518,8 +518,8 @@ fn refusal_reason(how: &str) -> &'static str {
         "a word it has never met"
     } else if how.contains("no kind of lesson I was taught is like") {
         "no kind of lesson is like it (routing)"
-    } else if how.contains("I only memorise this kind") {
-        "memorise-only unit, nothing close enough"
+    } else if how.contains("I only memorize this kind") {
+        "memorize-only unit, nothing close enough"
     } else if how.contains("couldn't work it out") {
         "the unit could not work it out (declined)"
     } else if how.contains("they disagree") {
@@ -570,7 +570,7 @@ pub fn run_refusals(seed: u64, counts: &[usize]) {
             }
         }
         by_reason.sort_by(|a, b| b.1.cmp(&a.1));
-        println!("{units} units, {n} never-taught questions: refused {refused} ({:.1}%); of those a right labelled guess {guess_right}, sent to a different unit {routed_wrong}", 100.0 * refused as f64 / n as f64);
+        println!("{units} units, {n} never-taught questions: refused {refused} ({:.1}%); of those a right labeled guess {guess_right}, sent to a different unit {routed_wrong}", 100.0 * refused as f64 / n as f64);
         for (why, c) in &by_reason {
             println!("    {:>5.1}%  {why}", 100.0 * *c as f64 / n as f64);
         }
@@ -630,7 +630,7 @@ pub fn run_teacher(seed: u64, units: usize, rounds: usize, per_unit: usize, wron
     };
     let floor_start = school.route_floor;
     let mut wrong_ever = report(&school, "before any checks", 0, 0);
-    // how well each never-taught question was recognised before any learning: the margin of its best unit over the runner-up, and who won
+    // how well each never-taught question was recognized before any learning: the margin of its best unit over the runner-up, and who won
     let before_route: Vec<(usize, f32)> = w.new_items.iter().map(|it| school.route(&it.query, &mut Ledger::default())).collect();
     let floor_before = school.route_floor;
     let (mut asked, mut answered, mut unanswerable) = (0usize, 0usize, 0usize);

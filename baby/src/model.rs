@@ -62,7 +62,7 @@ fn hash_piece(salt: u8, piece: &str, buckets: usize) -> usize {
 }
 
 /// What the letters reader sees: hashed pieces of the question's own spelling. A whole word, its 3- and 4-letter groups (with
-/// word-boundary marks), and each pair of neighbouring words. Any word at all has pieces, and a typo keeps most of them.
+/// word-boundary marks), and each pair of neighboring words. Any word at all has pieces, and a typo keeps most of them.
 pub fn letter_features(query: &str, buckets: usize) -> Vec<usize> {
     let words = tokenize(query);
     let mut out = Vec::new();

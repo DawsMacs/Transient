@@ -1,19 +1,19 @@
 # Contributing
 
-Transient is open research and is licensed `AGPL-3.0-only`. Contributions are welcome under the same licence.
+Transient is open research and is licensed `AGPL-3.0-only`. Contributions are welcome under the same license.
 
-## Licence and sign-off (DCO, no CLA)
+## License and sign-off (DCO, no CLA)
 
-There is no contributor licence agreement. Instead, sign off each commit with the
+There is no contributor license agreement. Instead, sign off each commit with the
 [Developer Certificate of Origin](https://developercertificate.org/):
 
 ```bash
 git commit -s -m "your message"
 ```
 
-This adds a `Signed-off-by:` line stating you have the right to submit the work under the project's licence. Contributions stay
+This adds a `Signed-off-by:` line stating you have the right to submit the work under the project's license. Contributions stay
 under `AGPL-3.0-only`; nobody, including the maintainer, gets a special right to relicense them into a closed product. That is
-deliberate: the point of the licence is that this work stays open.
+deliberate: the point of the license is that this work stays open.
 
 New source files start with:
 

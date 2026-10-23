@@ -342,7 +342,7 @@ impl Remembered {
     }
 
     /// What was taught for exactly this question (the same words in the same order), by vote; None if it was never taught as written
-    /// or the lessons for it tie. Not a similarity match: a neighbouring lesson is no witness.
+    /// or the lessons for it tie. Not a similarity match: a neighboring lesson is no witness.
     pub fn exact(&self, q: &str) -> Option<String> {
         let tokens = tokenize(q);
         let mut candidates: Vec<usize> = tokens
@@ -451,7 +451,7 @@ pub fn fit(mech: Mech, items: &[Item], weights: &Weights, seed: u64) -> Fitted {
     match mech {
         Mech::Remember => Fitted::Remember(Remembered::from_items(items)),
         Mech::Rule => {
-            // Solved exactly (see `Quantity::fit_ridge`): no passes, no learning rate. Filler words are pulled hard towards zero.
+            // Solved exactly (see `Quantity::fit_ridge`): no passes, no learning rate. Filler words are pulled hard toward zero.
             let (rule, _ops) = Quantity::fit_ridge_robust(&as_examples(items), &|w| if weights.is_filler(w) { 5.0 } else { 0.0 });
             Fitted::Rule(rule)
         }
@@ -463,7 +463,7 @@ pub fn fit(mech: Mech, items: &[Item], weights: &Weights, seed: u64) -> Fitted {
     }
 }
 
-/// `fit`, then: a program whose held-back score is below the reliability bar is provisional, a source of labelled guesses only.
+/// `fit`, then: a program whose held-back score is below the reliability bar is provisional, a source of labeled guesses only.
 pub fn fit_for(mech: Mech, items: &[Item], weights: &Weights, seed: u64, held_back: f64) -> Fitted {
     let mut state = fit(mech, items, weights, seed);
     if let (Mech::Program, Fitted::Program(Some(p))) = (mech, &mut state) {
@@ -622,7 +622,7 @@ pub fn evidence(unit_items: &[Item], weights: &Weights, seed: u64) -> [f64; 5] {
 }
 
 /// As `evidence`, but the expensive mechanism (the network) is only tried when the cheaper ones show some structure without being
-/// reliable (25% up to the bar). Where they already generalise it is waste, and where they show nothing at all (an arbitrary table of
+/// reliable (25% up to the bar). Where they already generalize it is waste, and where they show nothing at all (an arbitrary table of
 /// facts) a network cannot do better on facts it was not shown, but cross-validating one costs about 100 ms a unit.
 pub fn evidence_thrifty(unit_items: &[Item], weights: &Weights, seed: u64) -> [f64; 5] {
     // Cheapest first. Building a program is the dearest of the cheap ones (a search, now over a library too), so it is only tried when
@@ -712,7 +712,7 @@ pub fn choose_mechanism(ev: &[f64; 5], facts: usize) -> Mech {
     }
 }
 
-/// Below the fact bar a unit is memory; but a program that fits most of the unit's lessons (a partial program) answers only as a labelled
+/// Below the fact bar a unit is memory; but a program that fits most of the unit's lessons (a partial program) answers only as a labeled
 /// guess that states how sure it is, so it is worth having at a lower bar: if it is the best way to learn the unit and was right on at least
 /// this share of the facts held back.
 pub const GUESS_BAR: f64 = 0.6;
@@ -750,7 +750,7 @@ pub fn learn(world: &World, seed: u64) -> Baby {
     learn_with(world, seed, false)
 }
 
-/// `thrifty`: skip the network where cheaper mechanisms already generalise, and fit only what will be used. The unused
+/// `thrifty`: skip the network where cheaper mechanisms already generalize, and fit only what will be used. The unused
 /// mechanisms are left as placeholders that decline.
 pub fn learn_with(world: &World, seed: u64, thrifty: bool) -> Baby {
     learn_items(&world.train, UNITS.len(), seed, thrifty)
@@ -899,7 +899,7 @@ mod tests {
 
     /// "which is bigger two or three" and "... three or two" are different facts but the same bag of words, so memory (which ignores
     /// order) answers one from the other. Held-back evidence must not credit memory for that, or a commutative rule is mistaken for
-    /// a table whenever its twins happen to land in different folds. (Found at 200 units: 3 of 11 such units were mislabelled.)
+    /// a table whenever its twins happen to land in different folds. (Found at 200 units: 3 of 11 such units were mislabeled.)
     #[test]
     fn a_commutative_rule_is_never_mistaken_for_a_table_by_where_the_folds_fall() {
         let line = ["zero", "one", "two", "three", "four", "five"];

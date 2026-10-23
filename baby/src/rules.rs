@@ -2,9 +2,9 @@
 // Copyright (C) 2026 DawsMacs
 //! Rules, not tables, and a baby that decides for itself which way of learning to trust.
 //!
-//! Two ways of answering a question that contains numbers: a network that has memorised sums, and a quantity unit that has fitted
+//! Two ways of answering a question that contains numbers: a network that has memorized sums, and a quantity unit that has fitted
 //! a rule (see `quantity.rs`). Neither is declared the winner in advance. The baby holds back a fifth of the sums it was taught,
-//! learns from the rest with each mechanism, checks both on the sums it held back, and uses whichever generalises better for
+//! learns from the rest with each mechanism, checks both on the sums it held back, and uses whichever generalizes better for
 //! questions of that kind. A tie goes to the cheaper one. The decision and the evidence are kept, so it can say why.
 
 use crate::data::{self, Dataset, Example, Family, NUM};

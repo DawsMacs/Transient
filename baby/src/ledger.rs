@@ -9,7 +9,7 @@
 //!    0.9 pJ, a 32-bit DRAM read 640 pJ. Cache prices (L1 ~5 pJ, L2 ~50 pJ per 32-bit word) are my recollection of the same
 //!    talk's SRAM numbers, not re-checked, and a modern chip is several times cheaper in absolute terms. The *ratios* (memory
 //!    costs far more than arithmetic, and farther memory costs far more than near memory) are what to trust. It is a model, not
-//!    a measurement, and is labelled as an estimate wherever it is printed.
+//!    a measurement, and is labeled as an estimate wherever it is printed.
 //! 2. **Measured** (this machine only): the CPU's own energy counter (Intel RAPL), when the OS lets us read it. It includes
 //!    everything the package does, so we subtract idle power. Unavailable unless the user grants read access.
 

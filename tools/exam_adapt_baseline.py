@@ -3,7 +3,7 @@
 # Copyright (C) 2026 DawsMacs
 """A deliberately naive system for the adaptive exam, speaking its line protocol on standard input/output, in a different language from the baby.
 
-It memorises every lesson and every answer it is told, word for word, states a fact when a question is an exact repeat of one it has seen, and refuses
+It memorizes every lesson and every answer it is told, word for word, states a fact when a question is an exact repeat of one it has seen, and refuses
 everything else. It never learns a rule, so it does not adapt: it shows how a foreign system plugs in, and it is the floor the climb across the stream
 is measured against.
 

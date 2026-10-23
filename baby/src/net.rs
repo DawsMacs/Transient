@@ -10,13 +10,13 @@
 //! Three readers (the part that decides what the baby can notice):
 //!   concat   each slot's embedding laid side by side. Order matters, and so does *position*: a word is tied to its slot.
 //!   bag      the average of the words' embeddings. Position-free, order-blind.
-//!   bigram   the bag, plus the average of hashed *pairs* of neighbouring words (the fastText recipe). Position-free but it
+//!   bigram   the bag, plus the average of hashed *pairs* of neighboring words (the fastText recipe). Position-free but it
 //!            keeps local order ("three minus two" differs from "two minus three").
 //!   letters  no word list at all. The query is turned into hashed pieces of its own spelling (whole words, 3- and 4-letter
 //!            groups, word pairs) and their embeddings are averaged. Any word, even one never seen, has a reading, and a typo
 //!            shares most of its pieces with the right spelling. The "ids" this reader takes are those hashed piece numbers.
 //!
-//! All parameters live in one flat `theta` vector (embeddings, pair embeddings, W1, b1, W2, b2), which keeps the optimiser, the
+//! All parameters live in one flat `theta` vector (embeddings, pair embeddings, W1, b1, W2, b2), which keeps the optimizer, the
 //! file format and the gradient check trivial.
 
 use crate::ledger::Ledger;
@@ -25,7 +25,7 @@ use std::ops::Range;
 
 const PAD: usize = 0;
 
-/// Dot product with eight independent running sums. A plain `for` loop that adds into one `f32` cannot be vectorised, because
+/// Dot product with eight independent running sums. A plain `for` loop that adds into one `f32` cannot be vectorized, because
 /// floating-point addition is not associative and the compiler must keep the written order; splitting the work into lanes
 /// lets it use SIMD without any unsafe code or special flags.
 #[inline]
@@ -81,11 +81,11 @@ pub struct Config {
     /// Answer words it can say.
     pub classes: usize,
     pub reader: Reader,
-    /// Hash buckets for neighbouring word pairs (bigram reader only).
+    /// Hash buckets for neighboring word pairs (bigram reader only).
     pub buckets: usize,
 }
 
-/// Which pair-embedding row a pair of neighbouring words lands in.
+/// Which pair-embedding row a pair of neighboring words lands in.
 fn bucket(a: usize, b: usize, buckets: usize) -> usize {
     let h = (a as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ (b as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F);
     ((h >> 17) % buckets as u64) as usize
@@ -495,7 +495,7 @@ mod tests {
     }
 
     #[test]
-    fn can_memorise_a_handful_of_examples() {
+    fn can_memorize_a_handful_of_examples() {
         let cfg = Config { vocab: 8, dim: 4, len: 3, hidden: 12, classes: 3, reader: Reader::Concat, buckets: 0 };
         let mut rng = Rng::new(1);
         let mut net = Net::new(cfg, &mut rng);

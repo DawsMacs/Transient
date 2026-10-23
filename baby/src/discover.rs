@@ -78,7 +78,7 @@ impl<'a> Ctx<'a> {
 }
 
 /// How well the best of the given mechanisms (1 rule, 2 selection, 3 built expression) does on facts held back from these lessons.
-fn generalises(ctx: &Ctx, groups: &[Vec<usize>], which: &[usize], all: &Weights, seed: u64, mechs: &[usize]) -> f64 {
+fn generalizes(ctx: &Ctx, groups: &[Vec<usize>], which: &[usize], all: &Weights, seed: u64, mechs: &[usize]) -> f64 {
     let idxs: Vec<usize> = which.iter().flat_map(|g| groups[*g].iter().copied()).collect();
     let mut facts = HashMap::new();
     let items = ctx.items(&idxs, 0, &mut facts);
@@ -265,7 +265,7 @@ pub fn discover(lessons: &[(String, String)], seed: u64) -> Discovered {
         };
         let all = Weights::from(&provisional);
         let numeric: Vec<usize> = (0..groups.len()).filter(|&g| ctx.numeric(&groups[g])).collect();
-        let alone: HashMap<usize, f64> = numeric.iter().map(|&g| (g, generalises(&ctx, &groups, &[g], &all, seed, &[1, 2, 3]))).collect();
+        let alone: HashMap<usize, f64> = numeric.iter().map(|&g| (g, generalizes(&ctx, &groups, &[g], &all, seed, &[1, 2, 3]))).collect();
         let mut best: Option<(usize, usize, f64)> = None;
         for (x, &a) in numeric.iter().enumerate() {
             for &b in &numeric[x + 1..] {
@@ -329,7 +329,7 @@ mod tests {
     use crate::kinds;
     use crate::rng::Rng;
 
-    fn unlabelled(seed: u64) -> (Vec<(String, String)>, Vec<usize>) {
+    fn unlabeled(seed: u64) -> (Vec<(String, String)>, Vec<usize>) {
         let w = kinds::world(seed);
         let mut order: Vec<usize> = (0..w.train.len()).collect();
         Rng::new(seed + 5).shuffle(&mut order);
@@ -338,7 +338,7 @@ mod tests {
 
     #[test]
     fn it_never_mixes_things_that_need_different_rules_and_keeps_facts_apart() {
-        let (lessons, truth) = unlabelled(1);
+        let (lessons, truth) = unlabeled(1);
         let d = discover(&lessons, 1);
         let names = kinds::UNITS;
         // Facts that cannot be worked out (capital, color, sound, opposite, code) must each stay in a group of their own kind.
