@@ -384,6 +384,8 @@ description than one with a single fixed learner.
 
 - **2026-10-23** The entry exam put to the matched transformer (`baby exam transformer`): same lessons, same judge, same meter, three seeds. The transformer fits what it was taught and then states 1,500-2,800 wrong facts and answers 43-100 % of the traps depending on whether it refuses below its own confidence; the baby states 0 and answers 0. Teaching cost is 11-24x the baby's and answering 2.2-2.7x (upper bounds on a busy machine). The adaptive tier for the transformer is the open next step.
 
+- **2026-10-23** The adaptive exam put to the matched transformer (`baby exam adapt-transformer`): told each truth as the stream goes on, the transformer does not get better (frozen 19 % right, 81 % wrong facts; fine-tuned 11-16 %, no setting tried beat frozen), while the baby holds 0 wrong facts and 64 % facts right plus 24 % right labeled guesses. The measured weak side is the baby's own: adapting costs 0.22 J per told answer against 1.6-34 mJ for fine-tuning (6.5-140x more), 174-183 J for the 787-question stream. That is the number a cheaper, more genuine Adaptive Learning has to beat.
+
 ---
 
 ## More to come

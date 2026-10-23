@@ -395,6 +395,73 @@ pub fn transformer_run(exam: &Exam, d: usize, layers: usize, epochs: usize, thre
     }
 }
 
+/// One way the transformer takes in a told answer: how many passes of fine-tuning on it, and how many random old lessons are mixed in so it does not forget.
+pub struct UpdateMode {
+    pub name: &'static str,
+    pub epochs: usize,
+    pub replay: usize,
+}
+
+pub struct TransformerAdaptRun {
+    pub mode: &'static str,
+    pub always: Replies,
+    pub cut: Replies,
+    /// joules and seconds above idle for the whole stream (asking and learning from each told answer)
+    pub stream_j: Option<f64>,
+    pub stream_s: f64,
+}
+
+/// The plain transformer on the adaptive stream: taught the lessons once, then for each mode a copy is asked the stream, told each truth, and fine-tuned on it.
+/// `told` is what the teacher says (the truth, unless the stream has a wrong-teacher tier). Spare answer slots are reserved so a new answer can be learned at all.
+pub fn transformer_adapt(a: &Adapt, modes: &[UpdateMode], d: usize, layers: usize, epochs: usize, threshold: f32, seed: u64, meter: &crate::compare::Meter) -> (usize, Option<f64>, f64, Vec<TransformerAdaptRun>) {
+    use crate::compare::{lessons, train_transformer, Lexicon};
+    let items: Vec<crate::kinds::Item> = a.lessons.iter().map(|l| crate::kinds::Item { unit: 0, fact: l.4, template: 0, query: l.1.clone(), answer: l.2.clone() }).collect();
+    let known: std::collections::HashSet<&str> = items.iter().map(|i| i.answer.as_str()).collect();
+    let fresh: std::collections::HashSet<&str> = a.stream.iter().map(|i| i.told.as_str()).filter(|t| !known.contains(t)).collect();
+    let lex0 = Lexicon::with_reserve(&items, 400, fresh.len() + 8);
+    let longest = lex0.longest;
+    let base = train_transformer(&lex0, &items, d, layers, epochs, seed, meter);
+    let pool = lessons(&lex0, &items);
+    let mut runs = Vec::new();
+    for mode in modes {
+        let mut model = base.model.clone();
+        let mut lex = lex0.clone();
+        let mut rng = crate::rng::Rng::new(seed ^ 0x7F4A);
+        let mut ledger = crate::ledger::Ledger::default();
+        let ((always, cut), secs, joules) = meter.run(|| {
+            let (mut always, mut cut): (Replies, Replies) = (Vec::new(), Vec::new());
+            let mut scratch = crate::ledger::Ledger::default();
+            for it in &a.stream {
+                let mut tokens = lex.encode(&it.question);
+                tokens.truncate(longest);
+                let (best, p) = model.ask(&tokens, &mut scratch);
+                let ans = lex.classes.get(best).cloned().unwrap_or_default();
+                always.push((it.id.clone(), "fact".to_string(), ans.clone(), p as f64));
+                cut.push(if p >= threshold { (it.id.clone(), "fact".to_string(), ans, p as f64) } else { (it.id.clone(), "refuse".to_string(), String::new(), 0.0) });
+                if mode.epochs > 0 {
+                    let told = crate::kinds::Item { unit: 0, fact: 0, template: 0, query: it.question.clone(), answer: it.told.clone() };
+                    lex.extend(std::slice::from_ref(&told));
+                    let mut toks = lex.encode(&told.query);
+                    toks.truncate(longest);
+                    let mut data = Vec::new();
+                    if let Some(c) = lex.class(&told.answer) {
+                        data.push((toks, c));
+                    }
+                    for _ in 0..mode.replay.min(pool.len()) {
+                        data.push(pool[rng.below(pool.len())].clone());
+                    }
+                    if !data.is_empty() {
+                        model.train(&data, mode.epochs, 16, 0.003, seed, &mut ledger);
+                    }
+                }
+            }
+            (always, cut)
+        });
+        runs.push(TransformerAdaptRun { mode: mode.name, always, cut, stream_j: joules, stream_s: secs });
+    }
+    (base.params, base.measured_j, base.secs, runs)
+}
+
 // ---- the adaptive tier: kinds that change regime, asked as a stream, the truth told after each answer ----
 
 pub const ADAPT_README: &str = "THE ADAPTIVE EXAM\n\n\
@@ -828,7 +895,7 @@ mod tests {
         let dir = dir.to_string_lossy().to_string();
         write(&dir, 6, 1).unwrap();
         let exam = load(&dir).unwrap();
-        let run = transformer_run(&exam, 8, 1, 4, 0.9, 1, &crate::compare::Meter::new());
+        let run = transformer_run(&exam, 8, 1, 4, 0.9, 1, &crate::compare::Meter::off());
         assert_eq!((run.always.len(), run.cut.len()), (exam.questions.len(), exam.questions.len()));
         assert!(run.always.iter().all(|p| p[1] == "fact"), "without a cut it answers everything, traps included");
         let v = judge(&exam, &run.always).unwrap();
@@ -836,6 +903,27 @@ mod tests {
         // a cut can only turn answers into refusals, never the other way
         assert!(run.cut.iter().zip(&run.always).all(|(c, a)| c[1] == "refuse" || c == a));
         assert!(run.cut.iter().any(|p| p[1] == "refuse"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn the_transformer_on_the_adaptive_stream_answers_every_question_in_every_mode() {
+        let dir = std::env::temp_dir().join(format!("adapt_tf_{}", std::process::id()));
+        let dir = dir.to_string_lossy().to_string();
+        write_adapt(&dir, 1, 1, 0.0, 0.0).unwrap();
+        let mut a = load_adapt(&dir).unwrap();
+        a.lessons.truncate(150); // (a small taught set: this tests the plumbing, not the learning)
+        let modes = [UpdateMode { name: "frozen", epochs: 0, replay: 0 }, UpdateMode { name: "new", epochs: 1, replay: 0 }, UpdateMode { name: "replay", epochs: 1, replay: 4 }];
+        let (params, _, _, runs) = transformer_adapt(&a, &modes, 8, 1, 2, 0.9, 1, &crate::compare::Meter::off());
+        assert!(params > 0 && runs.len() == 3);
+        for r in &runs {
+            assert_eq!((r.always.len(), r.cut.len()), (a.stream.len(), a.stream.len()), "{}", r.mode);
+            assert!(r.always.iter().all(|x| x.1 == "fact"));
+            assert!(r.cut.iter().zip(&r.always).all(|(c, x)| c.1 == "refuse" || c == x));
+        }
+        // told nothing, the frozen model's answers do not depend on the order of the stream's truths: same replies as a second frozen run
+        let (_, _, _, again) = transformer_adapt(&a, &modes[..1], 8, 1, 2, 0.9, 1, &crate::compare::Meter::off());
+        assert_eq!(runs[0].always, again[0].always);
         std::fs::remove_dir_all(&dir).ok();
     }
 

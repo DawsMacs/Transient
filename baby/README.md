@@ -43,6 +43,28 @@ cargo test --offline                 # 61 tests, including numerical checks of t
 ./target/release/baby energy         # what one question and one learning step cost, counted
 ```
 
+## The adaptive exam, put to the matched transformer: what it costs to learn from being told (2026-10-23)
+
+`baby exam adapt-transformer DIR [--steps N --replay N]` teaches the plain transformer the adaptive exam's lessons once (3,048 lessons), then puts a copy of it the 787-question stream three ways: **frozen** (never learns), **fine-tune on the told answer only** (3 passes, Adam, lr 0.003), and **fine-tune on the told answer plus 16 replayed old lessons**. Spare answer slots are reserved so a new answer can be learned at all. Each is scored always-answering and refusing-below-0.9, by the same stream judge as the baby, with the same meter. Clean stream, seeds 1 / 2 / 3, run serially after the baby's (`adapt-run`) in the same session.
+
+| | baby | transformer frozen | + fine-tune, told only | + fine-tune + replay 16 |
+|---|---|---|---|---|
+| facts right | 64.2 / 65.2 / 64.4 % | 19.1 / 18.8 / 19.4 % | 10.7 / 11.7 / 10.9 % | 15.9 / 14.2 / 15.6 % |
+| right *labeled guesses* | 23.8 / 23.0 / 23.6 % | (none) | (none) | (none) |
+| **wrong facts** | **0 / 0 / 0** | 80.9 / 81.2 / 80.6 % | 89.3 / 88.3 / 89.1 % | 84.1 / 85.8 / 84.4 % |
+| climb, first third -> last third | 86.7 -> 88.5, 86.3 -> 91.2, 87.5 -> 90.1 % | 18.6 -> 21.8, 22.4 -> 16.8, 18.6 -> 20.6 % | 10.3 -> 10.7, 14.1 -> 8.8, 8.4 -> 13.0 % | 14.1 -> 19.8, 16.3 -> 13.0, 16.3 -> 13.7 % |
+| initial teaching energy | 39.4 / 41.8 / 41.3 J | 84.9 / 55.6 / 97.7 J | same model | same model |
+| the stream (asking + learning) | **174 / 178 / 183 J** (221-233 mJ per question) | 0.07-0.08 J | 2.0 / 2.4 / 2.5 J (2.6-3.2 mJ per told answer) | 22.1 / 21.6 / 21.5 J (27-28 mJ per told answer) |
+
+Refusing below 0.9 does not change the picture: the frozen model still states 33-37 % wrong facts and refuses 47-52 %; the fine-tuned ones refuse 80-91 % and are still wrong in 4-12 % of all answers. Gentler settings on seed 1 (1 pass; with 16 or 64 replayed lessons) gave 16.4 % / 18.9 % / 16.4 % facts right: no setting I tried beat frozen.
+
+**What this says, and does not say.**
+- **The transformer does not adapt here.** Fine-tuning on a told answer never improved it over being frozen, and mostly hurt it (the forgetting the earlier comparison found at 20 new facts shows up again as a loss on the stream's other questions). Rule-changing kinds are exactly what a classifier over answer words cannot learn from one example at a time: it can only emit answers it has been trained on, so a number it was never taught is unreachable until told.
+- **The baby's adapting is the expensive side.** Its stream costs 174-183 J against the transformer's 0.07-27 J; per told answer that is 0.22 J against 1.6-34 mJ, **6.5x to 140x more**. Counting teaching too, the baby's whole adaptive run is 213-225 J and the frozen transformer's 56-98 J (the transformer pays almost all of that once, up front). In right answers per joule (the baby counting its right labeled guesses, which the transformer has none of) the two are in the same range, baby 3.1-3.2 against transformer 1.6-2.7, but the transformer's right answers come with 80 % wrong facts and the baby's with none. **This is the measured bar for Novice's "genuine AL": the same honesty and learning at a fraction of 0.22 J per told answer.**
+- Caveats: joules are upper bounds on a busy machine (other processes up to ~50 % of the busy time); the transformer here is one small untuned classifier (the update settings tried were few: 1 or 3 passes, 0 / 16 / 64 replayed lessons, lr fixed), a bigger or better-tuned one, or a model that can generate numbers rather than choose among taught answers, was not run; the stream is the invention battery's kinds (a third of them unexplainable or regime-changing by design), so absolute accuracies are low for everyone but the baby; only the clean stream was run (the wrong-teacher tier on the transformer is untried).
+
+**A tooling slip worth recording.** My first tests for the new commands took 13 and 36 s each: the real meter samples the machine's idle draw for several seconds before and after every run, and RAPL is readable here, so any test that passes `Meter::new()` pays that. Tests now use `Meter::off()` (suite back to ~20 s). The first version of the report also printed "J J" and rounded 0.0016 J to "0.00 J".
+
 ## The exam, put to the matched transformer: capability per joule (2026-10-23; Vision Entry 7)
 
 `baby exam transformer DIR [--d N --layers N --epochs N --threshold P]` teaches the repo's plain attention transformer (`transformer.rs`, 2 layers, d = 32, trained to fit its lessons, up to 60 epochs) the static exam's lessons and puts it the same questions, judged by the same judge and measured by the same meter as `baby exam run`. A transformer cannot say "I do not know" by itself, so one trained model is scored two ways: **always answering** (every answer a fact) and **refusing below its own probability 0.9** (a conventional cut; mine, untuned). 60 units, 2,520 lessons, 4,832 questions; seeds 1, 2, 3.

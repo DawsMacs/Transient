@@ -6,7 +6,7 @@
 //!   baby learn  "what is two multiplied by three" six --unit times    keep learning AFTER school: add a lesson, re-work how that unit is learned
 //!   baby discover [--seed N] [--out PATH]   hand it a heap of UNLABELED lessons: it finds the units itself, then is scored like the others
 //!   baby tutor [--school FILE] [--rounds N] [--limit N] [--out FILE]   the baby asks what it wants checked, you answer (Enter skips, q quits; `question => answer` teaches it something of your own)
-//!   baby exam write DIR [--units N --seed N] | score DIR PREDICTIONS.tsv | run DIR [--out FILE] | adapt-write DIR [--wrong P --repeat F] | adapt-run DIR | adapt-drive DIR COMMAND... | transformer DIR [--d N --layers N --epochs N --threshold P]   the entry exam: plain files and a line protocol any system can be taught and judged by (Novice's bar)
+//!   baby exam write DIR [--units N --seed N] | score DIR PREDICTIONS.tsv | run DIR [--out FILE] | adapt-write DIR [--wrong P --repeat F] | adapt-run DIR | adapt-drive DIR COMMAND... | adapt-transformer DIR [--steps N --replay N] | transformer DIR [--d N --layers N --epochs N --threshold P]   the entry exam: plain files and a line protocol any system can be taught and judged by (Novice's bar)
 //!   baby bridge (--svamp FILE | --pairs FILE) [--units kind|discover] [--split random|blocks] [--numbers N] [--select] [--test F] [--seed N]   REAL TEXT: what does the baby make of problems somebody else wrote?
 //!   baby compare [--seed N] [--sizes 16,32,64] [--layers N] [--epochs N] [--adapt N | --scale 20,60 | --export DIR [--units N] | --refusals 20,200 | --teacher UNITS [--rounds N --limit N]]   the controlled comparison: the baby against a matched attention transformer, in joules
 //!   baby cost                               what LEARNING costs: time and memory to teach it, a new lesson, a new kind, and to tidy up
@@ -1566,6 +1566,36 @@ fn cmd_exam(a: &Args) {
                 std::process::exit(1);
             }
         },
+        "adapt-transformer" => {
+            let adapt = exam::load_adapt(&dir).unwrap_or_else(|e| {
+                eprintln!("{e}");
+                std::process::exit(1);
+            });
+            let meter = compare::Meter::new();
+            let (steps, replay) = (a.get("steps", 3usize), a.get("replay", 16usize));
+            let modes = [
+                exam::UpdateMode { name: "frozen (never learns from being told)", epochs: 0, replay: 0 },
+                exam::UpdateMode { name: "fine-tune on the told answer only", epochs: steps, replay: 0 },
+                exam::UpdateMode { name: "fine-tune on the told answer + replayed old lessons", epochs: steps, replay },
+            ];
+            let (params, teach_j, teach_s, runs) = exam::transformer_adapt(&adapt, &modes, a.get("d", 32usize), a.get("layers", 2usize), a.get("epochs", 60usize), a.get("threshold", 0.9f32), a.get("seed", 1u64), &meter);
+            let j = |x: Option<f64>| x.map_or("n/a".to_string(), |v| if v < 1.0 { format!("{:.1} mJ", v * 1000.0) } else { format!("{v:.2} J") });
+            println!("a plain attention transformer ({params} parameters) taught {} lessons ({}, {teach_s:.1} s), then put the {}-question stream, told each truth ({steps} passes per told answer, {replay} replayed lessons in the last mode)\n", adapt.lessons.len(), j(teach_j), adapt.stream.len());
+            for r in &runs {
+                for (label, replies) in [("always answers", &r.always), ("refuses below its own probability", &r.cut)] {
+                    println!("=== {} / {label}", r.mode);
+                    let v = exam::judge_stream(&adapt, replies);
+                    exam::print_stream(&v);
+                    let right = v.all.fact_right + v.all.guess_right;
+                    println!("  right answers {right}; stated wrongly {}", v.all.fact_wrong + v.all.guess_wrong);
+                    println!();
+                }
+                println!("  >>> {}: the stream cost {} ({:.1} s), {} per told answer\n", r.mode, j(r.stream_j), r.stream_s, j(r.stream_j.map(|x| x / adapt.stream.len().max(1) as f64)));
+            }
+            if let Some(w) = meter.warning() {
+                println!("{w}");
+            }
+        }
         "run" => match exam::load(&dir) {
             Ok(e) => {
                 let seed: u64 = a.get("seed", 1);

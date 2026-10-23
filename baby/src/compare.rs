@@ -69,6 +69,11 @@ impl Meter {
         Meter { rapl: Rapl::open(), worst_other: std::cell::Cell::new(0.0), invalid: std::cell::Cell::new(0) }
     }
 
+    /// A meter that measures nothing (tests: a real one samples the idle draw for seconds before and after every run).
+    pub fn off() -> Meter {
+        Meter { rapl: None, worst_other: std::cell::Cell::new(0.0), invalid: std::cell::Cell::new(0) }
+    }
+
     pub fn available(&self) -> bool {
         self.rapl.is_some()
     }
