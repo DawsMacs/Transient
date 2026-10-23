@@ -211,6 +211,18 @@ Before: **0 %** right on the many-number questions (nothing learned, everything 
 
 **Costs, stated plainly.** Under a persistently wrong teacher the baby answers less than the build before the repair step (right 74.9 vs 79.2 % on seed 2, 82.0 vs 88.8 % on seed 3, 87.4 vs 88.0 % on seed 1) and states somewhat more repeats of wrongly-told facts (52 vs 40, 45 vs 31): it is more willing to believe a rebuilt law, and what it was wrongly told is recalled in any phrasing. I judge that the right side of the trade: no wrong facts about things it was not wrongly told. The facts the rebuilt laws used to supply beyond a vouched region are now guesses until two separating lessons arrive.
 
+**Tried to win the coverage back, and it made things worse (reverted, 2026-10-23).** Idea: a rebuilt law only retires its predecessor after two separating lessons, so have `check_myself` ask, for each such unit, the questions where the old law and the new one part ways (the nearest to the taught numbers first, then the farthest from that), so that one or two honest answers decide. Built (`separating_probes`, a test, 140 passing) and run through the same 18-job gate. **Results against the veto alone:**
+
+| | veto alone | with separating probes |
+|---|---|---|
+| persistent teacher, 200 units, seeds 1 / 2 / 3: right | 87.4 / 74.9 / 82.0 % | 88.5 / 78.5 / 86.0 % |
+| persistent teacher, 20 units, seed 2: right | 88.5 % | **97.7 %** |
+| persistent teacher, 200 units, seed 2: wrong facts (elsewhere) | 52 (**0**) | 92 (**32**) |
+| careful battery, deceptive kinds right of 480-720, budgets 4 / 1 / 2 | 684 / 331 / 478 | **678 / 288 / 442** |
+| everything else (corrections, exam, scale, invention, slips, other traps) | identical | identical |
+
+Coverage under the wrong teacher improved, but the careful battery's rule-changing kinds fell at every budget (the separating probes spend the question budget that the ordinary edge and corner checks would have used to extend where the law may speak), and **seed 2 at 200 units gained 32 wrong facts elsewhere**: a persistent teacher's wrong answer can coincide with the rebuilt law at a probed point and count as a separating lesson, retiring the old law wrongly. An honesty regression and lower deceptive coverage are not an acceptable price for better coverage under a wrong teacher, so it is reverted. **What it taught:** retirement needs lessons that cannot be a wrong teacher's coincidence, and that is not available from the lessons alone; the veto's cost is therefore best paid back some other way (an independent second source, or checks that extend coverage rather than only separate). Not tried: asking for separating lessons only when the unit is not refuted, or using a probe's answer only if it is also repeated.
+
 **Also changed.** `select`, `online` and `no-joules` are now boolean flags (they were not in the list, so `--select --seed 2` swallowed the seed; flags no longer have to come last). `invent --careful --first N` runs seeds N..N+seeds-1. `TRAP_DEBUG=1` on `compare --teacher` lists the traps that were answered.
 
 ## A hole found by asking fewer questions: a repair swapped for a coincidence (2026-10-23)
