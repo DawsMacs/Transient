@@ -1,6 +1,6 @@
 # Transient: session handover
 
-Rewritten 2026-10-22; **fully refreshed 2026-10-23 at the end of the fourth long session**, for a fresh session with Daws. **Read this first.** It is meant to be enough to continue without re-deriving anything, and it contains the failures on purpose: most of what was learned came from being wrong.
+Rewritten 2026-10-22; **fully refreshed 2026-10-23 at the end of the fourth long session; the wrong-teacher tier (item 1) was added in the fifth**, for a fresh session with Daws. **Read this first.** It is meant to be enough to continue without re-deriving anything, and it contains the failures on purpose: most of what was learned came from being wrong.
 Order of reading: this file, then `TransientVision.md` (Daws's own words: never rewrite them; the progress log near its end is a dated summary of everything; Entries 7-10 are his latest), then the section of `baby/README.md` you need
 (it is long, **newest section first**; the first few sections are the 2026-10-21/22 work). Nothing here is aspirational unless marked PLAN or OPEN.
 
@@ -8,11 +8,11 @@ Order of reading: this file, then `TransientVision.md` (Daws's own words: never 
 
 ## START HERE (state at the end of 2026-10-23)
 
-**Repo state.** `main` at the commit named by `git log -1`; **139 tests pass** (`cargo test --release --offline`, ~20 s); CI green on every commit checked; tree clean. `baby/` is pure Rust with zero dependencies; `tools/` has two naive foreign systems for the exam (Python). Nothing in `runs/` or the scratch folders matters (all regenerable); **ASDiv and SVAMP data are NOT in the repo and must not be** (ASDiv is CC BY-NC: private evaluation only).
+**Repo state.** `main` at the commit named by `git log -1`; **142 tests pass** (`cargo test --release --offline`, ~20 s); CI green on every commit checked; tree clean. `baby/` is pure Rust with zero dependencies; `tools/` has two naive foreign systems for the exam (Python). Nothing in `runs/` or the scratch folders matters (all regenerable); **ASDiv and SVAMP data are NOT in the repo and must not be** (ASDiv is CC BY-NC: private evaluation only).
 
 **What the baby is now (one paragraph).** A system taught units of lessons that chooses, per unit, how to learn it from facts it holds back (remember / rule / select / program / provisional or partial program that only guesses); states as fact only inside the range taught or checked, otherwise a labelled guess with an honest stated rate or nothing; checks itself by asking questions (and now a person can answer them: `baby tutor`); is skeptical of a source that contradicts what it is sure of; after a miss rebuilds the law (`repair_regime`) but keeps the law it replaced as a competing explanation until two later lessons separate them (`repair_veto`); on real text routes a question's kind with a learned correction layer, cuts a many-number question down to the numbers that matter (`selector`), learns from told answers where a program can place them (`learn_told`), and scales its stated confidence to what it achieved on held-back answers. Everything is judged by the entry exam (`baby exam ...`), which any successor, in any language, can be judged by.
 
-**Bars a successor (Novice) must beat** (all measured on this machine; see `baby/README.md`, "The entry exam" and following):
+**Bars a successor (Novice) must beat** (the wrong-teacher tier's numbers are in the battery table, section 3) (all measured on this machine; see `baby/README.md`, "The entry exam" and following):
 - Static exam, 60 units (2,520 lessons, 4,832 questions): taught 100 %, reworded 100 %, never-seen 94.9 % as facts + 5.1 % right guesses, beyond-range 100 % right guesses, **0 wrong facts, 0 of 140 traps answered**; teaching 0.68 J, answering 0.28 J (59 uJ per question), ~4,800 right answers per joule.
 - Adaptive exam (787 questions, rule-changing kinds, truth told after each answer): **0 wrong facts**; the rule-changing kinds climb 90.6 -> 93.8 -> 100 % right across the stream; **268 J to answer and adapt (0.34 J per told answer; it was 1.80 J)**, 2.2 right answers per joule. A naive Python memoriser scores 0 right at 0.08 J.
 - Real text (private data), labelled guesses, never stated as fact: SVAMP two-number problems ~56 % right (35-73 % across six splits; fragile), ASDiv 58-60 %, routing 70-76 %; problems with more numbers than the rules use 27-38 % (SVAMP). Wording (addition vs subtraction told by "how many more" vs "in all") is the ceiling, not a shortage of lessons.
@@ -20,7 +20,7 @@ Order of reading: this file, then `TransientVision.md` (Daws's own words: never 
 **What Daws said about direction (Vision Entry 10).** AL must become *genuine* (real invention, dynamic architecture, internal rearrangement, efficiency changes, real-time adaptation), not a trick; the successor is to be called **Novice** and every new version is rebuilt from scratch with the old one as reference only. My honest reading: baby is approaching a ceiling I can name (hand-built mechanisms and thresholds; the wording ceiling on real text; adapting still ~5,800x the cost of answering). Say so when a measurement shows it, and propose what Novice should be rebuilt around.
 
 **Open problems, in the order I would take them** (Daws usually says "go ahead with your plan"; default to doing):
-1. **A wrong-teacher tier in the adaptive exam** (stream truths sometimes wrong, consistently; the judge separates wrong facts that *repeat a wrongly-told fact* from wrong facts about things never wrongly told: the second kind must be 0). Today's two worst holes were exactly this class and were only found by hand-varying the gate.
+1. ~~A wrong-teacher tier in the adaptive exam~~ **DONE 2026-10-23** (`baby exam adapt-write DIR --wrong P --repeat F`; the judge splits wrong facts into *repeats* of a wrongly-told fact and *elsewhere*, which must be 0). Its first run found a hole at once (a wrong lesson that a coincidence law agrees with replaced a correct tens-digit law and 19 was stated as 9; elsewhere 0/1/1 and 0/1/0 on seeds 1-3 at 10 %/20 %); fixed by `rebuild_policy` (see `baby/README.md`, first section; failure item 28). Now elsewhere 0 on all six runs, clean stream unchanged. **Run both tiers after any change to repair, refit or reach**: `adapt-write DIR --seed S --wrong 0.1 --repeat 0.3` (and 0.2) for S = 1, 2, 3 (~10-20 min in parallel). Next here: the 14-39 *repeats* (the baby still believes a teacher who repeats a wrong answer; the floor is 32-59), and a rate/teacher sweep beyond 10/20 %.
 2. **The baby's energy against the earlier transformer comparison, on the exam** (capability per joule, Entry 7), and the exam on a harder tier.
 3. **Let the baby choose its own next question** and ask about facts and phrasings, not only numeric units. Measured first: the current chooser is already efficient (2 questions per unit reach 99.6 % of the rule-changing kinds' coverage with 25 % fewer questions than 4), so the win is likely small; do the measurement again before building.
 4. **Win back the coverage the veto costs** under a persistent teacher (right 74.9 / 82.0 % vs 79.2 / 88.8 % before the repair step on seeds 2 / 3). One attempt (ask where the rebuilt and replaced laws part ways) was WORSE and brought back 32 wrong facts: see section 10 item 23. Untried: a second independent source; asking only repeated answers.
@@ -56,7 +56,7 @@ Order of reading: this file, then `TransientVision.md` (Daws's own words: never 
 
 ## 2. Where the work stands (2026-10-23)
 
-Everything is in `~/Transient/baby/` (pure Rust, **zero dependencies**, builds offline, **139 tests pass**, ~13k lines) plus `tools/pytorch_baseline.py` (not under cargo). Git repo, `origin` = `git@github.com:DawsMacs/Transient.git` (**public**, Daws's global account `DawsMacs`, SSH), branch `main`, **CI green** (`.github/workflows/ci.yml`: build, tests, and the scorecard's WRONG column must be 0.0 %). Licence `AGPL-3.0-only` (SPDX headers, `REUSE.toml`, `LICENSE`, `LICENSES/`), DCO not CLA (`CONTRIBUTING.md`).
+Everything is in `~/Transient/baby/` (pure Rust, **zero dependencies**, builds offline, **142 tests pass**, ~13k lines) plus `tools/pytorch_baseline.py` (not under cargo). Git repo, `origin` = `git@github.com:DawsMacs/Transient.git` (**public**, Daws's global account `DawsMacs`, SSH), branch `main`, **CI green** (`.github/workflows/ci.yml`: build, tests, and the scorecard's WRONG column must be 0.0 %). Licence `AGPL-3.0-only` (SPDX headers, `REUSE.toml`, `LICENSE`, `LICENSES/`), DCO not CLA (`CONTRIBUTING.md`).
 All work is committed and pushed (`git log --oneline -5` shows the last commits).
 
 **The baby** (`baby school` / `baby ask` / `baby learn`) is one system:
@@ -93,7 +93,7 @@ Older headline numbers still hold (tidy 13-unit curriculum `kinds.rs`): scorecar
 
 ```
 cd ~/Transient
-cargo test --release --offline          # 139 passed (about 20 s)
+cargo test --release --offline          # 142 passed (about 20 s)
 cargo build --release --offline
 ./target/release/baby school            # teaches 13 units (~0.3 s); the honest scorecard: WRONG must be 0.0 % on every row
 ./target/release/baby ask "how far apart are two and nine"      # seven, with how it knew
@@ -116,6 +116,7 @@ cargo build --release --offline
 | `baby compare --seed S --teacher N --rounds 4 --limit 4` for N = 20, 200, 1000 | 20/200 units: 100 % / 100 %, 0 wrong, 0 traps answered; 1,000 units: 98.4 % / 100 %, 0 of 984 traps; with `--wrong 0.05` etc. see `baby/README.md` |
 
 | `baby exam run DIR` (after `exam write DIR --units 60`) and `baby exam adapt-run DIR` (after `adapt-write`), seeds 1-3 | 0 wrong facts, 0 traps; the numbers in START HERE; `EXAM_NO_JOULES=1` skips the meter |
+| `baby exam adapt-write DIR --seed S --wrong 0.1 --repeat 0.3` (and `--wrong 0.2`), then `adapt-run DIR --seed S`, S = 1, 2, 3 | wrong facts *elsewhere* **0** (repeats 14 / 14 / 10 at 10 %, 39 / 25 / 28 at 20 %; facts right 61.4 / 64.9 / 63.0 % and 51.4 / 56.6 / 52.2 %); the naive Python floor has 32 / 59 repeats on seed 1 |
 
 If `wrong` is ever above 0.0 % on the scorecard (outside the deceptive kinds, which are answered permissively by design), or a refusal battery in the tests starts answering, **stop**: a regression in honesty is the failure that matters most here.
 `runs/` is gitignored and regenerable.
@@ -241,6 +242,8 @@ Docs: `README.md` (public technical overview), `docs/Direction.md` (strategy, ha
 25. **Cost, found by timing stages, not guessing:** the program search was 1 s of a 111 s real-text build; the rule's dense ridge solve (cubic in vocabulary) was >90 %; an allocation-removal pass on the search changed nothing. Adapting: the first guess (a full re-decision per told answer) was right for settled units; memorise-only units were the other 60 %.
 26. **A belief I wrote into this handover and had to retract:** "bag of words tops out near 60 % on SVAMP" was a fact about my counting classifier; a perceptron on the same words gets 78 %. Also retracted: the program search as the remaining cost; the guess bar and the work budget as causes of SVAMP's fragility (identical to the decimal); a miscount that made me "correct" a right claim about repeats in the unexplainable kinds.
 27. **Small traps:** the CLI's boolean flags must be listed in `FLAGS` in `main.rs` or they swallow the next token (`--select --seed 2` ran seed 1 three times: identical outputs are a clue; fixed for `select`, `online`, `no-joules`); a doc script followed by a commit commits even if the script died (twice); the safety check refuses `rm -f dir/*` after a `cd` (do not need it: use a fresh directory); a monitor can report "done" because an unrelated file matched.
+
+28. **The wrong-teacher tier's first run, 2026-10-23:** elsewhere 0/1/1 and 0/1/0 (seeds 1-3, 10 %/20 %) where the clean stream was perfect. A one-unit trace (`STREAM_UNIT=<unit> baby exam adapt-run ...`) showed a correct `first div 10` replaced, right after one wrongly told `28 -> 8`, by a coincidence law that agrees with that wrong answer (a rival that is the tens digit until the digits sum past nine) and then stated 19 as 9. *A wrong answer can pose as support for a rival law; any fresh exact fit that explains a contradicting lesson is a rebuild, not an upgrade.* Fix: `rebuild_policy` in `relearn_unit` and `refit_in_place`. Mistakes on the way: (a) refusing the rebuild outright broke a test where the contradiction is the truth (the data cannot tell the cases apart: adopt as a repair, keep the rival, state only where both agree); (b) a program adopted this way must not stay sticky when the library grows (`rebuilt` flag, re-examined in `reconsider`); (c) my first regression test passed with and without the fix (checked by disabling it): *always disable the fix to see the test fail*; (d) a one-unit replay cannot reproduce a unit whose law needs pieces other units put in the library. Which of the two functions swapped it in the exam run is not established.
 
 ## 11. How to work on this (earned the hard way)
 

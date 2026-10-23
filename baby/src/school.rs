@@ -92,6 +92,14 @@ impl SchoolUnit {
             _ => None,
         }
     }
+
+    /// (lessons the program was repaired around, the way of learning it replaced): for tracing
+    pub fn repair_info(&self) -> (usize, Option<String>) {
+        match &self.state {
+            Fitted::Program(Some(p)) => (p.repaired.len(), p.before.clone()),
+            _ => (0, None),
+        }
+    }
 }
 
 /// How telling each word's *shape* is for each unit. A question's score for a unit is the sum, over its words, of
@@ -376,6 +384,13 @@ pub fn print_prof() {
 const ROUTE_FOLDS: usize = 5;
 /// A repaired program overrules the law it replaced once this many lessons told after the repair have separated the two.
 const RETIRE_AFTER: usize = 2;
+
+/// What to do when a fresh fit offers a different exact program for a unit that already has an established one (`School::rebuild_policy`).
+enum Rebuild {
+    Ordinary,
+    /// adopt the fresh program as a repair around these lessons (their queries)
+    Adopt(Vec<String>),
+}
 /// A settled exact unit takes in this many told lessons between thinking its way of learning through again from scratch.
 const SETTLED_RETHINK_EVERY: usize = 25;
 /// How many lessons a unit that only guesses takes in between looking again at its program.
@@ -1508,31 +1523,11 @@ impl School {
             self.repair_failed.push((name, told));
             return false;
         };
-        // A repair extends a law beyond where it was contradicted; it must not rewrite it where it was working. A program that fits wrongly-told lessons
-        // by a coincidence (a selection repaired into `min(second, first + second div 6)`) disagrees with the old rule INSIDE the range the other lessons
-        // cover, and would state those answers as fact. So it must agree with the old rule at every point of that range it can be asked about.
-        let others: Vec<usize> = (0..unit.lessons.len()).filter(|i| !contradicting.contains(i)).collect();
-        let hull = unit.remember.operand_hull(&others, &|w: &str| self.line.value(w), &contradicting);
-        if let (Some(template), true) = (others.first().map(|&i| unit.lessons[i].query.clone()), !hull.is_empty()) {
-            let (a_hi, b_hi) = (hull[0].1.min(30.0) as i32, hull.get(1).map_or(0.0, |h| h.1.min(30.0)) as i32);
-            let (a_lo, b_lo) = (hull[0].0.max(0.0) as i32, hull.get(1).map_or(0.0, |h| h.0.max(0.0)) as i32);
-            for a in a_lo..=a_hi {
-                for b in b_lo..=b_hi {
-                    // (only where the other lessons vouch for the old rule: the staircase under them, not the whole box)
-                    let point: Vec<f32> = if hull.len() > 1 { vec![a as f32, b as f32] } else { vec![a as f32] };
-                    if unit.remember.uncovered_by(&[], &|w: &str| self.line.value(w), &contradicting, &point).is_some() {
-                        continue;
-                    }
-                    let Some(q) = self.numeric_question(&template, a as f32, b as f32) else { continue };
-                    let Some(old) = predict(&unit.state, &q, &self.weights).and_then(|o| self.line.value(&o)) else { continue };
-                    let new = rule.expr.eval(a as f32, b as f32);
-                    if !new.is_finite() || (new - old).abs() > 0.01 {
-                        self.repair_failed.retain(|(n, _)| *n != name);
-                        self.repair_failed.push((name, told));
-                        return false;
-                    }
-                }
-            }
+        // (a repair extends a law beyond where it was contradicted; it must not rewrite it where it was working: see `rebuilt_agrees_with_old`)
+        if !self.rebuilt_agrees_with_old(u, &rule, &contradicting) {
+            self.repair_failed.retain(|(n, _)| *n != name);
+            self.repair_failed.push((name, told));
+            return false;
         }
         let mut repaired = match &unit.state {
             Fitted::Program(Some(p)) => p.repaired.clone(),
@@ -1559,6 +1554,72 @@ impl School {
         unit.evidence[slot] = unit.evidence[slot].max(before);
         self.settle_reach(u);
         true
+    }
+
+    /// A rebuilt law must agree with the one it replaces at every point the OTHER lessons (all but `contradicting`) vouch for. A program that fits wrongly-told
+    /// lessons by a coincidence (a selection repaired into `min(second, first + second div 6)`; a tens digit rebuilt as `b apart ((a + b) mod 10)`, which is the
+    /// tens digit until the digits sum past nine) disagrees with the old rule INSIDE the range the other lessons cover, and would state those answers as fact.
+    /// (Only where the other lessons vouch for the old rule: the staircase under them, not the whole box.)
+    fn rebuilt_agrees_with_old(&self, u: usize, rule: &ProgramRule, contradicting: &[usize]) -> bool {
+        let unit = &self.units[u];
+        let others: Vec<usize> = (0..unit.lessons.len()).filter(|i| !contradicting.contains(i)).collect();
+        let hull = unit.remember.operand_hull(&others, &|w: &str| self.line.value(w), contradicting);
+        if let (Some(template), true) = (others.first().map(|&i| unit.lessons[i].query.clone()), !hull.is_empty()) {
+            let (a_hi, b_hi) = (hull[0].1.min(30.0) as i32, hull.get(1).map_or(0.0, |h| h.1.min(30.0)) as i32);
+            let (a_lo, b_lo) = (hull[0].0.max(0.0) as i32, hull.get(1).map_or(0.0, |h| h.0.max(0.0)) as i32);
+            for a in a_lo..=a_hi {
+                for b in b_lo..=b_hi {
+                    let point: Vec<f32> = if hull.len() > 1 { vec![a as f32, b as f32] } else { vec![a as f32] };
+                    if unit.remember.uncovered_by(&[], &|w: &str| self.line.value(w), contradicting, &point).is_some() {
+                        continue;
+                    }
+                    let Some(q) = self.numeric_question(&template, a as f32, b as f32) else { continue };
+                    let Some(old) = predict(&unit.state, &q, &self.weights).and_then(|o| self.line.value(&o)) else { continue };
+                    let new = rule.expr.eval(a as f32, b as f32);
+                    if !new.is_finite() || (new - old).abs() > 0.01 {
+                        return false;
+                    }
+                }
+            }
+        }
+        true
+    }
+
+    /// An established exact program meets a fresh exact fit that also explains the few lessons it contradicts (one to three: a wrong answer from a teacher,
+    /// or the truth at a point the old law had guessed). Nothing in the lessons says which; the fresh fit is adopted only as a REPAIR: the contradicting
+    /// lessons are marked unproven so they do not vouch for their neighbours, and the law it replaced stays a competing explanation (`repair_veto`), so where
+    /// the two part ways it is a guess until later lessons separate them. (Refusing the rebuild outright was tried: it breaks the case where the contradiction
+    /// is the truth, and the data cannot tell the two cases apart.)
+    /// Found by the adaptive exam's wrong-teacher tier: one wrongly told 28 -> 8 swapped the tens digit for a coincidence that stated 19 -> 9 as fact.
+    fn rebuild_policy(&self, u: usize, fresh: &Fitted) -> Rebuild {
+        let unit = &self.units[u];
+        let (Fitted::Program(Some(old)), Fitted::Program(Some(new))) = (&unit.state, fresh) else { return Rebuild::Ordinary };
+        if unit.chosen != Mech::Program || old.partial.is_some() || new.partial.is_some() || !old.alts.is_empty() || !old.repaired.is_empty() || unit.facts() < 12 || unit.best_evidence() < mechanisms::reliable() {
+            return Rebuild::Ordinary;
+        }
+        if old.expr.show() == new.expr.show() {
+            return Rebuild::Ordinary;
+        }
+        let contradicting: Vec<usize> = (0..unit.lessons.len()).filter(|&i| predict(&unit.state, &unit.lessons[i].query, &self.weights).as_deref() != Some(unit.lessons[i].answer.as_str())).collect();
+        if contradicting.is_empty() || contradicting.len() > 3 {
+            return Rebuild::Ordinary;
+        }
+        Rebuild::Adopt(contradicting.iter().filter(|&&i| predict(&unit.state, &unit.lessons[i].query, &self.weights).is_some()).map(|&i| unit.lessons[i].query.clone()).collect())
+    }
+
+    fn apply_rebuild_policy(&self, u: usize, keep_old: bool, mut fresh: Fitted) -> (bool, Fitted) {
+        match (keep_old, self.rebuild_policy(u, &fresh)) {
+            (true, _) => (true, fresh),
+            (false, Rebuild::Adopt(repaired)) => {
+                if let Fitted::Program(Some(p)) = &mut fresh {
+                    p.repaired = repaired;
+                    p.before = Some(self.units[u].chosen.name().to_string());
+                    p.rebuilt = true;
+                }
+                (false, fresh)
+            }
+            (false, Rebuild::Ordinary) => (false, fresh),
+        }
     }
 
     /// Work out again how to learn a unit, from every lesson it now has.
@@ -1589,6 +1650,7 @@ impl School {
                 _ => false,
             }
         };
+        let (keep_old, state) = self.apply_rebuild_policy(u, keep_old, state);
         if keep_old {
             self.units[u].remember = Remembered::from_items(&items);
             self.settle_reach(u);
@@ -1645,6 +1707,7 @@ impl School {
                 _ => false,
             }
         };
+        let (keep_old, state) = self.apply_rebuild_policy(u, keep_old, state);
         let unit = &mut self.units[u];
         unit.remember = Remembered::from_items(&items);
         if !keep_old {
@@ -1732,6 +1795,15 @@ impl School {
                 // (one search that ends as soon as it has found its fits, far cheaper than fitting the unit again)
                 let settled_program = matches!(&self.units[u].state, Fitted::Program(Some(p)) if p.alts.is_empty() && p.partial.is_none());
                 if open && numeric && (!settled_program || ProgramRule::ambiguity(&self.units[u].lessons, &self.weights.lib).is_some()) {
+                    // a program that was only ever a rebuild around a few contradicting lessons is not sticky when the vocabulary has grown and
+                    // something else fits as well (it was never built from numbers a contradiction named)
+                    if let Fitted::Program(Some(p)) = &mut self.units[u].state {
+                        if p.rebuilt {
+                            p.rebuilt = false;
+                            p.repaired = Vec::new();
+                            p.before = None;
+                        }
+                    }
                     self.relearn_unit(u);
                 }
             }
@@ -3182,6 +3254,39 @@ mod tests {
         assert_eq!(s.ask("what is zork 29").answer.as_deref(), Some("11"));
         assert_eq!(s.ask("what is zork 19").answer.as_deref(), Some("10"));
         assert!(s.wonder().is_empty());
+    }
+
+    #[test]
+    fn a_fresh_fit_that_explains_a_wrongly_told_lesson_is_a_repair_with_the_old_law_kept_as_a_rival() {
+        // The tens digit (settled), then 28 -> 8 told wrongly (true: 2). `b apart ((a + b) mod 10)` also says 8 there and is the tens digit until the digits sum past
+        // nine, so a fresh exact fit offers it. It used to replace the settled law outright and 19 was stated as 9 (found by the adaptive exam's wrong-teacher tier).
+        // The fresh fit is now adopted only as a repair: the wrong lesson does not vouch for its neighbours, and where the old law disagrees it is a guess.
+        let mut s = numbers_school(|a| a / 10, 14);
+        s.set_careful(true);
+        s.weights.lib.learn_constant(3);
+        assert_eq!(s.units[0].program().as_deref(), Some("(first div 10)"));
+        // (the lessons go straight in: this small fixture's own re-decision would fall back to plain memory)
+        for (i, (q, a)) in [("what is zork 24", "2"), ("what is zork 28", "8")].into_iter().enumerate() {
+            s.units[0].lessons.push(Item { unit: 0, fact: 100 + i, template: 0, query: q.to_string(), answer: a.to_string() });
+        }
+        // the fresh fit the re-decision would find (this fixture's own search finds the true law, so the coincidence is offered by hand)
+        let coincidence = crate::program::Expr::from_text("(apart (mod A K10) (mod (add (div A K10) (mod A K10)) K10))");
+        let Some(expr) = coincidence else { panic!("the expression syntax changed: update this test") };
+        let fresh = Fitted::Program(Some(crate::program::ProgramRule::rebuild(expr, 1, Vec::new())));
+        let (keep, state) = s.apply_rebuild_policy(0, false, fresh);
+        assert!(!keep);
+        match &state {
+            Fitted::Program(Some(p)) => {
+                assert!(p.rebuilt && p.before.as_deref() == Some("program"), "adopted as a repair");
+                assert_eq!(p.repaired, vec!["what is zork 28".to_string()], "the wrong lesson is marked unproven");
+            }
+            _ => panic!("expected a program"),
+        }
+        // an old law that explains everything (nothing contradicted) is left to the ordinary decision
+        let again = crate::program::Expr::from_text("(div A K10)").unwrap();
+        let fresh2 = Fitted::Program(Some(crate::program::ProgramRule::rebuild(again, 1, Vec::new())));
+        let (_, plain) = s.apply_rebuild_policy(0, false, fresh2);
+        assert!(matches!(&plain, Fitted::Program(Some(p)) if !p.rebuilt && p.repaired.is_empty()));
     }
 
     #[test]

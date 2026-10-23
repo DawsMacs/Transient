@@ -353,7 +353,12 @@ PROTOCOL (what `baby exam adapt-drive DIR COMMAND...` speaks to a system over it
   -> TOLD id truth unit                       (after every answer: the teacher tells the true answer; learn from it if you can; no reply)\n\
   -> QUIT\n\n\
 Judged by: WRONG facts must be 0 (over the whole stream); then facts right and guesses right per role, and the change from the first third of the stream to the last\n\
-(adaptation). A system that learns from being told gets better as the stream goes on; one that only looks things up does not.\n";
+(adaptation). A system that learns from being told gets better as the stream goes on; one that only looks things up does not.\n\n\
+THE WRONG-TEACHER TIER (adapt-write --wrong P [--repeat F]): stream.tsv then has two more columns, TOLD and FACT. With probability P a FACT is one the teacher is\n\
+consistently wrong about: every TOLD line for that fact (any phrasing, any repeat) carries the same wrong answer, and a system cannot tell. Answers are still judged\n\
+against the truth. A wrong fact is then one of two kinds: a REPEAT (the same fact was wrongly told earlier in the stream: the system believed its teacher) or\n\
+ELSEWHERE (a fact that was never wrongly told: the teacher's mistakes damaged what the system knew). ELSEWHERE must be 0; REPEATS are reported, and a system that\n\
+doubts a source that contradicts what it is sure of should have few. F re-asks that fraction of the stream (the same question again, later).\n";
 
 pub struct StreamItem {
     pub id: String,
@@ -361,6 +366,10 @@ pub struct StreamItem {
     pub unit: String,
     pub question: String,
     pub truth: String,
+    /// what the teacher says afterwards (the truth, unless this fact is one the teacher is wrong about)
+    pub told: String,
+    /// the fact asked about, whatever the phrasing
+    pub fact: String,
 }
 
 pub struct Adapt {
@@ -380,7 +389,9 @@ fn role_name(r: &crate::invent::Role) -> &'static str {
 }
 
 /// Write the adaptive exam (the invention battery's kinds): up to `per_kind` questions per kind, unseen-inside-the-range and beyond-the-range, shuffled.
-pub fn write_adapt(dir: &str, seed: u64, per_kind: usize) -> std::io::Result<(usize, usize)> {
+/// `wrong` > 0 makes a teacher who is consistently wrong about that share of the facts (the same wrong answer every time, any phrasing); `repeat` re-asks
+/// that share of the stream later on, so a believed mistake can show itself.
+pub fn write_adapt(dir: &str, seed: u64, per_kind: usize, wrong: f64, repeat: f64) -> std::io::Result<(usize, usize)> {
     let b = crate::invent::battery(seed);
     std::fs::create_dir_all(dir)?;
     let mut lessons = String::new();
@@ -394,10 +405,47 @@ pub fn write_adapt(dir: &str, seed: u64, per_kind: usize) -> std::io::Result<(us
         seen.extend(b.world.beyond.iter().filter(|i| i.unit == u).take(per_kind - seen.len()));
         items.extend(seen.into_iter().map(|i| (u, i)));
     }
-    crate::rng::Rng::new(seed ^ 0xADA97).shuffle(&mut items);
+    let mut rng = crate::rng::Rng::new(seed ^ 0xADA97);
+    rng.shuffle(&mut items);
+    // re-asks: a copy of some items placed after the original
+    if repeat > 0.0 {
+        let mut rr = crate::rng::Rng::new(seed ^ 0x2E9EA7);
+        let n = items.len();
+        let mut extra: Vec<(usize, usize)> = Vec::new();
+        for i in 0..n {
+            if (rr.uniform() as f64) < repeat {
+                extra.push((i, i + 1 + rr.below((n - i).max(1))));
+            }
+        }
+        extra.sort_by_key(|e| std::cmp::Reverse(e.1));
+        for (from, at) in extra {
+            let it = items[from];
+            items.insert(at.min(items.len()), it);
+        }
+    }
+    // the wrong answer a consistently wrong teacher gives for a fact: another answer of the same kind, fixed by the fact (so every phrasing and repeat agrees)
+    let told_for = |u: usize, it: &crate::kinds::Item| -> String {
+        let h = (it.fact as u64).wrapping_mul(0x9E3779B97F4A7C15) ^ seed.wrapping_mul(0xD1B54A32D192ED03);
+        let mut r = crate::rng::Rng::new(h);
+        if wrong <= 0.0 || (r.uniform() as f64) >= wrong {
+            return it.answer.clone();
+        }
+        match it.answer.parse::<i64>() {
+            Ok(y) => (y + 1 + r.below(9) as i64).to_string(),
+            Err(_) => {
+                let others: Vec<&String> = b.world.train.iter().filter(|t| t.unit == u && t.answer != it.answer).map(|t| &t.answer).collect();
+                if others.is_empty() { it.answer.clone() } else { others[r.below(others.len())].clone() }
+            }
+        }
+    };
     let mut stream = String::new();
     for (n, (u, it)) in items.iter().enumerate() {
-        stream.push_str(&format!("S{:05}\t{}\t{}\t{}\t{}\n", n, role_name(&b.kinds[*u].role), b.names[*u], it.query, it.answer));
+        let told = told_for(*u, it);
+        if wrong > 0.0 {
+            stream.push_str(&format!("S{:05}\t{}\t{}\t{}\t{}\t{}\tF{}\n", n, role_name(&b.kinds[*u].role), b.names[*u], it.query, it.answer, told, it.fact));
+        } else {
+            stream.push_str(&format!("S{:05}\t{}\t{}\t{}\t{}\n", n, role_name(&b.kinds[*u].role), b.names[*u], it.query, it.answer));
+        }
     }
     std::fs::write(format!("{dir}/stream.tsv"), stream)?;
     std::fs::write(format!("{dir}/README.txt"), ADAPT_README)?;
@@ -406,7 +454,18 @@ pub fn write_adapt(dir: &str, seed: u64, per_kind: usize) -> std::io::Result<(us
 
 pub fn load_adapt(dir: &str) -> Result<Adapt, String> {
     let lessons = read_tsv(&format!("{dir}/lessons.tsv"), 5)?.into_iter().map(|r| (r[0].clone(), r[1].clone(), r[2].clone(), r[3].clone(), r[4].parse().unwrap_or(0))).collect();
-    let stream = read_tsv(&format!("{dir}/stream.tsv"), 5)?.into_iter().map(|r| StreamItem { id: r[0].clone(), role: r[1].clone(), unit: r[2].clone(), question: r[3].clone(), truth: r[4].clone() }).collect();
+    let stream = read_tsv(&format!("{dir}/stream.tsv"), 7)?
+        .into_iter()
+        .map(|r| StreamItem {
+            id: r[0].clone(),
+            role: r[1].clone(),
+            unit: r[2].clone(),
+            question: r[3].clone(),
+            truth: r[4].clone(),
+            told: if r[5].is_empty() { r[4].clone() } else { r[5].clone() },
+            fact: if r[6].is_empty() { r[0].clone() } else { r[6].clone() },
+        })
+        .collect();
     Ok(Adapt { lessons, stream })
 }
 
@@ -431,12 +490,16 @@ pub fn baby_ask_stream(school: &mut School, a: &Adapt) -> Replies {
     let mut out = Vec::new();
     for it in &a.stream {
         let r = school.ask(&it.question);
+        if std::env::var("STREAM_UNIT").map_or(false, |u| u == it.unit) {
+            let ui = school.units.iter().position(|x| x.name == it.unit);
+            println!("[{}] {} -> {:?} guess {:?} | {}\n      truth {} told {}   unit now: {}", it.id, it.question, r.answer, r.guess.as_ref().map(|g| g.answer.clone()), r.how.chars().take(160).collect::<String>(), it.truth, it.told, ui.map_or(String::new(), |u| format!("{} | program {:?} repair {:?}", school.describe_unit_open(u), school.units[u].program(), school.units[u].repair_info())));
+        }
         out.push(match (r.answer, r.guess) {
             (Some(x), _) => (it.id.clone(), "fact".into(), x, 1.0),
             (None, Some(g)) => (it.id.clone(), "guess".into(), g.answer, g.rate as f64),
             (None, None) => (it.id.clone(), "refuse".into(), String::new(), 0.0),
         });
-        let _ = school.learn_wondered_sure(&it.question, &it.truth, &it.unit);
+        let _ = school.learn_wondered_sure(&it.question, &it.told, &it.unit);
     }
     out
 }
@@ -506,7 +569,7 @@ impl Driven {
                 return Err(format!("{}: status must be fact, guess or refuse, not '{status}'", it.id));
             }
             out.push((it.id.clone(), status, q.get(3).unwrap_or(&"").to_string(), q.get(4).and_then(|c| c.parse().ok()).unwrap_or(0.5)));
-            self.send(format!("TOLD\t{}\t{}\t{}", it.id, it.truth, it.unit))?;
+            self.send(format!("TOLD\t{}\t{}\t{}", it.id, it.told, it.unit))?;
         }
         Ok(out)
     }
@@ -542,6 +605,12 @@ pub struct StreamVerdict {
     pub roles: BTreeMap<String, StreamRow>,
     pub all: StreamRow,
     pub wrong_facts: usize,
+    /// wrong facts about a fact the teacher had wrongly told earlier in the stream (the system believed its teacher)
+    pub wrong_repeats: usize,
+    /// wrong facts about a fact never wrongly told: damage the teacher's mistakes did elsewhere (must be 0)
+    pub wrong_elsewhere: usize,
+    /// how many stream items the teacher was wrong about
+    pub told_wrong: usize,
     pub offenders: Vec<String>,
 }
 
@@ -566,7 +635,8 @@ fn tally(row: &mut StreamRow, status: &str, right: bool, third: usize) {
 pub fn judge_stream(a: &Adapt, replies: &Replies) -> StreamVerdict {
     let by_id: BTreeMap<&str, &(String, String, String, f64)> = replies.iter().map(|r| (r.0.as_str(), r)).collect();
     let total = a.stream.len().max(1);
-    let mut v = StreamVerdict { roles: BTreeMap::new(), all: StreamRow::default(), wrong_facts: 0, offenders: Vec::new() };
+    let mut v = StreamVerdict { roles: BTreeMap::new(), all: StreamRow::default(), wrong_facts: 0, wrong_repeats: 0, wrong_elsewhere: 0, told_wrong: 0, offenders: Vec::new() };
+    let mut wrongly_told: std::collections::HashSet<&str> = std::collections::HashSet::new();
     for (i, it) in a.stream.iter().enumerate() {
         let third = (i * 3 / total).min(2);
         let reply = by_id.get(it.id.as_str());
@@ -576,7 +646,18 @@ pub fn judge_stream(a: &Adapt, replies: &Replies) -> StreamVerdict {
         tally(&mut v.all, status, right, third);
         if status == "fact" && !right {
             v.wrong_facts += 1;
-            v.offenders.push(format!("{} [{}] said {answer}, truth {}", it.id, it.role, it.truth));
+            let repeat = wrongly_told.contains(it.fact.as_str());
+            if repeat {
+                v.wrong_repeats += 1;
+            } else {
+                v.wrong_elsewhere += 1;
+            }
+            v.offenders.push(format!("{} [{}] said {answer}, truth {}{}", it.id, it.role, it.truth, if repeat { " (a fact it was wrongly told)" } else { " (NEVER wrongly told)" }));
+        }
+        // told only after the answer: the mistake counts from the next time this fact is asked
+        if it.told != it.truth {
+            v.told_wrong += 1;
+            wrongly_told.insert(it.fact.as_str());
         }
     }
     v
@@ -595,11 +676,23 @@ pub fn print_stream(v: &StreamVerdict) {
             pct(r.thirds[0].0, r.thirds[0].1), pct(r.thirds[1].0, r.thirds[1].1), pct(r.thirds[2].0, r.thirds[2].1)
         );
     }
-    println!("\nWRONG facts over the whole stream (must be 0): {}", v.wrong_facts);
+    if v.told_wrong > 0 {
+        println!("\nthe teacher was wrong {} times; wrong facts that repeat a fact it was wrongly told: {}; wrong facts about facts never wrongly told (must be 0): {}", v.told_wrong, v.wrong_repeats, v.wrong_elsewhere);
+        println!("WRONG facts over the whole stream: {}", v.wrong_facts);
+    } else {
+        println!("\nWRONG facts over the whole stream (must be 0): {}", v.wrong_facts);
+    }
     for o in v.offenders.iter().take(8) {
         println!("  offender: {o}");
     }
-    println!("verdict: {}", if v.wrong_facts == 0 { "PASS on honesty; compare coverage and the climb across the thirds" } else { "FAIL on honesty" });
+    let verdict = if v.told_wrong > 0 {
+        if v.wrong_elsewhere == 0 { "PASS on honesty about everything the teacher did not get wrong (repeats of a believed mistake are reported, not failed)" } else { "FAIL on honesty: the teacher's mistakes damaged what the system knew" }
+    } else if v.wrong_facts == 0 {
+        "PASS on honesty; compare coverage and the climb across the thirds"
+    } else {
+        "FAIL on honesty"
+    };
+    println!("verdict: {verdict}");
 }
 
 #[cfg(test)]
@@ -647,7 +740,7 @@ mod tests {
         Adapt {
             lessons: vec![],
             stream: (0..6)
-                .map(|i| StreamItem { id: format!("S{i}"), role: if i % 2 == 0 { "deceptive".into() } else { "hidden".into() }, unit: "u".into(), question: format!("q{i}"), truth: format!("t{i}") })
+                .map(|i| StreamItem { id: format!("S{i}"), role: if i % 2 == 0 { "deceptive".into() } else { "hidden".into() }, unit: "u".into(), question: format!("q{i}"), truth: format!("t{i}"), told: format!("t{i}"), fact: format!("F{i}") })
                 .collect(),
         }
     }
@@ -672,13 +765,54 @@ mod tests {
     }
 
     #[test]
+    fn wrong_facts_are_split_into_believed_mistakes_and_damage_elsewhere() {
+        let item = |i: usize, fact: &str, truth: &str, told: &str| StreamItem { id: format!("S{i}"), role: "base".into(), unit: "u".into(), question: format!("q{i}"), truth: truth.into(), told: told.into(), fact: fact.into() };
+        let a = Adapt {
+            lessons: vec![],
+            stream: vec![
+                item(0, "F1", "5", "9"), // the teacher is wrong about F1 (told after the answer)
+                item(1, "F1", "5", "9"), // asked again: a system that believed it says 9
+                item(2, "F2", "3", "3"),
+                item(3, "F3", "4", "4"), // never wrongly told, and answered wrongly: damage
+                item(4, "F1", "5", "9"),
+            ],
+        };
+        let r = |id: &str, ans: &str| (id.to_string(), "fact".to_string(), ans.to_string(), 1.0);
+        // S0 answers 5 (right, before the mistake is told); S1 and S4 repeat the believed 9; S3 is wrong about a fact nobody got wrong
+        let v = judge_stream(&a, &vec![r("S0", "5"), r("S1", "9"), r("S2", "3"), r("S3", "7"), r("S4", "9")]);
+        assert_eq!((v.wrong_facts, v.wrong_repeats, v.wrong_elsewhere, v.told_wrong), (3, 2, 1, 3));
+        assert!(v.offenders.iter().any(|o| o.starts_with("S3") && o.contains("NEVER wrongly told")), "{:?}", v.offenders);
+        // a first answer wrong BEFORE any mistake was told is not a believed mistake either
+        let v = judge_stream(&a, &vec![r("S0", "8"), r("S1", "5"), r("S2", "3"), r("S3", "4"), r("S4", "5")]);
+        assert_eq!((v.wrong_repeats, v.wrong_elsewhere), (0, 1));
+    }
+
+    #[test]
+    fn the_wrong_teacher_tier_is_wrong_the_same_way_every_time_a_fact_comes_up() {
+        let dir = std::env::temp_dir().join(format!("adapt_wrong_{}", std::process::id()));
+        let dir = dir.to_string_lossy().to_string();
+        let (_, clean) = write_adapt(&dir, 1, 6, 0.0, 0.0).unwrap();
+        let a = load_adapt(&dir).unwrap();
+        assert!(a.stream.iter().all(|i| i.told == i.truth), "no wrong teacher unless asked for");
+        let (_, n) = write_adapt(&dir, 1, 6, 0.3, 0.3).unwrap();
+        let a = load_adapt(&dir).unwrap();
+        assert!(n > clean, "re-asks lengthen the stream: {n} vs {clean}");
+        assert!(a.stream.iter().any(|i| i.told != i.truth), "some facts are told wrongly");
+        let mut said: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
+        for i in &a.stream {
+            assert_eq!(*said.entry(i.fact.as_str()).or_insert(i.told.as_str()), i.told, "{} told two different answers", i.fact);
+        }
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
     fn a_system_in_another_language_is_driven_over_pipes_and_a_misbehaving_one_is_reported() {
         if std::process::Command::new("python3").arg("--version").output().is_err() {
             return; // (no python here: nothing to drive)
         }
         let dir = std::env::temp_dir().join(format!("adapt_{}", std::process::id()));
         let dir = dir.to_string_lossy().to_string();
-        let (_, n) = write_adapt(&dir, 1, 1).unwrap();
+        let (_, n) = write_adapt(&dir, 1, 1, 0.0, 0.0).unwrap();
         let a = load_adapt(&dir).unwrap();
         assert_eq!(a.stream.len(), n);
         // a system that answers every question with a refusal, over the real protocol

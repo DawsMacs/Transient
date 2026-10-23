@@ -378,6 +378,8 @@ description than one with a single fixed learner.
 
 - **2026-10-23** A tried idea that failed, recorded: to win back the coverage the new caution costs, I made the baby ask exactly where its rebuilt law and the law it replaced disagree. Under a consistently wrong teacher it recovered some (up to ten points), but the long careful battery's rule-changing kinds fell at every question budget, and on one seed 32 wrong facts about things never wrongly told came back, because a wrong teacher's answer can coincide with the rebuilt law at a probed point and be taken as proof. Reverted. The lesson is about what counts as evidence: a lesson can retire a rival law only if it cannot be a wrong teacher's coincidence, and nothing inside the lessons themselves can promise that.
 
+- **2026-10-23** The exam's wrong-teacher tier (`adapt-write --wrong P --repeat F`): the adaptive stream's truths are told wrongly for a share of the facts, consistently, and the judge separates wrong facts that repeat a believed mistake from wrong facts about things never wrongly told (must be 0). Its first run found a hole at once: one wrongly told lesson that a coincidence law agreed with replaced a correct tens-digit law, and the baby then stated a wrong fact the teacher never touched (0/1/1 and 0/1/0 on three seeds). Fixed by adopting a fresh fit that explains a contradicting lesson only as a repair, keeping the replaced law as a rival (`baby/README.md`, first section). Now 0 elsewhere on all six runs; the baby still believes a teacher who repeats a wrong answer (14-39 repeats; a naive memoriser 32-59).
+
 ---
 
 ## More to come
