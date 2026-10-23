@@ -1504,7 +1504,13 @@ fn cmd_exam(a: &Args) {
                 exam::drive(&adapt, &a.positional[3..].to_vec())
             };
             match replies {
-                Ok(r) => exam::print_stream(&exam::judge_stream(&adapt, &r)),
+                Ok(r) => {
+                    if let Some(out) = a.opts.get("out") {
+                        let text: String = r.iter().map(|x| format!("{}\t{}\t{}\t{}\n", x.0, x.1, x.2, x.3)).collect();
+                        let _ = std::fs::write(out, text);
+                    }
+                    exam::print_stream(&exam::judge_stream(&adapt, &r))
+                }
                 Err(e) => {
                     eprintln!("{e}");
                     std::process::exit(1);
