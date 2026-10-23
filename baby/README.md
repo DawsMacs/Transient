@@ -66,6 +66,25 @@ Entry 10 says every new version is rebuilt from scratch with the previous work a
 
 **Limits.** The exam is the scale generator's tidy, number-word, rule-shaped worlds: no real text (SVAMP and ASDiv cannot be redistributed: their licences, and `bridge` already runs the baby on them locally); static (the interactive parts, the baby asking questions of a teacher, a stream of corrections, are not in it); coverage and honesty only, no joules (the energy meter is the baby's and the machine's); a successor that learned nothing but memorised the answers to `taught` would pass the honesty rules and win only that group.
 
+### The adaptive tier (same day)
+
+The static exam cannot test the thing the project is about: learning from being told. The adaptive tier does. `baby exam adapt-write DIR [--seed N] [--per-kind N]` writes `lessons.tsv` and `stream.tsv` (787 questions at the defaults: for each of the invention battery's 45 kinds up to 18 questions, a third unseen-inside-the-range and the rest beyond it, shuffled; each tagged with a role: **base**, **hidden**, **stage2** (kinds that can be worked out), **deceptive** (kinds that look exactly like a simple rule on the numbers taught and change regime outside them: a sum that saturates at 30, one that wraps at 40), **unexplainable** (no rule: must stay unexplained)). A static file cannot enforce "answer before you are told", so the exam **drives the system**: `baby exam adapt-drive DIR COMMAND...` starts it as a child process and speaks a line protocol on its standard input/output, one tab-separated message per line (`TEACH id question answer unit fact` per lesson, `READY`, then for each question `ASK id question` -> `ANSWER id status answer confidence`, then `TOLD id truth unit`, and `QUIT`), so the system can be written in any language and cannot see an answer before it has given its own. `baby exam adapt-run DIR` runs the baby on the same stream in-process. The judge reports facts right, wrong facts (must be 0 over the whole stream), guesses right and refusals per role, and **how many answers are right in each third of the stream**: a system that learns from being told climbs, one that only looks things up stays flat.
+
+**Reference results** (seed 1; 3,048 lessons, 787 questions):
+
+| role | n | baby: right in the 1st / 2nd / 3rd third | naive Python memoriser |
+|---|---|---|---|
+| base | 158 | 100 -> 100 -> 100 % | 0 -> 0 -> 0 % |
+| hidden | 288 | 100 -> 100 -> 100 % | 0 |
+| stage2 | 155 | 98.1 -> 100 -> 100 % | 0 |
+| **deceptive** (changes regime) | 90 | **90.6 -> 93.8 -> 100 %** | 0 |
+| unexplainable | 96 | 3.2 -> 12.5 -> 9.1 % (91.7 % refused) | 0 |
+| all | 787 | 87.1 -> 88.5 -> 88.5 % | 0 |
+
+**0 wrong facts for both systems**: the baby states 64.8 % of all questions as facts, all right, and gives another 23.3 % as right guesses and 0.5 % as wrong guesses. (The baby's run takes about 7 minutes: every told answer makes it think its unit through again, which is its cost of adapting, and one of the things a successor should beat.)
+
+**Limits.** The tier is the invention battery: tidy, number-word, rule-shaped kinds with a simulated teacher who is always right and answers every question; no wrong teacher, no real text, no energy; the "unexplainable" kinds' small number of right facts are exact repeats of numbers it was told earlier in the stream (the stream asks a few numbers twice).
+
 ## A person answers the baby's questions: `baby tutor` (2026-10-22)
 
 Until now the questions the baby asks about its own explanations (`baby wonder --check`: the farthest number it has not checked, the corner, the swapped order) were answered only by simulated teachers; the CLI could list them and take one answer at a time with `baby learn --wondered`. `baby tutor [--school FILE] [--rounds N] [--limit N] [--out FILE]` runs the whole loop with a person (`tutor.rs`, `tutor::session`): it shows each question, **why it asks**, and **what it would say now** (a fact, or "probably X, a guess, 50 % sure"), then you type the answer, press Enter to skip, `?` if you do not know, or `q` to stop. It learns from each answer and saves the school at the end. Three behaviours:

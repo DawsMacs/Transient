@@ -24,7 +24,7 @@ Order of reading: this file, then `TransientVision.md` (Daws's own words: never 
 
 ## 2. Where the work stands (2026-10-22)
 
-Everything is in `~/Transient/baby/` (pure Rust, **zero dependencies**, builds offline, **135 tests pass**, ~13k lines) plus `tools/pytorch_baseline.py` (not under cargo). Git repo, `origin` = `git@github.com:DawsMacs/Transient.git` (**public**, Daws's global account `DawsMacs`, SSH), branch `main`, **CI green** (`.github/workflows/ci.yml`: build, tests, and the scorecard's WRONG column must be 0.0 %). Licence `AGPL-3.0-only` (SPDX headers, `REUSE.toml`, `LICENSE`, `LICENSES/`), DCO not CLA (`CONTRIBUTING.md`).
+Everything is in `~/Transient/baby/` (pure Rust, **zero dependencies**, builds offline, **137 tests pass**, ~13k lines) plus `tools/pytorch_baseline.py` (not under cargo). Git repo, `origin` = `git@github.com:DawsMacs/Transient.git` (**public**, Daws's global account `DawsMacs`, SSH), branch `main`, **CI green** (`.github/workflows/ci.yml`: build, tests, and the scorecard's WRONG column must be 0.0 %). Licence `AGPL-3.0-only` (SPDX headers, `REUSE.toml`, `LICENSE`, `LICENSES/`), DCO not CLA (`CONTRIBUTING.md`).
 All work is committed and pushed (the last commit is "Skepticism on by default..." or later: `git log --oneline -5`).
 
 **The baby** (`baby school` / `baby ask` / `baby learn`) is one system:
@@ -57,7 +57,7 @@ Older headline numbers still hold (tidy 13-unit curriculum `kinds.rs`): scorecar
 
 ```
 cd ~/Transient
-cargo test --release --offline          # 135 passed (about 25 s)
+cargo test --release --offline          # 137 passed (about 25 s)
 cargo build --release --offline
 ./target/release/baby school            # teaches 13 units (~0.3 s); the honest scorecard: WRONG must be 0.0 % on every row
 ./target/release/baby ask "how far apart are two and nine"      # seven, with how it knew
@@ -82,7 +82,7 @@ If `wrong` is ever above 0.0 % on the scorecard (outside the deceptive kinds, wh
 
 ## 4. Commands (`baby <command>`; usage at the top of `main.rs`)
 
-`exam write DIR [--units N] | score DIR PRED | run DIR [--out FILE]` (the entry exam any successor is judged by; `tools/exam_baseline.py` is a naive foreign baseline), `tutor [--school FILE --rounds N --limit N --out FILE]` (a person answers the baby's own check questions), `school [--permissive]`, `ask "..." [--permissive]`, `learn "<q>" <a> [--unit NAME] [--wondered]` (with `--wondered`, a contradiction of a settled rule is held; say it again to confirm), `wonder [--check] [--limit N]`, `sleep [--compact]`, `discover`, `grade`, `cost`, `storage`, `effort`, `teach`, and the experiments:
+`exam write DIR [--units N] | score DIR PRED | run DIR [--out FILE] | adapt-write DIR | adapt-run DIR | adapt-drive DIR COMMAND...` (the entry exam any successor is judged by: static, and an adaptive tier over a TEACH/READY/ASK/ANSWER/TOLD/QUIT line protocol; `tools/exam_baseline.py` and `tools/exam_adapt_baseline.py` are naive foreign systems), `tutor [--school FILE --rounds N --limit N --out FILE]` (a person answers the baby's own check questions), `school [--permissive]`, `ask "..." [--permissive]`, `learn "<q>" <a> [--unit NAME] [--wondered]` (with `--wondered`, a contradiction of a settled rule is held; say it again to confirm), `wonder [--check] [--limit N]`, `sleep [--compact]`, `discover`, `grade`, `cost`, `storage`, `effort`, `teach`, and the experiments:
 - `scale [--units N --entities N --noise F --digits --typos F --no-reorg | --sweep 20,60,200,600]`
 - `invent [--seed N | --seeds K] [--noise F] [--bar F] [--stage2-first] [--active | --check | --careful [--rounds N --limit N] | --guesses | --corrections | --calibrate]`
 - `bridge (--svamp FILE | --pairs FILE.tsv) [--units kind|discover] [--split random|blocks] [--numbers N] [--test F] [--seed N]` (real text; `--pairs` is `question TAB answer [TAB kind]`)

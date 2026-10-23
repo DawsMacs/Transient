@@ -6,7 +6,7 @@
 //!   baby learn  "what is two multiplied by three" six --unit times    keep learning AFTER school: add a lesson, re-work how that unit is learned
 //!   baby discover [--seed N] [--out PATH]   hand it a heap of UNLABELLED lessons: it finds the units itself, then is scored like the others
 //!   baby tutor [--school FILE] [--rounds N] [--limit N] [--out FILE]   the baby asks what it wants checked, you answer (Enter skips, q quits; `question => answer` teaches it something of your own)
-//!   baby exam write DIR [--units N --seed N] | score DIR PREDICTIONS.tsv | run DIR [--out FILE]   the entry exam: plain files any system can be taught and judged by (Novice's bar)
+//!   baby exam write DIR [--units N --seed N] | score DIR PREDICTIONS.tsv | run DIR [--out FILE] | adapt-write DIR | adapt-run DIR | adapt-drive DIR COMMAND...   the entry exam: plain files and a line protocol any system can be taught and judged by (Novice's bar)
 //!   baby bridge (--svamp FILE | --pairs FILE) [--units kind|discover] [--split random|blocks] [--numbers N] [--select] [--test F] [--seed N]   REAL TEXT: what does the baby make of problems somebody else wrote?
 //!   baby compare [--seed N] [--sizes 16,32,64] [--layers N] [--epochs N] [--adapt N | --scale 20,60 | --export DIR [--units N] | --refusals 20,200 | --teacher UNITS [--rounds N --limit N]]   the controlled comparison: the baby against a matched attention transformer, in joules
 //!   baby cost                               what LEARNING costs: time and memory to teach it, a new lesson, a new kind, and to tidy up
@@ -1480,6 +1480,31 @@ fn cmd_exam(a: &Args) {
             let result = exam::load(&dir).and_then(|e| exam::read_predictions(pred).and_then(|p| exam::judge(&e, &p)));
             match result {
                 Ok(v) => exam::print(&v),
+                Err(e) => {
+                    eprintln!("{e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        "adapt-write" => match exam::write_adapt(&dir, a.get("seed", 1u64), a.get("per-kind", 18usize)) {
+            Ok((lessons, questions)) => println!("wrote the adaptive exam to {dir}: {lessons} lessons and a stream of {questions} questions (README.txt has the protocol)"),
+            Err(e) => {
+                eprintln!("could not write the adaptive exam: {e}");
+                std::process::exit(1);
+            }
+        },
+        "adapt-run" | "adapt-drive" => {
+            let adapt = exam::load_adapt(&dir).unwrap_or_else(|e| {
+                eprintln!("{e}");
+                std::process::exit(1);
+            });
+            let replies = if verb == "adapt-run" {
+                Ok(exam::baby_stream(&adapt, a.get("seed", 1u64)))
+            } else {
+                exam::drive(&adapt, &a.positional[3..].to_vec())
+            };
+            match replies {
+                Ok(r) => exam::print_stream(&exam::judge_stream(&adapt, &r)),
                 Err(e) => {
                     eprintln!("{e}");
                     std::process::exit(1);
