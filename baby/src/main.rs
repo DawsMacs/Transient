@@ -5,6 +5,7 @@
 //!   baby school [--seed N] [--out PATH]     TEACH THE BABY (the unified one): units of lessons, each learned the way evidence says
 //!   baby learn  "what is two multiplied by three" six --unit times    keep learning AFTER school: add a lesson, re-work how that unit is learned
 //!   baby discover [--seed N] [--out PATH]   hand it a heap of UNLABELLED lessons: it finds the units itself, then is scored like the others
+//!   baby tutor [--school FILE] [--rounds N] [--limit N] [--out FILE]   the baby asks what it wants checked, you answer (Enter skips, q quits; `question => answer` teaches it something of your own)
 //!   baby bridge (--svamp FILE | --pairs FILE) [--units kind|discover] [--split random|blocks] [--numbers N] [--select] [--test F] [--seed N]   REAL TEXT: what does the baby make of problems somebody else wrote?
 //!   baby compare [--seed N] [--sizes 16,32,64] [--layers N] [--epochs N] [--adapt N | --scale 20,60 | --export DIR [--units N] | --refusals 20,200 | --teacher UNITS [--rounds N --limit N]]   the controlled comparison: the baby against a matched attention transformer, in joules
 //!   baby cost                               what LEARNING costs: time and memory to teach it, a new lesson, a new kind, and to tidy up
@@ -54,6 +55,7 @@ mod rng;
 mod rules;
 mod scale;
 mod transformer;
+mod tutor;
 mod school;
 mod selector;
 mod store;
@@ -1453,6 +1455,53 @@ fn cmd_wonder(a: &Args) {
     println!("\nAnswer one with: baby learn \"<question>\" <answer> --unit <unit> --wondered");
 }
 
+fn cmd_tutor(a: &Args) {
+    use std::io::{BufRead, Write};
+    let path = a.string("school", DEFAULT_SCHOOL);
+    let out_path = a.string("out", &path);
+    let mut school = school::School::load(&path).unwrap_or_else(|e| {
+        eprintln!("{e}\n(teach one first: baby school)");
+        std::process::exit(1);
+    });
+    println!("I will ask what I would like to check about my own explanations. For each: type the answer, press Enter to skip, ? if you do not know, q to stop.");
+    println!("You can also teach me something of your own at any prompt: type  a question => the answer\n");
+    let stdin = std::io::stdin();
+    let mut lines = stdin.lock().lines();
+    let mut person = |p: &tutor::Prompt| {
+        match &p.confirming {
+            None => {
+                println!("\n[{}] unit '{}': {}", p.number, p.unit, p.question);
+                println!("    why I ask: {}", p.why);
+                println!("    I would say: {}", p.would_say);
+                print!("    your answer: ");
+            }
+            Some((rule, said)) => {
+                println!("    I would have said {rule}, you said {said}. Type your answer again to confirm it (Enter keeps my rule).");
+                print!("    again: ");
+            }
+        }
+        let _ = std::io::stdout().flush();
+        match lines.next() {
+            Some(Ok(l)) => match l.trim() {
+                "q" | "quit" => tutor::Said::Quit,
+                "" | "?" => tutor::Said::Skip,
+                t => tutor::Said::Answer(t.to_string()),
+            },
+            _ => tutor::Said::Quit,
+        }
+    };
+    let mut out = std::io::stdout();
+    let sum = tutor::session(&mut school, &mut person, &mut out, a.get("rounds", 3usize), a.get("limit", 3usize));
+    println!("\nAsked {}; learned {}; skipped {}; answers held and then confirmed {}, not confirmed {}; taught by you {}.", sum.asked, sum.learned, sum.skipped, sum.confirmed, sum.unconfirmed, sum.told);
+    match school.save(&out_path) {
+        Ok(()) => println!("Saved {out_path}."),
+        Err(e) => {
+            eprintln!("could not save {out_path}: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
 fn cmd_cost(a: &Args) {
     let seed: u64 = a.get("seed", 1);
     let world = kinds::world(seed);
@@ -1544,6 +1593,7 @@ fn main() {
         Some("learn") => cmd_learn(&args),
         Some("cost") => cmd_cost(&args),
         Some("wonder") => cmd_wonder(&args),
+        Some("tutor") => cmd_tutor(&args),
         Some("scale") => cmd_scale(&args),
         Some("bridge") => cmd_bridge(&args),
         Some("compare") => {

@@ -63,6 +63,11 @@ impl SchoolUnit {
         format!("chose {} evidence {:?} facts {} alts {alts:?} ambiguity {amb:?} lib consts {:?} funcs {}", self.chosen.name(), self.evidence.map(|e| (e * 100.0).round()), self.facts(), lib.consts, lib.funcs.len())
     }
 
+    /// Do this unit's lessons give their answers in words (not digits)? (for a person typing "6" where the unit says "six")
+    pub fn speaks_in_words(&self) -> bool {
+        !self.lessons.is_empty() && self.lessons.iter().take(8).all(|l| l.answer.parse::<f64>().is_err())
+    }
+
     pub fn best_evidence(&self) -> f64 {
         self.evidence.iter().cloned().fold(0.0, f64::max)
     }
