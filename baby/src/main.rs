@@ -6,6 +6,7 @@
 //!   baby learn  "what is two multiplied by three" six --unit times    keep learning AFTER school: add a lesson, re-work how that unit is learned
 //!   baby discover [--seed N] [--out PATH]   hand it a heap of UNLABELLED lessons: it finds the units itself, then is scored like the others
 //!   baby tutor [--school FILE] [--rounds N] [--limit N] [--out FILE]   the baby asks what it wants checked, you answer (Enter skips, q quits; `question => answer` teaches it something of your own)
+//!   baby exam write DIR [--units N --seed N] | score DIR PREDICTIONS.tsv | run DIR [--out FILE]   the entry exam: plain files any system can be taught and judged by (Novice's bar)
 //!   baby bridge (--svamp FILE | --pairs FILE) [--units kind|discover] [--split random|blocks] [--numbers N] [--select] [--test F] [--seed N]   REAL TEXT: what does the baby make of problems somebody else wrote?
 //!   baby compare [--seed N] [--sizes 16,32,64] [--layers N] [--epochs N] [--adapt N | --scale 20,60 | --export DIR [--units N] | --refusals 20,200 | --teacher UNITS [--rounds N --limit N]]   the controlled comparison: the baby against a matched attention transformer, in joules
 //!   baby cost                               what LEARNING costs: time and memory to teach it, a new lesson, a new kind, and to tidy up
@@ -40,6 +41,7 @@ mod compare;
 mod curious;
 mod data;
 mod discover;
+mod exam;
 mod invent;
 mod kinds;
 mod know;
@@ -1455,6 +1457,56 @@ fn cmd_wonder(a: &Args) {
     println!("\nAnswer one with: baby learn \"<question>\" <answer> --unit <unit> --wondered");
 }
 
+fn cmd_exam(a: &Args) {
+    let verb = a.positional.get(1).map(|s| s.as_str()).unwrap_or("");
+    let dir = a.positional.get(2).cloned().unwrap_or_default();
+    let usage = || {
+        eprintln!("usage: baby exam write DIR [--units N] [--seed N]  |  baby exam score DIR predictions.tsv  |  baby exam run DIR [--out predictions.tsv]");
+        std::process::exit(2);
+    };
+    if dir.is_empty() {
+        usage();
+    }
+    match verb {
+        "write" => match exam::write(&dir, a.get("units", 60usize), a.get("seed", 1u64)) {
+            Ok((lessons, questions)) => println!("wrote {lessons} lessons and {questions} questions to {dir} (README.txt says how to take it)"),
+            Err(e) => {
+                eprintln!("could not write the exam: {e}");
+                std::process::exit(1);
+            }
+        },
+        "score" => {
+            let Some(pred) = a.positional.get(3) else { usage(); return };
+            let result = exam::load(&dir).and_then(|e| exam::read_predictions(pred).and_then(|p| exam::judge(&e, &p)));
+            match result {
+                Ok(v) => exam::print(&v),
+                Err(e) => {
+                    eprintln!("{e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        "run" => match exam::load(&dir) {
+            Ok(e) => {
+                let seed: u64 = a.get("seed", 1);
+                let preds = exam::baby_predictions(&e, seed);
+                if let Some(out) = a.opts.get("out") {
+                    let _ = exam::write_predictions(out, &preds);
+                }
+                match exam::judge(&e, &preds) {
+                    Ok(v) => exam::print(&v),
+                    Err(e) => eprintln!("{e}"),
+                }
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        },
+        _ => usage(),
+    }
+}
+
 fn cmd_tutor(a: &Args) {
     use std::io::{BufRead, Write};
     let path = a.string("school", DEFAULT_SCHOOL);
@@ -1594,6 +1646,7 @@ fn main() {
         Some("cost") => cmd_cost(&args),
         Some("wonder") => cmd_wonder(&args),
         Some("tutor") => cmd_tutor(&args),
+        Some("exam") => cmd_exam(&args),
         Some("scale") => cmd_scale(&args),
         Some("bridge") => cmd_bridge(&args),
         Some("compare") => {

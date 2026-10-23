@@ -362,6 +362,8 @@ description than one with a single fixed learner.
 
 - **2026-10-22** Cost, measured: building the baby on a real-text corpus took 111 s and I had said the program search was the reason; timing each mechanism showed the program search takes one second and the rule mechanism, which fits a weight to every word and so scales with the cube of the vocabulary, took ninety per cent. With more unknowns than lessons the same fit can be solved from the other side (a system the size of the lessons): the build now takes 13.7 s, the results are identical line for line, and every honesty battery reads as before. A first attempt on the part I had wrongly blamed changed nothing. Light matters here, and being wrong about where the cost is cost an hour.
 
+- **2026-10-22** The entry exam (Entry 10: each new version is rebuilt from scratch with the old one only as reference): since code will not carry over, the judging does. `baby exam write` makes plain files (lessons, optional calibration material, questions in groups, and traps that must be refused); any system in any language answers with a predictions file (a fact, a guess with its own confidence, or a refusal); `baby exam score` judges by the project's own rules (no wrong facts, no traps answered, a guess's stated confidence at or below how often it is right) without caring how the system works. The baby's own result is the bar a successor starts from, and a naive Python memoriser is the floor. On its first run the exam found two traps the baby answered, and the cause was in my exam: it had left out the teacher's grouping of lessons, which the baby's honesty depends on. Honest limits: tidy synthetic worlds, static, no joules, no real text (the licences forbid redistributing it).
+
 ---
 
 ## More to come

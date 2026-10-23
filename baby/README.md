@@ -43,6 +43,29 @@ cargo test --offline                 # 61 tests, including numerical checks of t
 ./target/release/baby energy         # what one question and one learning step cost, counted
 ```
 
+## The entry exam: a way to judge any system, not only this one (2026-10-22; Vision Entry 10)
+
+Entry 10 says every new version is rebuilt from scratch with the previous work as reference only. What can carry over is therefore not code but **the exam**, so I made it independent of the baby's internals (`exam.rs`, `baby exam`).
+
+- `baby exam write DIR [--units N] [--seed N]` writes plain tab-separated files and a `README.txt` of the protocol: **`lessons.tsv`** (`id, question, answer, unit, fact`: the unit names the kind, `fact` numbers lessons that say the same thing in different words; both optional to use), **`calibration.tsv`** (optional extra material: other phrasings of taught facts, **disjoint from every question**), **`questions.tsv`** (`id, group, question, truth`; groups `taught`, `reworded`, `never`, `beyond`, `trap`; a trap's truth is empty: it must be refused). A system, in any language, writes **`predictions.tsv`** (`id, status, answer, confidence`; status `fact`, `guess` with its own probability, or `refuse`).
+- `baby exam score DIR predictions.tsv` judges by rules that do not depend on how the system works: **WRONG facts must be 0**; **traps answered (as fact or guess) must be 0**; then facts right per group (coverage), guesses right, and whether the confidence it states for its guesses is at or below how often they were right. Every offender is listed by id. A system that refuses everything is honest and covers nothing: coverage is what is then compared.
+- `baby exam run DIR [--out FILE]` teaches the baby and judges it: the bar a successor starts from. `tools/exam_baseline.py` is a deliberately naive foreign system (a Python exact-match memoriser) to show the judge works across languages and to give the floor.
+
+**Reference results** (seed 1, the scale generator's worlds):
+
+| exam | system | taught | reworded | never | beyond | traps answered | wrong facts |
+|---|---|---|---|---|---|---|---|
+| 60 units (2,520 lessons, 4,832 questions) | baby | 100 % | 100 % | 94.9 % fact + 5.1 % right guess | 100 % right guess | 0 of 140 | 0 |
+| 60 units | naive memoriser (python) | 100 % | 0 | 0 | 0 | 0 of 140 | 0 |
+| 200 units (8,580 lessons, 16,997 questions) | baby | 100 % | 100 % | 91.0 % fact + 9.0 % right guess | 100 % right guess | 0 of 467 | 0 |
+| 200 units | naive memoriser (python) | 100 % | 0 | 0 | 0 | 0 of 467 | 0 |
+
+(Percentages are facts right unless said; the baby's whole 60-unit run, from the lessons to a judged scorecard, takes 0.5 s; its guesses state 50 % (no checks yet) against 100 % realised, which the judge calls honest. Tidy rule-shaped worlds are its home ground: this is the *floor* a successor must clear and then exceed on harder material, not an achievement.)
+
+**What the exam found in the baby on its first run (recorded as it happened).** My first version answered **two traps as fact** (22 traps at 8 units: "what is the gedevubi of ridoba **sedavubi**", two attributes at once) and refused 20 % of reworded questions. Two causes, both in my exam, both informative about the baby: (1) it was given no calibration material, and the baby's recognition floor, which is what keeps it from answering a question that merely resembles a taught one, is calibrated on rephrasings; (2) I numbered every lesson as its own fact, discarding the teacher's grouping (which lessons are one fact in different words), which the baby's cross-validation and memory rely on. With the grouping (`fact` column) and a disjoint half of the rephrasings as calibration: 0 of 22 traps, 100 % of reworded. **So the baby's trap-honesty depends on its teacher's grouping and on calibration material; a successor should state what it needs, and the exam now offers both openly.**
+
+**Limits.** The exam is the scale generator's tidy, number-word, rule-shaped worlds: no real text (SVAMP and ASDiv cannot be redistributed: their licences, and `bridge` already runs the baby on them locally); static (the interactive parts, the baby asking questions of a teacher, a stream of corrections, are not in it); coverage and honesty only, no joules (the energy meter is the baby's and the machine's); a successor that learned nothing but memorised the answers to `taught` would pass the honesty rules and win only that group.
+
 ## A person answers the baby's questions: `baby tutor` (2026-10-22)
 
 Until now the questions the baby asks about its own explanations (`baby wonder --check`: the farthest number it has not checked, the corner, the swapped order) were answered only by simulated teachers; the CLI could list them and take one answer at a time with `baby learn --wondered`. `baby tutor [--school FILE] [--rounds N] [--limit N] [--out FILE]` runs the whole loop with a person (`tutor.rs`, `tutor::session`): it shows each question, **why it asks**, and **what it would say now** (a fact, or "probably X, a guess, 50 % sure"), then you type the answer, press Enter to skip, `?` if you do not know, or `q` to stop. It learns from each answer and saves the school at the end. Three behaviours:
