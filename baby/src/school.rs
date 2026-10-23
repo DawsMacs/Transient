@@ -1509,6 +1509,8 @@ impl School {
         let keep_old = {
             let unit = &self.units[u];
             match (&unit.state, unit.chosen) {
+                // (see `refit_in_place`: a repaired program that still explains every lesson stays)
+                (Fitted::Program(Some(old)), Mech::Program) if !old.repaired.is_empty() && old.partial.is_none() && items.iter().all(|l| predict(&unit.state, &l.query, &self.weights).as_deref() == Some(l.answer.as_str())) => true,
                 (Fitted::Program(Some(old)), Mech::Program) if old.partial.is_none() && (old.alts.is_empty() || !old.repaired.is_empty()) && unit.best_evidence() >= mechanisms::reliable() && (unit.facts() >= 12 || !old.repaired.is_empty()) => {
                     let new_is_exact = matches!(&state, Fitted::Program(Some(p)) if p.partial.is_none());
                     if new_is_exact {
@@ -1566,6 +1568,10 @@ impl School {
         let keep_old = {
             let unit = &self.units[u];
             match (&unit.state, &state) {
+                // A repaired program that still explains EVERY lesson (the one just taken in too) is not swapped for a fresh fit: the fresh fit does not know the
+                // numbers the repair was given, and the smallest program that fits can be a coincidence (`second + (first min 18)` agrees with two probes that
+                // `min(first + second, 30)` also gets right), whose lessons would then vouch for what lies below them.
+                (Fitted::Program(Some(old)), _) if !old.repaired.is_empty() && old.partial.is_none() && items.iter().all(|l| predict(&unit.state, &l.query, &self.weights).as_deref() == Some(l.answer.as_str())) => true,
                 (Fitted::Program(Some(old)), Fitted::Program(Some(new))) if old.partial.is_none() && old.alts.is_empty() && new.partial.is_some() && unit.facts() >= 12 => {
                     let unexplained = items.iter().filter(|l| predict(&unit.state, &l.query, &self.weights).as_deref() != Some(l.answer.as_str())).count();
                     unexplained <= 3 && unexplained * 20 <= items.len()
@@ -3408,6 +3414,23 @@ mod tests {
         let filed: Vec<&str> = s.units[times].lessons.iter().map(|l| l.query.as_str()).filter(|q| q.contains(crate::selector::BLANK)).collect();
         assert!(filed.iter().all(|q| q.contains("two") && q.contains("three")), "{filed:?}");
         assert_eq!(s.units.iter().map(|u| u.lessons.len()).sum::<usize>() >= before, true);
+    }
+
+    #[test]
+    fn a_repaired_program_is_not_swapped_for_a_coincidence_by_the_next_lesson_and_the_checks_do_not_vouch_for_a_wrong_law() {
+        // the building blocks a unit like this would have from other kinds: a three, and a sum of two squares, which make 18 = 3x3 + 3x3
+        let mut s = sums_school(|a, b| (a + b).min(30));
+        s.set_careful(true);
+        s.weights.lib.learn_constant(3);
+        s.weights.lib.learn_program(&crate::program::Expr::from_text("(add (mul A A) (mul B B))").unwrap(), 2, crate::program::NO_ORIGIN);
+        s.learn("what is 24 zork 12", "30", Some("zork")).unwrap();
+        // a second probe that a coincidence law (second + (first min 18)) also gets right: 18 + 12 = 30
+        s.learn("what is 48 zork 12", "30", Some("zork")).unwrap();
+        let Fitted::Program(Some(p)) = &s.units[0].state else { panic!("expected a program: {}", s.describe_unit_open(0)) };
+        assert!(!p.repaired.is_empty(), "it must still be the repaired program: {}", p.expr.show());
+        // and nothing below the probes is stated as a fact it cannot back: the truth under (48, 12) at (19, 2) is 21
+        let r = s.ask("what is 19 zork 2");
+        assert!(r.answer.as_deref().map_or(true, |a| a == "21"), "stated {:?}, truth 21 ({})", r.answer, p.expr.show());
     }
 
     #[test]

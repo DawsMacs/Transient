@@ -197,6 +197,24 @@ Before: **0 %** right on the many-number questions (nothing learned, everything 
 
 **Honest limits.** One adversarial corpus. The selector is learned from labels that exist only where exactly one pair fits (about 61 % of the many-number lessons in the first run): problems whose answer needs three numbers (237 of SVAMP's equations use three) are not handled at all. The stopword list, the 8-feature window sizes, the kept count (two), the one-in-four held-back share, the 10-guess minimum for rescaling and the epochs are mine and were not tuned. The scales are measured on 25 % of the lessons only. It does not yet choose its own questions about which number matters.
 
+## A hole found by asking fewer questions: a repair swapped for a coincidence (2026-10-23)
+
+**Found by accident, while measuring something else.** To see whether a smarter chooser of its own check questions had anything to win, I ran the careful battery at a budget of 1, 2 and 4 questions per unit per round (2 seeds, 3 rounds). The curve says the current chooser is already efficient: 2 per unit reach 478 of 480 right on the rule-changing kinds with 370 questions asked against 490 for 4 per unit. But **at 1 per unit the deceptive kinds stated 6 WRONG facts** (304 / 170 / 6 after two rounds), and they stayed. The gate had only ever run at 4 per unit.
+
+**A regression, bisected.** The build before the repair step read 0 wrong at this budget; the four commits from the first repair commit on all read 6 (so it came with the repair itself, not with the later changes). The six were all one unit, `capsum` (a sum capped at 30), stated by `second + (first min ((3 x 3) + (3 x 3)))`. Instrumenting where its program was set showed the sequence: the first probe, (24,12) -> 30, made the repair adopt `(30 min (first + second))`, correct; the second probe, (48,12) -> 30, made `refit_in_place` fit a fresh program from scratch, **without the numbers the repair had been given**, and the smallest program that fits was a coincidence: with a library of 3 and a sum of two squares it can build 18 = 3x3 + 3x3, and `second + (first min 18)` gets both probes right (18 + 12 = 30). It replaced the repaired program and dropped its `repaired` bookkeeping, so the two probes, now ordinary confirmations, vouched for everything under (48,12): 19 + 2 stated 20 (truth 21), 27 + 0 stated 18 (truth 27), and so on. The old build could not do this because a contradicted rule just stayed refuted; my repair created a program that a lesson could then swap.
+
+**The fix** (`refit_in_place` and `relearn_unit`): a repaired program that still explains every lesson, the one just taken in included, is not replaced by a fresh fit. Test written first (it reproduced the exact coincidence law before the fix): `a_repaired_program_is_not_swapped_for_a_coincidence_by_the_next_lesson_and_the_checks_do_not_vouch_for_a_wrong_law` (138 tests).
+
+**Result, and its price.** 0 wrong facts at every budget:
+
+| questions per unit per round | asked over 3 rounds | deceptive kinds: right / refused / WRONG | genuine kinds |
+|---|---|---|---|
+| 1 | 228 | 331 / 149 / **0** (was 325 / 149 / 6) | 2340 / 800 / 0 |
+| 2 | 370 | 478 / 2 / **0** | 3108 / 32 / 0 |
+| 4 | 490 | 480 / 0 / **0** | 3108 / 32 / 0 |
+
+The rest of the gate is clean (hidden 64/64, unexplainable 0/24, 0 wrong anywhere, 0 of 467 traps, corrections 157/157, 20 %-persistent 87.40 % / 39 / 0 elsewhere), **but the standard battery's deceptive kinds read 684 / 36 / 0 instead of 718 / 2 / 0**: keeping the repaired program gives up the extra coverage a fresh fit used to find. I judge 34 facts of 720 a fair price for closing a hole that stated wrong facts, and the lost coverage should come back through better checks, not through trusting the smallest program that fits. **The gate now includes `invent --careful --seeds 2 --rounds 3 --limit 1`.**
+
 ## Real text: the routing wall was the counting, not the words (2026-10-22; Vision Entry 9/10: learn from its own mistakes)
 
 **A wrong belief, corrected.** The previous section said routing the kind of a SVAMP problem "from the words alone" tops out at 49-62 % because "bag-of-words cannot see the compositional cue", backed by an offline prototype of three naive-Bayes-style classifiers (57-65 %). That was a fact about the **classifier family**, not about the words. Re-measuring offline with an averaged perceptron (learns from its mistakes) on the *same* bag of words: **78 %** (all 1,000 problems, five folds; grouped by story so the same story never sits in train and test: 78 %); adding the **last few words** as separate, marked features (the question of a story problem comes last): 80-82 %. The baby's routing table is a counting table (per word, per unit: ln(1 + 2 x count), minus a penalty for the words it knows), which treats every word as independent evidence, exactly the naive-Bayes weakness.

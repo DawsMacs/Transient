@@ -372,6 +372,8 @@ description than one with a single fixed learner.
 
 - **2026-10-23** Timed the rest of that cost stage by stage rather than guessing: sixty per cent of what remained was the baby re-thinking, for every answer it was told, the units that can only memorise, which already had a rule for being looked at only every ten facts elsewhere. Following that rule, the same stream costs 268 joules (a third of a joule a question; it was 1,419 at the start of the day, 5.3 times more) with the same answers and nothing wrong stated as fact. What is left is mostly real work for real changes (a new building block means re-examining the open units). Honest limits: one run per figure, desktop counter, processor only.
 
+- **2026-10-23** An honesty hole, found by accident and closed: asking the baby to check its own explanations with fewer questions (one per kind instead of four) made it state six wrong facts, which the usual gate, always run at four, had never shown. It was mine: when a rule was shown wrong and it rebuilt the law from the correction, the next lesson let it throw that law away for a different one that fitted the same two probes by coincidence (a cap built out of threes where the truth is a cap at thirty), and those probes then vouched for everything below them. It now keeps a rebuilt law that still explains everything it has been told. No wrong facts at one, two or four questions; the price is 34 facts of 720 on the rule-changing kinds in the standard battery, coverage a fresh fit used to find by luck. The standing gate now includes the one-question budget.
+
 ---
 
 ## More to come
