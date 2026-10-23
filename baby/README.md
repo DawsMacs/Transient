@@ -83,7 +83,7 @@ The static exam cannot test the thing the project is about: learning from being 
 
 **0 wrong facts for both systems**: the baby states 64.8 % of all questions as facts, all right, and gives another 23.3 % as right guesses and 0.5 % as wrong guesses. (The baby's run takes about 7 minutes: every told answer makes it think its unit through again, which is its cost of adapting, and one of the things a successor should beat.)
 
-**Limits.** The tier is the invention battery: tidy, number-word, rule-shaped kinds with a simulated teacher who is always right and answers every question; no wrong teacher, no real text, no energy; the "unexplainable" kinds' small number of right facts are exact repeats of numbers it was told earlier in the stream (the stream asks a few numbers twice).
+**Limits.** The tier is the invention battery: tidy, number-word, rule-shaped kinds with a simulated teacher who is always right and answers every question; no wrong teacher, no real text, no energy; the unexplainable kinds show 8.3 % right facts (8 of 96) that I have not explained: only 4 of their 96 questions repeat an earlier one, so repeats cannot account for all of them (a recalled answer to a differently phrased question is my guess, unchecked); they are all right, so honesty is unaffected, but "must stay unexplained" deserves a look.
 
 ## A person answers the baby's questions: `baby tutor` (2026-10-22)
 
