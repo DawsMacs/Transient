@@ -13,13 +13,15 @@
 *adaptive learning*: a system that keeps learning while it is used, decides for itself *how* to learn each kind of thing, and is
 measured by what it costs (operations, memory, estimated joules) rather than by parameter count alone.
 
-The current artefact is `baby/`: about 11k lines of Rust, **no dependencies**, builds offline, 102 tests. It is a research prototype
-evaluated on a synthetic curriculum. It is not a language model and makes no claim to be one yet.
+The current artefact is `baby/`: about 17k lines of Rust, **no dependencies**, builds offline, 139 tests. It is a research prototype
+evaluated mostly on a synthetic curriculum, with a first look at real word problems (SVAMP, ASDiv) and an entry exam that any
+other system can take. It is not a language model and makes no claim to be one yet.
 
 Transient is made by **[TransientAI](https://transientai.org)**, an independent research effort (currently one person, Daws Macs). Its
 website has an overview, documentation, a progress page and a blog.
 
-> **Status:** active research. Every number below comes from tidy synthetic lessons and *estimated* energy. Read
+> **Status:** active research. Unless a line says otherwise, the numbers below come from tidy synthetic lessons; energy is
+> *measured* with the CPU's own counter where stated, and *estimated* from counted operations where not. Read
 > [Limitations](#limitations) before drawing conclusions.
 
 ## What `baby` does
@@ -55,7 +57,7 @@ All on the synthetic curriculum in `baby/src/kinds.rs` (13 units, 792 lessons), 
 
 | claim | result |
 |---|---|
-| scorecard: taught / reworded / never taught / beyond range | right 100 / 100 / 95.1 / 100 %, **0 % wrong**, the rest refused; identical on seeds 1-5, for the taught school and the self-organised one |
+| scorecard: taught / reworded / never taught / beyond range (careful by default) | stated as fact 100 / 100 / 90.2 / 0 %, **0 % wrong** on every row; the rest refused, and every beyond-range question (100 %) refused with a right labelled guess |
 | answering effort | 8,977 -> 57 operations per question (159x fewer); about 85x less *estimated* energy; same answers |
 | fitting a rule | exact solve vs 800-pass SGD: 392x fewer operations, ~60x faster, same rule |
 | teaching 792 lessons from nothing | 0.34 s, 11.9 MB peak |
@@ -66,6 +68,10 @@ All on the synthetic curriculum in `baby/src/kinds.rs` (13 units, 792 lessons), 
 | **rules that change regime beyond what was taught** (a sum that saturates or wraps) | permissively (`--permissive`) 53 wrong answers per seed; **careful, the default since 2026-10-21** (answer as fact only within the range taught or checked) removes them and costs half the extrapolation; two rounds of self-checks win back 99 % with 0 wrong |
 | **its own reliability bar** | measured from the noise in its lessons (it estimates 9.6 % where the world has 9.7 %) and set just under what a correct rule can reach; at 10 % label noise unseen questions answered 98 % instead of 42 %; clean worlds unchanged |
 | **label noise** (2 % and 5 % of taught answers wrong, 60-200 units, words and digits) | **0 % wrong** on unseen questions; at 2 % essentially as good as clean data (97-100 % of unseen questions right); wrongly taught lessons answered with the truth by voting memory, robust rule fitting and cross-checks |
+| **the entry exam** (`baby exam`, 60 units, 2,520 lessons, 4,832 questions) | taught 100 %, reworded 100 %, never seen 94.9 % as facts + 5.1 % right guesses, beyond range 100 % right guesses; **0 wrong facts, 0 of 140 traps answered**; teaching 0.68 J and answering 0.28 J (59 uJ per question), measured with the CPU's counter |
+| **the adaptive exam** (787 questions on rule-changing kinds, the truth told after each answer) | **0 wrong facts**; the rule-changing kinds climb 90.6 -> 93.8 -> 100 % right across the stream; 268 J to answer and adapt (0.34 J per told answer, down from 1.80 J). A naive Python memoriser scores 0 right at 0.08 J |
+| **after a correction** | the law is rebuilt from the numbers the correcting lessons name: 157 of 157 wrong guesses became right guesses after one correction (they were refused before); the law it replaced is kept as a competing explanation until two later lessons separate them |
+| **real word problems** (SVAMP, ASDiv; private data, not in this repo) | labelled guesses only, never stated as fact: two-number problems about 56 % right on SVAMP (35-73 % across six splits; fragile) and 58-60 % on ASDiv; problems with more numbers than the rules use 27-38 %. Which operation the wording means is the ceiling, not a shortage of lessons |
 | storage | school file 29 KB, of which 1.3 KB is what was learned; `--compact` keeps 49 % of the file, still answers all 792 taught lessons, 0 % wrong |
 | unit discovery from 792 unlabelled, shuffled lessons | 9 units found (13 named by the teacher), scorecard identical |
 
@@ -76,7 +82,7 @@ The scorecard reports **WRONG separately from refused**: a refusal is an accepta
 Requires a stable Rust toolchain (edition 2021). No other dependencies, no network.
 
 ```bash
-cargo test --release --offline         # 102 tests (about 13 s)
+cargo test --release --offline         # 139 tests (about 21 s)
 cargo build --release --offline
 ./target/release/baby school           # teach 13 units (~4 s), print how each was learned and the scorecard
 ./target/release/baby ask "how far apart are two and nine"   # answers, and says how it knew
@@ -86,7 +92,13 @@ cargo build --release --offline
 ./target/release/baby scale --sweep 20,60,200,600   # does learning stay light as the world grows? (about 5 min)
 ./target/release/baby invent --seeds 20            # can it work out kinds of lesson nobody wrote a mechanism for? (about 8 min)
 ./target/release/baby wonder [--check]             # what would it like to be told? (--check: where would it test its own explanations?)
+./target/release/baby tutor                        # it asks what it wants checked and you answer (Enter skips, q quits; `question => answer` teaches it something of your own)
+./target/release/baby exam write /tmp/exam --units 60 && ./target/release/baby exam run /tmp/exam   # the entry exam: plain files, judged on wrong facts, traps, honest confidence and joules
 ```
+
+`baby exam` is built so that any other system, in any language, can take it: `exam write DIR` writes plain files, `exam score DIR
+predictions.tsv` judges any predictions, and an adaptive tier (`exam adapt-write`, `adapt-drive`) speaks a small line protocol over
+standard input and output. `tools/exam_baseline.py` and `tools/exam_adapt_baseline.py` are naive systems to compare against.
 
 If the scorecard's WRONG column is ever above 0.0 %, or a refusal battery in `school.rs` starts answering, treat it as a
 regression: honesty is the property this project protects first.
@@ -104,7 +116,10 @@ All under `baby/src/`.
 | `discover.rs` | unit discovery from unlabelled lessons (anchor words, fact and rule-coherence merges) |
 | `program.rs` | expression search and ambiguity detection (by behaviour, not by taught examples) |
 | `quantity.rs` | number line, per-word operator weights, exact ridge fit |
-| `bridge.rs` | `baby bridge`: real-text corpora (SVAMP JSON or question/answer TSV) taught, graded and explained; a minimal JSON reader |
+| `bridge.rs` | `baby bridge`: real-text corpora (SVAMP JSON, ASDiv XML or question/answer TSV) taught, graded and explained; a minimal JSON reader |
+| `selector.rs` | on real text, which numbers in a question matter (learned from the baby's own programs) |
+| `exam.rs` | the entry exam: static and adaptive tiers, a line protocol, and the judge, independent of the baby's internals |
+| `tutor.rs` | `baby tutor`: the baby asks, a person answers |
 | `transformer.rs`, `compare.rs` | `baby compare`: a from-scratch attention transformer (hand-written backward pass) and the controlled comparison against the baby, with measured energy; `compare --export DIR` writes the lessons for other tools |
 | `kinds.rs` | the synthetic curriculum |
 | `ledger.rs` | counted operations and words moved, priced with published 45 nm figures; optional RAPL reader |
@@ -118,8 +133,9 @@ All under `baby/src/`.
 - **WRONG is reported apart from refused.** Accuracy alone hides bluffing.
 - **Adversarial batteries are part of the tests.** The same trap (`|a-b|`, `a-b` and `10-n` agree on every taught lesson) caught
   the system three times; ambiguity is now defined by behaviour, merges are checked per group, and operand order is kept.
-- **Energy is estimated**, as counted operations times published per-operation costs. Ratios are the trustworthy part. A real
-  meter (RAPL) is wired in but needs a one-time permission change on the host.
+- **Energy is measured where stated and otherwise estimated.** The entry exam and `baby compare` read the CPU's own counter (Intel
+  RAPL, above an idle baseline; it needs a one-time permission change on the host, and readings are upper bounds on a busy machine).
+  The older operation counts times published per-operation costs are estimates: trust the ratios, not the absolute joules.
 - **Dead ends are written down.** `baby/README.md` records wrong hypotheses and bugs next to the results.
 
 ### Against matched transformers (`baby compare`, `tools/pytorch_baseline.py`)
@@ -141,21 +157,21 @@ Two transformers are trained on the same lessons and graded on the same question
 - The five mechanisms, the expression language, the number line (taught by counting lessons) and the thresholds are the author's
   design choices. The system selects and fits among them; it does not invent a sixth.
 - **A rule that changes regime outside what it was taught (a sum that saturates, one that wraps) is confidently wrong if allowed to extrapolate.** Since 2026-10-21 the baby is *careful by default*: it states as fact only what is inside the range it was taught or has had checked; `--permissive` turns that off (see `baby/README.md`).
-- **Only label noise was tested** (2 % and 5 % of taught answers wrong, up to 200 units). Where most of one fact's own phrasings are wrong nothing can know, and at 5 % a few such answers remain;
+- **Teachers were tested only in simulation** (label noise of 2 % and 5 % of taught answers wrong, up to 200 units; independent slips up to 20 %; consistent errors about particular things). Guarding against a persistent wrong teacher costs coverage: the repair step's veto leaves it right on 74.9 / 82.0 % of the checked questions (seeds 2 / 3) against 79.2 / 88.8 % without it. No person has been the teacher at scale. Where most of one fact's own phrasings are wrong nothing can know, and at 5 % a few such answers remain;
   other noise kinds (ambiguous entities, real misspellings, noise correlated across phrasings) were not tested.
-- **First contact with real text (2026-10-21, SVAMP word problems):** nothing is stated as a wrong fact, but the baby only guesses, and 20-35 % of questions get a wrong *labelled* guess, because it cannot tell which operation a story means from its words (told the kind, its guesses are 67-90 % right; routed from the words, 49-62 %). Problems with three or four numbers still learn nothing. See `baby/README.md`.
+- **Real text has had only a first look (SVAMP and ASDiv word problems):** nothing is stated as a wrong fact, but the baby only guesses, and roughly 40-45 % of those labelled guesses are wrong, because wording ("how many more" against "in all") is the ceiling, not a shortage of lessons. Answers that need three numbers are not yet possible. No factoid corpus has been tried. See `baby/README.md`.
+- The thresholds of the repair step (two later lessons to retire a replaced law) are my guesses, not discovered; the exam's lessons are synthetic and tidy; joules are one machine's upper bounds.
 - Nothing here yet shows behaviour at millions of lessons, or at "frontier" quality. Those are the open questions the
   roadmap exists to answer.
 
 ## Roadmap
 
 1. **Scale test, continued:** clean worlds are done to 600 units (learning one lesson is flat). Next: asking about more than numeric programs, discovery at scale, and numeric learning knobs adapted from measurement, a Zipf-shaped vocabulary, discovery at scale (its pair loops are still quadratic).
-2. **Compact lossless storage format**, then incremental and exact updates, then the real energy meter.
+2. **Compact lossless storage format**, then incremental and exact updates. (The real energy meter is done: the exam and `compare` read it.)
 3. **Beyond expressions:** mechanisms of a different kind (not a formula), and the baby adapting its own learning knobs; a number
    line it discovers rather than is taught. (Building programs from a learned library, and digits as numbers, are done.)
-4. **Bridge to real data:** small factoid and word-problem corpora, to see which of units, mechanisms, discovery and refusal survive.
-5. **Controlled comparison:** a matched mini transformer against `baby`-style systems at three or more sizes, on quality per joule,
-   retention after new learning, adaptation speed and scaling slope.
+4. **Bridge to real data:** first versions done on two word-problem corpora. Next: answers that need three numbers, a factoid corpus, and a pretrained model as the comparison (needs a rented GPU).
+5. **Controlled comparison:** partly done (a matched from-scratch transformer and a tuned PyTorch one, measured joules, three seeds). Next: more sizes, the baby's energy against it on the exam, and a wrong-teacher tier of the adaptive exam.
 6. **Growth:** a unit that starts tiny and adds capacity only when it saturates (function-preserving growth).
 
 ## Ambition
