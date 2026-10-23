@@ -360,6 +360,8 @@ description than one with a single fixed learner.
 
 - **2026-10-22** A person can now answer the baby's own questions (`baby tutor`): it shows each question, why it asks and what it would say now; you type the answer. It is skeptical of you the way it is of any source: an answer that contradicts a rule it has good evidence for is held until you repeat it (a different second answer leaves it unsettled, Enter keeps its rule), and `a question => the answer` teaches it something of your own, filed where a program reproduces the answer. Until now only simulated and scripted teachers had answered it. Honest limit: no real person has yet used it beyond me piping in a few answers.
 
+- **2026-10-22** Cost, measured: building the baby on a real-text corpus took 111 s and I had said the program search was the reason; timing each mechanism showed the program search takes one second and the rule mechanism, which fits a weight to every word and so scales with the cube of the vocabulary, took ninety per cent. With more unknowns than lessons the same fit can be solved from the other side (a system the size of the lessons): the build now takes 13.7 s, the results are identical line for line, and every honesty battery reads as before. A first attempt on the part I had wrongly blamed changed nothing. Light matters here, and being wrong about where the cost is cost an hour.
+
 ---
 
 ## More to come

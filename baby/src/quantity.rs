@@ -106,6 +106,9 @@ pub struct Quantity {
     pub op: HashMap<String, [f32; 3]>,
 }
 
+/// The size (3 x the number of words) from which a ridge fit with more unknowns than twice its lessons is solved in its dual form.
+const DUAL_FROM_DIM: usize = 600;
+
 const SCALE: f32 = 10.0;
 
 impl Quantity {
@@ -174,11 +177,100 @@ impl Quantity {
         q
     }
 
+    /// The same ridge fit, solved in its dual form: with X the lessons' feature rows (3 numbers per word of the lesson) and L the diagonal of penalties,
+    /// theta = L^-1 X^T (I + X L^-1 X^T)^-1 y, which needs a system of the number of lessons, not of words x 3 (Woodbury identity: the same solution as
+    /// `(X^T X + L) theta = X^T y`, to rounding). Used when the vocabulary is large and the lessons few.
+    fn fit_ridge_dual(mut q: Quantity, data: &[([f32; 2], Vec<String>, f32)], words: &[String], index: &HashMap<&str, usize>, ridge: &dyn Fn(&str) -> f64) -> (Quantity, u64) {
+        let n = data.len();
+        let penalty: Vec<f64> = words.iter().map(|w| 1e-6 + ridge(w)).collect();
+        // rows[i]: the (feature index, value) entries of lesson i; by_feature[k]: the lessons that use feature k and with what value
+        let mut by_feature: HashMap<usize, Vec<(usize, f64)>> = HashMap::new();
+        let mut y = vec![0.0f64; n];
+        for (i, (nums, rest, target)) in data.iter().enumerate() {
+            y[i] = *target as f64 / SCALE as f64;
+            let f = [nums[0] as f64 / SCALE as f64, nums[1] as f64 / SCALE as f64, 1.0];
+            let mut row: HashMap<usize, f64> = HashMap::new();
+            for w in rest {
+                let at = 3 * index[w.as_str()];
+                for j in 0..3 {
+                    *row.entry(at + j).or_insert(0.0) += f[j];
+                }
+            }
+            for (k, v) in row {
+                if v != 0.0 {
+                    by_feature.entry(k).or_default().push((i, v));
+                }
+            }
+        }
+        // K = I + X L^-1 X^T
+        let mut k = vec![vec![0.0f64; n]; n];
+        for i in 0..n {
+            k[i][i] = 1.0;
+        }
+        let mut ops = 0u64;
+        for (feature, rows) in &by_feature {
+            let inv = 1.0 / penalty[feature / 3];
+            for (a, va) in rows {
+                for (b, vb) in rows {
+                    k[*a][*b] += va * vb * inv;
+                }
+            }
+            ops += (rows.len() * rows.len()) as u64;
+        }
+        // solve K alpha = y (symmetric positive definite: Gaussian elimination)
+        let mut alpha = y.clone();
+        for col in 0..n {
+            let pivot = (col..n).max_by(|&x, &z| k[x][col].abs().partial_cmp(&k[z][col].abs()).unwrap()).unwrap_or(col);
+            k.swap(col, pivot);
+            alpha.swap(col, pivot);
+            let p = k[col][col];
+            if p.abs() < 1e-12 {
+                continue;
+            }
+            for r in col + 1..n {
+                let factor = k[r][col] / p;
+                if factor == 0.0 {
+                    continue;
+                }
+                for c in col..n {
+                    k[r][c] -= factor * k[col][c];
+                }
+                alpha[r] -= factor * alpha[col];
+                ops += (n - col) as u64 + 1;
+            }
+        }
+        for r in (0..n).rev() {
+            let mut s = alpha[r];
+            for c in r + 1..n {
+                s -= k[r][c] * alpha[c];
+            }
+            alpha[r] = if k[r][r].abs() < 1e-12 { 0.0 } else { s / k[r][r] };
+        }
+        // theta_k = (1 / L_k) * sum_i x_ik alpha_i
+        let mut theta = vec![0.0f64; 3 * words.len()];
+        for (feature, rows) in &by_feature {
+            let mut t = 0.0;
+            for (i, v) in rows {
+                t += v * alpha[*i];
+            }
+            theta[*feature] = t / penalty[feature / 3];
+        }
+        for (wi, w) in words.iter().enumerate() {
+            q.op.insert(w.clone(), [theta[3 * wi] as f32, theta[3 * wi + 1] as f32, theta[3 * wi + 2] as f32]);
+        }
+        (q, ops)
+    }
+
     /// Fit the same rule by solving it exactly instead of nudging it thousands of times. The model is linear in the operator weights,
     /// so the best fit is the solution of one small system of equations (ridge regression); no learning rate, no number of passes,
     /// and the same answer every time. `ridge(word)` is how hard to pull a word's weights towards zero (common filler words are
     /// poor suspects). Returns the rule and the arithmetic operations spent.
     pub fn fit_ridge(train: &[Example], line: NumberLine, ridge: &dyn Fn(&str) -> f64) -> (Quantity, u64) {
+        Quantity::fit_ridge_mode(train, line, ridge, None)
+    }
+
+    /// `fit_ridge`, with the solving form forced (for the test that they agree): Some(true) the dual, Some(false) the primal, None as `fit_ridge` chooses.
+    fn fit_ridge_mode(train: &[Example], line: NumberLine, ridge: &dyn Fn(&str) -> f64, force_dual: Option<bool>) -> (Quantity, u64) {
         let mut q = Quantity { line, op: HashMap::new() };
         let mut data: Vec<([f32; 2], Vec<String>, f32)> = Vec::new();
         for e in train {
@@ -191,6 +283,10 @@ impl Quantity {
         words.dedup();
         let index: HashMap<&str, usize> = words.iter().enumerate().map(|(i, w)| (w.as_str(), i)).collect();
         let dim = 3 * words.len();
+        // Many more unknowns than lessons (a vocabulary of story words): solve the equivalent system the size of the number of lessons instead.
+        if force_dual.unwrap_or(dim >= DUAL_FROM_DIM && dim > 2 * data.len()) {
+            return Quantity::fit_ridge_dual(q, &data, &words, &index, ridge);
+        }
         let mut a = vec![vec![0.0f64; dim]; dim];
         let mut b = vec![0.0f64; dim];
         let mut ops = 0u64;
@@ -387,6 +483,44 @@ impl Quantity {
 
     pub fn operator(&self, word: &str) -> Option<[f32; 3]> {
         self.op.get(word).copied()
+    }
+}
+
+#[cfg(test)]
+mod dual_tests {
+    use super::*;
+    use crate::data::{Example, Family};
+
+    #[test]
+    fn the_dual_form_of_the_ridge_fit_gives_the_same_rule_as_the_primal_form() {
+        // 60 lessons, each with a few of 250 distinct story words, answer = first + second plus a word-dependent shift for a handful of words
+        let line = NumberLine::from_counting(&counting_lessons());
+        let mut train = Vec::new();
+        let mut state = 12345u64;
+        let mut next = |m: u64| {
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            (state >> 33) % m
+        };
+        for i in 0..60usize {
+            let (a, b) = (next(6) as usize, next(5) as usize);
+            let w1 = format!("story{}", next(250));
+            let w2 = format!("tale{}", next(250));
+            let op = if i % 2 == 0 { "plus" } else { "added" };
+            let query = format!("{w1} {op} {} {w2} {}", crate::data::NUM[a], crate::data::NUM[b]);
+            train.push(Example { family: Family::Color, template: i % 4, query, answer: crate::data::NUM[(a + b).min(10)].to_string() });
+        }
+        let ridge = |w: &str| if w.starts_with("story") || w.starts_with("tale") { 5.0 } else { 0.0 };
+        let (primal, _) = Quantity::fit_ridge_mode(&train, NumberLine::from_counting(&counting_lessons()), &ridge, Some(false));
+        let (dual, _) = Quantity::fit_ridge_mode(&train, line, &ridge, Some(true));
+        assert_eq!(primal.op.len(), dual.op.len());
+        let mut worst = 0.0f32;
+        for (w, p) in &primal.op {
+            let d = dual.op.get(w).expect("same words");
+            for k in 0..3 {
+                worst = worst.max((p[k] - d[k]).abs());
+            }
+        }
+        assert!(worst < 1e-3, "the two forms must agree to rounding, worst difference {worst}");
     }
 }
 

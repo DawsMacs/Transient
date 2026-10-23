@@ -333,6 +333,17 @@ fn signature(vals: &[f32]) -> Vec<i32> {
     vals.iter().map(|v| (v * 100.0).round() as i32).collect()
 }
 
+/// A 64-bit fingerprint of `signature(vals)` without building it (FNV-1a over the same rounded integers): two expressions that behave alike on the lessons
+/// get the same one. The search asks this of every candidate it makes, and nearly all are duplicates that are thrown away.
+fn fingerprint(vals: &[f32]) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for v in vals {
+        h ^= ((v * 100.0).round() as i32) as u32 as u64;
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    h ^ (vals.len() as u64)
+}
+
 pub struct ProgramRule {
     pub expr: Expr,
     /// Other explanations (of the smallest size) that fit every lesson but behave differently somewhere. The program answers only
@@ -621,7 +632,8 @@ impl ProgramRule {
             true
         };
 
-        let mut seen: HashSet<Vec<i32>> = HashSet::new();
+        let mut seen: HashSet<u64> = HashSet::new();
+        let mut scratch: Vec<f32> = Vec::with_capacity(points.len());
         let mut levels: Vec<Vec<Cand>> = (0..=MAX_SIZE).map(|_| Vec::new()).collect();
         let mut terminals = vec![
             Cand { expr: Expr::A, vals: points.iter().map(|p| p.0).collect() },
@@ -645,7 +657,7 @@ impl ProgramRule {
                     return (first, behaviours(&hit_exprs), hit_exprs);
                 }
             }
-            if seen.insert(signature(&c.vals)) {
+            if seen.insert(fingerprint(&c.vals)) {
                 levels[1].push(c);
             }
         }
@@ -656,8 +668,9 @@ impl ProgramRule {
             let mut made: Vec<Cand> = Vec::new();
             // Half of a smaller expression.
             for c in &levels[size - 1] {
-                let vals: Vec<f32> = c.vals.iter().map(|v| v / 2.0).collect();
-                if hits(&vals) {
+                scratch.clear();
+                scratch.extend(c.vals.iter().map(|v| v / 2.0));
+                if hits(&scratch) {
                     hits_n += 1;
                     hit_exprs.push(Expr::Half(Box::new(c.expr.clone())));
                     if first.is_none() {
@@ -667,8 +680,8 @@ impl ProgramRule {
                         return (first, behaviours(&hit_exprs), hit_exprs);
                     }
                 }
-                if seen.insert(signature(&vals)) {
-                    made.push(Cand { expr: Expr::Half(Box::new(c.expr.clone())), vals });
+                if seen.insert(fingerprint(&scratch)) {
+                    made.push(Cand { expr: Expr::Half(Box::new(c.expr.clone())), vals: scratch.clone() });
                 }
             }
             // Two smaller expressions joined by an operation.
@@ -684,11 +697,12 @@ impl ProgramRule {
                             if work > WORK_BUDGET {
                                 return (first, behaviours(&hit_exprs), hit_exprs);
                             }
-                            let vals: Vec<f32> = l.vals.iter().zip(&r.vals).map(|(x, y)| apply(op, *x, *y)).collect();
-                            if vals.iter().any(|v| !v.is_finite()) {
+                            scratch.clear();
+                            scratch.extend(l.vals.iter().zip(&r.vals).map(|(x, y)| apply(op, *x, *y)));
+                            if scratch.iter().any(|v| !v.is_finite()) {
                                 continue;
                             }
-                            if hits(&vals) {
+                            if hits(&scratch) {
                                 hits_n += 1;
                                 hit_exprs.push(Expr::Bin(op, Box::new(l.expr.clone()), Box::new(r.expr.clone())));
                                 if first.is_none() {
@@ -699,8 +713,8 @@ impl ProgramRule {
                                     return (first, behaviours(&hit_exprs), hit_exprs);
                                 }
                             }
-                            if made.len() < CAP_PER_LEVEL && seen.insert(signature(&vals)) {
-                                made.push(Cand { expr: Expr::Bin(op, Box::new(l.expr.clone()), Box::new(r.expr.clone())), vals });
+                            if made.len() < CAP_PER_LEVEL && seen.insert(fingerprint(&scratch)) {
+                                made.push(Cand { expr: Expr::Bin(op, Box::new(l.expr.clone()), Box::new(r.expr.clone())), vals: scratch.clone() });
                             }
                         }
                     }
@@ -717,16 +731,17 @@ impl ProgramRule {
                             if work > WORK_BUDGET {
                                 return (first, behaviours(&hit_exprs), hit_exprs);
                             }
-                            let vals: Vec<f32> = if f.arity == 1 {
-                                l.vals.iter().map(|x| f.expr.eval(*x, 0.0)).collect()
+                            scratch.clear();
+                            if f.arity == 1 {
+                                scratch.extend(l.vals.iter().map(|x| f.expr.eval(*x, 0.0)));
                             } else {
-                                l.vals.iter().zip(&r.vals).map(|(x, y)| f.expr.eval(*x, *y)).collect()
-                            };
-                            if vals.iter().any(|v| !v.is_finite()) {
+                                scratch.extend(l.vals.iter().zip(&r.vals).map(|(x, y)| f.expr.eval(*x, *y)));
+                            }
+                            if scratch.iter().any(|v| !v.is_finite()) {
                                 continue;
                             }
                             let expr = f.expr.subst(&l.expr, &r.expr);
-                            if hits(&vals) {
+                            if hits(&scratch) {
                                 hits_n += 1;
                                 hit_exprs.push(expr.clone());
                                 if first.is_none() {
@@ -736,8 +751,8 @@ impl ProgramRule {
                                     return (first, behaviours(&hit_exprs), hit_exprs);
                                 }
                             }
-                            if made.len() < CAP_PER_LEVEL && seen.insert(signature(&vals)) {
-                                made.push(Cand { expr, vals });
+                            if made.len() < CAP_PER_LEVEL && seen.insert(fingerprint(&scratch)) {
+                                made.push(Cand { expr, vals: scratch.clone() });
                             }
                         }
                     }
