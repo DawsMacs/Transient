@@ -495,6 +495,10 @@ fn cmd_bridge(a: &Args) {
     let seed: u64 = a.get("seed", 1);
     let (train, test) = bridge::split(&kept, how, a.get("test", 0.3f32), seed);
     println!("units: {:?}, split: {:?}, seed {seed}\n", units, how);
+    if a.flag("online") {
+        bridge::run_online(&train, &test, seed, a.get("window", 40usize));
+        return;
+    }
     if a.flag("select") {
         let r = bridge::run_select(&train, &test, seed);
         bridge::print_select(&r);

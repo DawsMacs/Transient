@@ -43,6 +43,28 @@ cargo test --offline                 # 61 tests, including numerical checks of t
 ./target/release/baby energy         # what one question and one learning step cost, counted
 ```
 
+## Being told the truth: learning from a stream of corrections (2026-10-22; Vision Entry 9: getting better so it makes fewer mistakes)
+
+**The idea.** When the baby is told the true answer to a question it guessed at, the lesson should go where it belongs and fix what made it guess wrongly. The old `learn` files it in the unit the question already resembles, which is the unit that was wrong. `School::place_told` does what the selector's labels already did: it looks for the **one unit and one choice of numbers whose program turns those numbers into the told answer**, and files the question there, cut down to those numbers; `School::learn_told` takes the lesson in only then. Every 20 placed lessons it learns the selector (from the examples it was taught plus the pairs it has now been told) and the routing corrections again. A guess-only unit is not re-fitted for every lesson (its tolerant program search costs seconds); it takes the lesson into what it remembers and how questions are routed at once and looks at its program again every 25 lessons (`GUESSER_REFIT_EVERY`, only on this path).
+
+**Measured as a stream** (`baby bridge ... --online`, flag last): after the usual two-step teaching, the held-out questions arrive in a shuffled order; for each one the baby is asked, the guess is scored, and then it is told the answer and learns. The static column asks the same questions in the same order with nothing learned.
+
+**A negative result first, and its cause.** My first version filed *every* told answer, wherever the question routed: nothing improved (guesses right 47.5 -> 47.2 %, 43.7 -> 38.1 %, 46.3 -> 39.2 % over the stream on SVAMP blocks) and it got **worse late in the stream** (37.5 -> 15 % in the last windows). Cause: only 49-58 % of SVAMP's answers are reproduced by any program (the rest are the questions it gets wrong or cannot cut down), and filing those as lessons into a unit whose program cannot explain them drags its explained share under 80 %, so the unit loses its program and falls back to memory. A lesson a unit's program cannot explain is not a lesson for that unit. Hence "place it or do not take it in".
+
+**With placement** (5 streams, 0 answers stated as fact wrong in any of them):
+
+| stream | guesses right: static -> learning | routed to own kind: static -> learning | answers it could place | placed into the file's real kind |
+|---|---|---|---|---|
+| SVAMP blocks (1) | 47.5 -> 47.8 | 80.6 -> 80.2 | 68.8 % | 97.3 % |
+| SVAMP blocks (2) | 43.7 -> 45.2 | 74.9 -> 75.5 | 79.3 % | 93.4 % |
+| SVAMP blocks (3) | 46.3 -> 47.5 | 77.5 -> 76.9 | 72.8 % | 94.9 % |
+| SVAMP random (1) | 41.9 -> 42.6 | 76.7 -> **80.7** | 68.6 % | 93.6 % |
+| ASDiv random (1) | 56.7 -> **59.2** | 76.5 -> 78.6 | 90.3 % | 99.1 % |
+
+The collapse is gone and the direction is right in all five, but the gain is **small** (about +0.3 to +2.5 points of guesses right over a stream of 240-324 questions). The placement inference is accurate (93-99 % name the real kind). Why small: the errors that remain are mostly wording (addition vs subtraction told by "how many more" vs "in all"), not a shortage of lessons, and the stream is only a few hundred questions. The window-by-window curves are noisy (+-5 points) and no single window should be read.
+
+**Honest limits.** Streams of 240-324 questions, one run each for SVAMP random and ASDiv, three for blocks; the gain is within the window noise for individual windows; placement needs a program (about 49-58 % of SVAMP's told answers cannot be placed and are simply not learned, which means the questions it cannot yet answer are the ones it learns least from); the teacher is the file (always right). Tests: `an_answer_it_is_told_is_filed_where_a_program_reproduces_it_and_one_it_cannot_place_is_not_taken_in` (128 tests).
+
 ## A second corpus: ASDiv, and what a re-count did to SVAMP's figures (2026-10-22)
 
 **The corpus.** ASDiv (Academia Sinica Diverse MWP dataset, 2,305 problems; `dataset/ASDiv.xml`, 947,401 bytes; **CC BY-NC 4.0**, so used for private evaluation only: downloaded with Daws's explicit yes to scratch space and **not committed**). The 960 problems of the four kinds SVAMP shares (Addition 281, Subtraction 331, Multiplication 194, Common-Division 154; its other 20 kinds (geometry, ratio, gcd...) are set aside unless `--kinds all`). Unlike SVAMP it writes many numbers as **words** ("Seven red apples and two green apples..."), which the baby reads. `baby bridge --asdiv ASDiv.xml ...` (`bridge::load_asdiv`, a minimal XML reader; the answer is the number before the unit "9 (apples)").

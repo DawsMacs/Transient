@@ -377,6 +377,8 @@ pub struct Oracle {
     pub guess_right: usize,
     pub guess_wrong: usize,
     pub refused: usize,
+    /// (the file's kind, the unit the question was routed to, how many)
+    pub confusion: Vec<(String, String, usize)>,
 }
 
 pub struct Report {
@@ -440,7 +442,7 @@ pub fn run(train: &[Problem], test: &[Problem], units: Units, seed: u64) -> Repo
         }
     };
     let school = School::from_items(&items, names, None, seed, true);
-    let mut oracle = Oracle { routed_right: 0, n: 0, right: 0, wrong: 0, guess_right: 0, guess_wrong: 0, refused: 0 };
+    let mut oracle = Oracle { routed_right: 0, n: 0, right: 0, wrong: 0, guess_right: 0, guess_wrong: 0, refused: 0, confusion: Vec::new() };
     if units == Units::ByKind {
         for p in test {
             let Some(r) = school.ask_as(&p.query, &p.kind) else { continue };
@@ -448,6 +450,10 @@ pub fn run(train: &[Problem], test: &[Problem], units: Units, seed: u64) -> Repo
             let (routed, _) = school.route(&p.query, &mut crate::ledger::Ledger::default());
             if school.units[routed].name == p.kind {
                 oracle.routed_right += 1;
+            }
+            match oracle.confusion.iter_mut().find(|(k, r, _)| *k == p.kind && *r == school.units[routed].name) {
+                Some(c) => c.2 += 1,
+                None => oracle.confusion.push((p.kind.clone(), school.units[routed].name.clone(), 1)),
             }
             match (&r.answer, &r.guess) {
                 (Some(a), _) if *a == p.answer => oracle.right += 1,
@@ -582,7 +588,7 @@ pub fn run_select(train: &[Problem], test: &[Problem], seed: u64) -> SelectRepor
         if numbers_in_text(&p.query) > 2 {
             if let Some(pair) = used(p) {
                 rep.kept_right.1 += 1;
-                if school.focus(&p.query) == keep_only(&p.query, &pair, &line) {
+                if school.focus(&p.query) == crate::selector::keep_only(&p.query, &pair, &line) {
                     rep.kept_right.0 += 1;
                 }
             }
@@ -625,31 +631,64 @@ fn teach_selecting(train: &[Problem], seed: u64, line: &crate::quantity::NumberL
     let mut second = first.clone();
     let mut fact = first.len();
     for (p, pair) in &labelled {
-        second.push(item(fact, p, keep_only(&p.query, pair, line)));
+        second.push(item(fact, p, crate::selector::keep_only(&p.query, pair, line)));
         fact += 1;
     }
     let mut school = School::from_items(&second, names, None, seed, true);
-    school.set_selector(selector);
+    school.set_selector(selector, examples);
     (school, school_a, labelled.len())
 }
 
-/// The text (as the baby reads it) with every number blanked except those at the given positions among its numbers.
-fn keep_only(text: &str, keep: &[usize], line: &crate::quantity::NumberLine) -> String {
-    let tokens = crate::data::tokenize(text);
-    let mut k = 0usize;
-    tokens
-        .iter()
-        .map(|t| {
-            if line.value(t).is_some() {
-                let here = keep.contains(&k);
-                k += 1;
-                if here { t.clone() } else { crate::selector::BLANK.to_string() }
-            } else {
-                t.clone()
+/// The same questions, asked as a stream: first all of them with nothing learned (static), then again in the same order, each asked and then told its true
+/// answer, which the baby learns from where it belongs (`learn_told`). Reports guesses right and questions routed to their kind per window of the stream, and
+/// how often "which unit's program reproduces this answer" names the unit of the file's real kind.
+pub fn run_online(train: &[Problem], test: &[Problem], seed: u64, window: usize) {
+    use crate::school::School;
+    let line = crate::quantity::NumberLine::from_counting(&crate::quantity::counting_lessons());
+    let (mut school, _, _) = teach_selecting(train, seed, &line);
+    let mut order: Vec<usize> = (0..test.len()).collect();
+    Rng::new(seed ^ 0x0711E).shuffle(&mut order);
+    let stream: Vec<&Problem> = order.iter().map(|&i| &test[i]).collect();
+    let judge = |school: &School, p: &Problem| -> (bool, bool, bool) {
+        let r = school.ask(&p.query);
+        let right = match (&r.answer, &r.guess) {
+            (Some(a), _) => *a == p.answer,
+            (None, Some(g)) => g.answer == p.answer,
+            _ => false,
+        };
+        let fact_wrong = matches!(&r.answer, Some(a) if *a != p.answer);
+        let (routed, _) = school.route(&school.focus(&p.query), &mut crate::ledger::Ledger::default());
+        (right, school.units[routed].name == p.kind, fact_wrong)
+    };
+    let static_run: Vec<(bool, bool, bool)> = stream.iter().map(|p| judge(&school, p)).collect();
+    let mut online: Vec<(bool, bool, bool)> = Vec::new();
+    let (mut assigned, mut assigned_right, mut facts_wrong) = (0usize, 0usize, 0usize);
+    for p in &stream {
+        let j = judge(&school, p);
+        if j.2 {
+            facts_wrong += 1;
+        }
+        online.push(j);
+        if let Some((u, _)) = school.place_told(&p.query, &p.answer) {
+            assigned += 1;
+            if school.units[u].name == p.kind {
+                assigned_right += 1;
             }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
+        }
+        let _ = school.learn_told(&p.query, &p.answer);
+    }
+    let pct = |v: &[(bool, bool, bool)], f: &dyn Fn(&(bool, bool, bool)) -> bool| 100.0 * v.iter().filter(|x| f(x)).count() as f64 / v.len().max(1) as f64;
+    println!("{} questions as a stream; after each one is answered the baby is told the true answer\n", stream.len());
+    println!("  {:<12} {:>26} {:>26}", "window", "guess right: static -> learning", "routed to own kind: static -> learning");
+    let mut i = 0;
+    while i < stream.len() {
+        let j = (i + window).min(stream.len());
+        println!("  {:>4}-{:<7} {:>12.1}% -> {:>5.1}%      {:>16.1}% -> {:>5.1}%", i + 1, j, pct(&static_run[i..j], &|x| x.0), pct(&online[i..j], &|x| x.0), pct(&static_run[i..j], &|x| x.1), pct(&online[i..j], &|x| x.1));
+        i = j;
+    }
+    println!("  {:<12} {:>12.1}% -> {:>5.1}%      {:>16.1}% -> {:>5.1}%", "all", pct(&static_run, &|x| x.0), pct(&online, &|x| x.0), pct(&static_run, &|x| x.1), pct(&online, &|x| x.1));
+    println!("\nof the {} answers it was told, it could place the answer (one unit, one choice of numbers whose program reproduces it) in {} ({:.1}%), and that unit was the file's real kind in {} of them ({:.1}%); only those were learned", stream.len(), assigned, 100.0 * assigned as f64 / stream.len().max(1) as f64, assigned_right, 100.0 * assigned_right as f64 / assigned.max(1) as f64);
+    println!("answers stated as fact that were WRONG during the stream: {facts_wrong}");
 }
 
 pub fn print_select(r: &SelectReport) {
@@ -708,6 +747,14 @@ pub fn print(report: &Report, total: usize) {
             "\nIF IT WERE TOLD EACH QUESTION'S KIND (the oracle: isolates the way of learning from recognising the kind), {} questions: right as fact {:.1}%, WRONG as fact {:.1}%, guess right {:.1}%, guess wrong {:.1}%, nothing {:.1}%\nrouting alone: {:.1}% of the questions went to the unit of their own kind",
             o.n, p(o.right), p(o.wrong), p(o.guess_right), p(o.guess_wrong), p(o.refused), p(o.routed_right)
         );
+    }
+    if !report.oracle.confusion.is_empty() {
+        println!("\nwhere questions went (the file's kind -> the unit it was routed to):");
+        let mut rows = report.oracle.confusion.clone();
+        rows.sort_by(|a, b| a.0.cmp(&b.0).then(b.2.cmp(&a.2)));
+        for (kind, routed, n) in rows {
+            println!("    {kind:<16} -> {routed:<16} {n:>4}{}", if kind == routed { "" } else { "   (confused)" });
+        }
     }
     println!("\nwhy it refused:");
     for (why, n) in &report.refusals {

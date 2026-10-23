@@ -212,6 +212,25 @@ pub fn used_pair(text: &str, answer: f32, line: &NumberLine, rule: &dyn Fn(f32, 
     (found.len() == 1).then(|| vec![found[0].0, found[0].1])
 }
 
+/// The text (as the baby reads it) with every number blanked except those at the given positions among its numbers.
+pub fn keep_only(text: &str, keep: &[usize], line: &crate::quantity::NumberLine) -> String {
+    let tokens = tokenize(text);
+    let mut k = 0usize;
+    tokens
+        .iter()
+        .map(|t| {
+            if line.value(t).is_some() {
+                let here = keep.contains(&k);
+                k += 1;
+                if here { t.clone() } else { BLANK.to_string() }
+            } else {
+                t.clone()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -338,6 +338,10 @@ fn routing_features(q: &str, line: &NumberLine) -> Vec<String> {
 
 const ROUTE_TAIL: usize = 8;
 const ROUTE_FOLDS: usize = 5;
+/// How many lessons a unit that only guesses takes in between looking again at its program.
+const GUESSER_REFIT_EVERY: usize = 25;
+/// After this many lessons it was told, the routing corrections are learned again.
+const ROUTE_RETRAIN_EVERY: usize = 20;
 /// Passes over its own lessons when learning the routing corrections (`Routing::refine`).
 const ROUTE_EPOCHS: usize = 12;
 
@@ -384,6 +388,12 @@ pub struct School {
     /// What its stated hit rates are multiplied by after it has checked itself against answers it was given and not taught from (`calibrate_guesses`): for a question
     /// it read as it was written, and for one it had to cut down to the numbers that matter. 1 until it has checked.
     guess_scale: [f32; 2],
+    /// Lessons taken in by `learn_told` since the routing corrections were last learned.
+    told_since_retrain: usize,
+    /// Set while a lesson that was told is being taken in (`learn_told`): a unit that only guesses then is not re-fitted for every lesson.
+    cheap_guessers: bool,
+    /// What the selector was taught from (text, positions of the numbers used) and what it has been told since, so that it can be taught again.
+    selector_examples: Vec<(String, Vec<usize>)>,
     /// For each unit, of the held-back lessons that were routed to it, the share that really belonged there (measured only when some unit is a
     /// partial program, whose guesses would otherwise state a rate that ignores how often the question is sent to the wrong unit).
     route_precision: Vec<f32>,
@@ -583,7 +593,7 @@ impl School {
         weights.lib = library;
         let routing = Routing::build(&units, &line);
         let library_seen = weights.lib.to_lines();
-        let mut school = School { units, weights, routing, line, route_floor: f32::NEG_INFINITY, route_base: f32::NEG_INFINITY, route_ratio: 0.0, calibrated_lessons: 0, seed, library_seen, bar, careful: true, skeptical: true, disputed: Vec::new(), guess_record: [(0, 0); 5], repair_failed: Vec::new(), selector: None, guess_scale: [1.0, 1.0], route_precision: Vec::new(), pen: Vec::new() };
+        let mut school = School { units, weights, routing, line, route_floor: f32::NEG_INFINITY, route_base: f32::NEG_INFINITY, route_ratio: 0.0, calibrated_lessons: 0, seed, library_seen, bar, careful: true, skeptical: true, disputed: Vec::new(), guess_record: [(0, 0); 5], repair_failed: Vec::new(), selector: None, guess_scale: [1.0, 1.0], told_since_retrain: 0, cheap_guessers: false, selector_examples: Vec::new(), route_precision: Vec::new(), pen: Vec::new() };
         // How decisive must a question be to count as a recognisable kind? Learned from rewordings of lessons it was taught.
         let own: Vec<&Item> = train.iter().collect();
         let (queries, safety): (Vec<&str>, f32) = match calibration {
@@ -1009,6 +1019,88 @@ impl School {
     }
 
     /// Give the baby a way to tell which numbers of a question matter (see `selector`).
+    /// Where does a question and its answer belong? The unit whose program turns some numbers of the question into this answer, and which numbers (their
+    /// positions among the question's numbers). Only when that is unambiguous: one unit and one choice of numbers, or, if several fit, the one the selector
+    /// would have chosen. None if no program reproduces the answer from any numbers of the question, or the choice is not clear.
+    pub fn place_told(&self, query: &str, answer: &str) -> Option<(usize, Vec<usize>)> {
+        let truth = self.line.value(answer)?;
+        let tokens = tokenize(query);
+        let numbers: Vec<f32> = tokens.iter().filter_map(|t| self.line.value(t)).collect();
+        let mut fits: Vec<(usize, Vec<usize>)> = Vec::new();
+        for (u, unit) in self.units.iter().enumerate() {
+            let Fitted::Program(Some(p)) = &unit.state else { continue };
+            match p.arity() {
+                1 => {
+                    for i in 0..numbers.len() {
+                        let v = p.expr.eval(numbers[i], 0.0);
+                        if v.is_finite() && (v - truth).abs() < 0.01 {
+                            fits.push((u, vec![i]));
+                        }
+                    }
+                }
+                2 => {
+                    for i in 0..numbers.len() {
+                        for j in (i + 1)..numbers.len() {
+                            let v = p.expr.eval(numbers[i], numbers[j]);
+                            if v.is_finite() && (v - truth).abs() < 0.01 {
+                                fits.push((u, vec![i, j]));
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        match fits.len() {
+            0 => None,
+            1 => fits.pop(),
+            _ => {
+                // several: the choice the selector would have made, if it is among them
+                let chosen: Option<Vec<usize>> = self.selector.as_ref().filter(|_| numbers.len() > 2).map(|s| {
+                    let scores = s.scores(query, &self.line);
+                    let mut ranked: Vec<usize> = (0..scores.len()).collect();
+                    ranked.sort_by(|&a, &b| scores[b].partial_cmp(&scores[a]).unwrap_or(std::cmp::Ordering::Equal).then(b.cmp(&a)));
+                    let mut top: Vec<usize> = ranked.into_iter().take(2).collect();
+                    top.sort();
+                    top
+                });
+                let pick: Vec<&(usize, Vec<usize>)> = fits.iter().filter(|(_, pair)| Some(pair) == chosen.as_ref()).collect();
+                if pick.len() == 1 { Some(pick[0].clone()) } else { None }
+            }
+        }
+    }
+
+    /// Be told the answer to a question and learn from it where it belongs (`place_told`): the question, cut down to the numbers whose program reproduces
+    /// the answer, goes to that unit, and which numbers mattered goes to the selector. An answer that cannot be placed is not taken in (a lesson its unit
+    /// cannot explain would only weaken the program it is filed under): this returns an error saying so. Every `ROUTE_RETRAIN_EVERY` placed lessons the
+    /// routing corrections and the selector are learned again from everything it knows.
+    pub fn learn_told(&mut self, query: &str, answer: &str) -> Result<Learned, String> {
+        if let Some(bad) = unreadable_number(query) {
+            return Err(format!("I only read plain whole numbers, not '{bad}'"));
+        }
+        let Some((unit, pair)) = self.place_told(query, answer) else {
+            return Err("no kind of question I know turns the numbers of this one into that answer, or it is not clear which numbers: I did not take it in".into());
+        };
+        let name = self.units[unit].name.clone();
+        let focused = crate::selector::keep_only(query, &pair, &self.line);
+        self.cheap_guessers = true;
+        let learned = self.learn(&focused, answer, Some(&name));
+        self.cheap_guessers = false;
+        let learned = learned?;
+        if self.selector.is_some() {
+            self.selector_examples.push((query.to_string(), pair));
+        }
+        self.told_since_retrain += 1;
+        if self.told_since_retrain >= ROUTE_RETRAIN_EVERY {
+            self.told_since_retrain = 0;
+            if self.selector.is_some() {
+                self.selector = Some(crate::selector::Selector::train(&self.selector_examples, &self.line));
+            }
+            self.settle_route_precision();
+        }
+        Ok(learned)
+    }
+
     pub fn guess_scales(&self) -> [f32; 2] {
         self.guess_scale
     }
@@ -1017,8 +1109,9 @@ impl School {
         self.guess_scale = scale;
     }
 
-    pub fn set_selector(&mut self, selector: crate::selector::Selector) {
+    pub fn set_selector(&mut self, selector: crate::selector::Selector, examples: Vec<(String, Vec<usize>)>) {
         self.selector = Some(selector);
+        self.selector_examples = examples;
     }
 
     /// The question as the baby reads it: with a selector, a question holding more than two numbers keeps the two that matter and blanks the rest.
@@ -1865,7 +1958,14 @@ impl School {
         } else {
             false
         };
-        if !repaired_now {
+        // A unit that only guesses (its program fits most lessons, or is not reliable enough to state facts) costs seconds to refit, since the tolerant
+        // search is expensive: a lesson updates what it remembers and how questions are routed at once, and the program is looked at again every
+        // `GUESSER_REFIT_EVERY` lessons.
+        let guesser = self.cheap_guessers && matches!(&self.units[u].state, Fitted::Program(Some(p)) if p.partial.is_some());
+        if guesser && !repaired_now && self.units[u].facts() % GUESSER_REFIT_EVERY != 0 {
+            let items = self.units[u].lessons.clone();
+            self.units[u].remember = Remembered::from_items(&items);
+        } else if !repaired_now {
             if !self.refit_in_place(u) {
                 self.relearn_unit(u);
             }
@@ -2654,7 +2754,7 @@ impl School {
         weights.lib = library;
         let routing = Routing::build(&units, &line);
         let library_seen = weights.lib.to_lines();
-        let mut school = School { units, weights, routing, line, route_floor, route_base, route_ratio, calibrated_lessons: 0, seed, library_seen, bar, careful, skeptical: true, disputed, guess_record, repair_failed: Vec::new(), selector, guess_scale, route_precision: Vec::new(), pen };
+        let mut school = School { units, weights, routing, line, route_floor, route_base, route_ratio, calibrated_lessons: 0, seed, library_seen, bar, careful, skeptical: true, disputed, guess_record, repair_failed: Vec::new(), selector, guess_scale, told_since_retrain: 0, cheap_guessers: false, selector_examples: Vec::new(), route_precision: Vec::new(), pen };
         school.calibrated_lessons = school.total_lessons();
         school.settle_all_reach();
         Ok(school)
@@ -3181,7 +3281,7 @@ mod tests {
         let mut s = sums_school(|a, b| a + b);
         let l = s.number_line().clone();
         let ex: Vec<(String, Vec<usize>)> = (0..40usize).map(|i| (format!("what is {} zork {} and also {} zorf", 1 + i % 9, 2 + i % 7, 3 + i % 5), vec![0, 1])).collect();
-        s.set_selector(crate::selector::Selector::train(&ex, &l));
+        s.set_selector(crate::selector::Selector::train(&ex, &l), ex.clone());
         s.set_guess_scales([0.8, 0.4]);
         let before = s.focus("what is 7 zork 5 and also 9 zorf");
         assert!(before.contains(crate::selector::BLANK), "{before}");
@@ -3218,6 +3318,26 @@ mod tests {
         assert!(p.partial.is_some(), "below the bar it is flagged as guess-only");
         assert!(r.answer.is_none(), "a provisional program never states a fact: {:?}", r.answer);
         assert_eq!(r.guess.as_ref().map(|g| g.answer.as_str()), Some("9"), "and it guesses the plurality's answer");
+    }
+
+    #[test]
+    fn an_answer_it_is_told_is_filed_where_a_program_reproduces_it_and_one_it_cannot_place_is_not_taken_in() {
+        let mut s = trained();
+        let times = s.units.iter().position(|u| u.name == "times").unwrap();
+        let before: usize = s.units.iter().map(|u| u.lessons.len()).sum();
+        // three numbers, only two matter: 2 x 3 = 6 and no other pair makes six by any unit's program
+        let (unit, pair) = s.place_told("what is two times three and also five", "six").expect("one unit, one pair");
+        assert_eq!((unit, pair), (times, vec![0, 1]));
+        // an answer no program makes from any of its numbers is not placed
+        assert!(s.place_told("what is two times three and also five", "four").is_none() || s.units[s.place_told("what is two times three and also five", "four").unwrap().0].name != "times");
+        let r = s.learn_told("what is two times three and also five", "seven");
+        assert!(r.is_err(), "nothing makes seven out of 2, 3 or 5 by a program it knows: it is not taken in");
+        assert_eq!(s.units.iter().map(|u| u.lessons.len()).sum::<usize>(), before, "and no lesson was added");
+        // placed: the question is filed cut down to the numbers that were used
+        s.learn_told("what is two times three and also five", "six").ok();
+        let filed: Vec<&str> = s.units[times].lessons.iter().map(|l| l.query.as_str()).filter(|q| q.contains(crate::selector::BLANK)).collect();
+        assert!(filed.iter().all(|q| q.contains("two") && q.contains("three")), "{filed:?}");
+        assert_eq!(s.units.iter().map(|u| u.lessons.len()).sum::<usize>() >= before, true);
     }
 
     #[test]
