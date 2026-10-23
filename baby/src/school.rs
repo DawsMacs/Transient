@@ -342,6 +342,37 @@ fn routing_features(q: &str, line: &NumberLine) -> Vec<String> {
 }
 
 const ROUTE_TAIL: usize = 8;
+static PROF: std::sync::Mutex<Vec<(&'static str, f64, u64)>> = std::sync::Mutex::new(Vec::new());
+
+/// Run `f`, and when BABY_PROF is set add its wall time to the stage called `name` (for finding where the energy of learning goes).
+fn timed<R>(name: &'static str, f: impl FnOnce() -> R) -> R {
+    if std::env::var("BABY_PROF").is_err() {
+        return f();
+    }
+    let t = std::time::Instant::now();
+    let r = f();
+    let dt = t.elapsed().as_secs_f64();
+    let mut p = PROF.lock().unwrap();
+    match p.iter_mut().find(|x| x.0 == name) {
+        Some(x) => {
+            x.1 += dt;
+            x.2 += 1;
+        }
+        None => p.push((name, dt, 1)),
+    }
+    r
+}
+
+/// (for diagnosis) the stages timed so far: name, seconds, calls.
+pub fn print_prof() {
+    let p = PROF.lock().unwrap();
+    let total: f64 = p.iter().map(|x| x.1).sum();
+    for (name, secs, calls) in p.iter() {
+        eprintln!("PROF {name:<28} {secs:>8.2} s  {calls:>6} calls  {:>6.1} ms each", 1000.0 * secs / *calls as f64);
+    }
+    eprintln!("PROF (stages overlap: a stage may contain others) total listed {total:.1} s");
+}
+
 const ROUTE_FOLDS: usize = 5;
 /// A settled exact unit takes in this many told lessons between thinking its way of learning through again from scratch.
 const SETTLED_RETHINK_EVERY: usize = 25;
@@ -1609,10 +1640,12 @@ impl School {
     }
 
     fn reconsider(&mut self, programs_too: bool) {
-        if !self.library_changed() {
+        let changed = timed("review:library_changed", || self.library_changed());
+        if !changed {
             return;
         }
         for _ in 0..3 {
+            timed("review:round", || ());
             let before = self.weights.lib.to_lines();
             for u in 0..self.units.len() {
                 let open = match &self.units[u].state {
@@ -1836,12 +1869,12 @@ impl School {
         mechanisms::set_reliable(self.bar);
         if self.skeptical {
             if let Some(u) = self.units.iter().position(|x| x.name == unit) {
-                if let Some(held) = self.weigh_against_rule(u, query, answer) {
+                if let Some(held) = timed("wondered:weigh_against_rule", || self.weigh_against_rule(u, query, answer)) {
                     return Ok(held);
                 }
             }
         }
-        let learned = self.learn(query, answer, Some(unit))?;
+        let learned = timed("wondered:learn", || self.learn(query, answer, Some(unit)))?;
         if let Some(u) = self.units.iter().position(|x| x.name == unit) {
             // An answer it asked for is kept even if it already predicted it: a confirmed check is what extends the range it may answer in.
             if !learned.surprised {
@@ -1856,18 +1889,24 @@ impl School {
             // Think the unit through again, now: unless it is a settled exact rule, selection or program (nothing to decide: a surprising answer was already
             // taken in by `learn`, a confirming one only extends where it may state facts), which looks again only every `SETTLED_RETHINK_EVERY` lessons.
             // (Re-deciding is a cross-validation of every mechanism: it was most of the energy of a stream of told answers, 1.8 J each.)
-            if !(self.settled_exact(u) && self.units[u].facts() % SETTLED_RETHINK_EVERY != 0) {
-                self.relearn_unit(u);
+            // (A unit that can only memorise, and is known not to be workable out, follows the rule `refit_in_place` has for it: look again every ten facts.)
+            let facts = self.units[u].facts();
+            let skip = (self.settled_exact(u) && facts % SETTLED_RETHINK_EVERY != 0) || (self.memorise_only_known(u) && facts % 10 != 0);
+            if !skip {
+                timed("wondered:relearn_unit", || self.relearn_unit(u));
             } else if !learned.surprised {
                 let items = self.units[u].lessons.clone();
                 self.units[u].remember = Remembered::from_items(&items);
+                if self.units[u].chosen == Mech::Remember {
+                    self.units[u].state = Fitted::Remember(self.units[u].remember.clone());
+                }
                 self.settle_reach(u);
             }
-            self.repair_regime(u);
+            timed("wondered:repair_regime", || self.repair_regime(u));
         }
         // a change in vocabulary can give a settled-looking program a rival: ask each one, cheaply, whether it is still the only explanation
-        self.review_programs();
-        self.maybe_recalibrate_route();
+        timed("wondered:review_programs", || self.review_programs());
+        timed("wondered:recalibrate_route", || self.maybe_recalibrate_route());
         Ok(learned)
     }
 
@@ -1878,6 +1917,12 @@ impl School {
             && unit.best_evidence() >= mechanisms::reliable()
             && !matches!(&unit.state, Fitted::Program(Some(p)) if p.partial.is_some() || !p.alts.is_empty())
             && !matches!(&unit.state, Fitted::Program(None) | Fitted::Remember(_) | Fitted::Network(_))
+    }
+
+    /// Is unit `u` one that only memorises, because nothing it tried reaches the bar (and it has enough facts to have been tested)?
+    fn memorise_only_known(&self, u: usize) -> bool {
+        let unit = &self.units[u];
+        unit.chosen == Mech::Remember && unit.best_evidence() < mechanisms::reliable() && unit.facts() >= 10 && matches!(unit.state, Fitted::Remember(_))
     }
 
     /// `learn_wondered` for a teacher who repeats themselves: if the answer is held for a second opinion, say it again (so a contradiction that
@@ -1991,10 +2036,10 @@ impl School {
             let items = self.units[u].lessons.clone();
             self.units[u].remember = Remembered::from_items(&items);
         } else if !repaired_now {
-            if !self.refit_in_place(u) {
-                self.relearn_unit(u);
+            if !timed("learn:refit_in_place", || self.refit_in_place(u)) {
+                timed("learn:relearn_unit", || self.relearn_unit(u));
             }
-            self.repair_regime(u);
+            timed("learn:repair_regime", || self.repair_regime(u));
         }
         let unit = &self.units[u];
         let learned = Learned { unit: unit.name.clone(), opened, corrected, was, now: unit.chosen, held_back: unit.best_evidence(), facts: unit.facts(), surprised: true, disputed: false };

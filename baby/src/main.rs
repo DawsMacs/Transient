@@ -1523,6 +1523,9 @@ fn cmd_exam(a: &Args) {
                     }
                     let verdict = exam::judge_stream(&adapt, &r);
                     exam::print_stream(&verdict);
+                    if std::env::var("BABY_PROF").is_ok() {
+                        school::print_prof();
+                    }
                     if let Some(e) = &energy {
                         let right = verdict.all.fact_right + verdict.all.guess_right;
                         exam::print_energy(e, adapt.lessons.len(), adapt.stream.len(), right, &meter);

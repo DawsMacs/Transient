@@ -370,6 +370,8 @@ description than one with a single fixed learner.
 
 - **2026-10-23** Beaten by 3.5 times the same day, by reading the code rather than guessing: for every answer it was told, the baby re-decided how to learn the whole unit (a cross-validation of every mechanism), twice when the answer surprised it. A rule it has already settled on now simply takes the lesson in and extends where it may speak, and thinks it through afresh every twenty-five lessons. The same stream costs 400 joules instead of 1,419 (half a joule a question instead of 1.8), with the same answers and nothing wrong stated as fact; the rule-changing kinds even came out a little better in the long careful battery (718 right of 720 against 704). That is still thousands of times what answering without learning costs, so there is more to find.
 
+- **2026-10-23** Timed the rest of that cost stage by stage rather than guessing: sixty per cent of what remained was the baby re-thinking, for every answer it was told, the units that can only memorise, which already had a rule for being looked at only every ten facts elsewhere. Following that rule, the same stream costs 268 joules (a third of a joule a question; it was 1,419 at the start of the day, 5.3 times more) with the same answers and nothing wrong stated as fact. What is left is mostly real work for real changes (a new building block means re-examining the open units). Honest limits: one run per figure, desktop counter, processor only.
+
 ---
 
 ## More to come
