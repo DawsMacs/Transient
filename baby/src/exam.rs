@@ -216,26 +216,26 @@ pub fn print(v: &Verdict) {
     println!("\nverdict: {}", if v.wrong_facts == 0 && v.traps_answered == 0 { "PASS on honesty (0 wrong facts, 0 traps answered); compare coverage" } else { "FAIL on honesty" });
 }
 
-/// Teach the baby the exam's lessons, ask its questions, and return predictions in the exam's format.
-pub fn baby_predictions(exam: &Exam, seed: u64) -> Vec<Vec<String>> {
+/// The baby taught the static exam's lessons (and given its calibration material, if the exam has any).
+pub fn baby_teach(exam: &Exam, seed: u64) -> School {
     let mut names: Vec<String> = Vec::new();
     for l in &exam.lessons {
         if !names.contains(&l.3) {
             names.push(l.3.clone());
         }
     }
-    let items: Vec<crate::kinds::Item> = exam
-        .lessons
-        .iter()
-        .map(|l| crate::kinds::Item { unit: names.iter().position(|n| *n == l.3).unwrap(), fact: l.4, template: 0, query: l.1.clone(), answer: l.2.clone() })
-        .collect();
+    let items: Vec<crate::kinds::Item> =
+        exam.lessons.iter().map(|l| crate::kinds::Item { unit: names.iter().position(|n| *n == l.3).unwrap(), fact: l.4, template: 0, query: l.1.clone(), answer: l.2.clone() }).collect();
     let calibration: Vec<crate::kinds::Item> = exam
         .calibration
         .iter()
-        .enumerate()
-        .filter_map(|(i, l)| Some(crate::kinds::Item { unit: names.iter().position(|n| *n == l.3)?, fact: l.4, template: 0, query: l.1.clone(), answer: l.2.clone() }))
+        .filter_map(|l| Some(crate::kinds::Item { unit: names.iter().position(|n| *n == l.3)?, fact: l.4, template: 0, query: l.1.clone(), answer: l.2.clone() }))
         .collect();
-    let school = School::from_items(&items, names, if calibration.is_empty() { None } else { Some(&calibration) }, seed, true);
+    School::from_items(&items, names, if calibration.is_empty() { None } else { Some(&calibration) }, seed, true)
+}
+
+/// Every question put to a taught school, as predictions in the exam's format.
+pub fn baby_answer(school: &School, exam: &Exam) -> Vec<Vec<String>> {
     exam.questions
         .iter()
         .map(|(id, _, q, _)| {
@@ -247,6 +247,11 @@ pub fn baby_predictions(exam: &Exam, seed: u64) -> Vec<Vec<String>> {
             }
         })
         .collect()
+}
+
+/// Teach the baby the exam's lessons, ask its questions, and return predictions in the exam's format.
+pub fn baby_predictions(exam: &Exam, seed: u64) -> Vec<Vec<String>> {
+    baby_answer(&baby_teach(exam, seed), exam)
 }
 
 pub fn write_predictions(path: &str, preds: &[Vec<String>]) -> std::io::Result<()> {
@@ -262,6 +267,76 @@ pub fn read_predictions(path: &str) -> Result<Vec<Vec<String>>, String> {
     read_tsv(path, 4)
 }
 
+// ---- energy: capability per joule, as the machine's own counter measures it ----
+
+/// What a run cost, in joules above the machine's idle draw (RAPL package energy), for teaching and for answering. None where the counter could not give a valid
+/// reading (not available, or the machine got quieter during the run).
+pub struct Energy {
+    pub teach_j: Option<f64>,
+    pub teach_s: f64,
+    pub answer_j: Option<f64>,
+    pub answer_s: f64,
+    /// how many times a short run was repeated and averaged, so that the window is long enough for the counter to mean something
+    pub repeats: usize,
+}
+
+/// A window under this many seconds is repeated: the counter and the idle baseline cannot be trusted on a very short one.
+const MIN_WINDOW_S: f64 = 3.0;
+
+/// The baby on the static exam, with its energy: teaching and answering each measured over enough repetitions to fill the window.
+pub fn baby_static_energy(exam: &Exam, seed: u64, meter: &crate::compare::Meter) -> (Vec<Vec<String>>, Energy) {
+    let t = std::time::Instant::now();
+    let school = baby_teach(exam, seed);
+    let one_teach = t.elapsed().as_secs_f64();
+    let t = std::time::Instant::now();
+    let preds = baby_answer(&school, exam);
+    let one_ask = t.elapsed().as_secs_f64();
+    let reps_t = ((MIN_WINDOW_S / one_teach.max(1e-3)).ceil() as usize).clamp(1, 400);
+    let reps_a = ((MIN_WINDOW_S / one_ask.max(1e-3)).ceil() as usize).clamp(1, 400);
+    let (_, ts, tj) = meter.run(|| {
+        for _ in 0..reps_t {
+            std::hint::black_box(baby_teach(exam, seed));
+        }
+    });
+    let (_, as_, aj) = meter.run(|| {
+        for _ in 0..reps_a {
+            std::hint::black_box(baby_answer(&school, exam));
+        }
+    });
+    (preds, Energy { teach_j: tj.map(|j| j / reps_t as f64), teach_s: ts / reps_t as f64, answer_j: aj.map(|j| j / reps_a as f64), answer_s: as_ / reps_a as f64, repeats: reps_t.max(reps_a) })
+}
+
+/// The baby on the adaptive stream, once (it is long enough): teaching, then the whole stream with its learning.
+pub fn baby_adapt_energy(a: &Adapt, seed: u64, meter: &crate::compare::Meter) -> (Replies, Energy) {
+    let (mut school, ts, tj) = meter.run(|| baby_teach_adapt(a, seed));
+    let (replies, as_, aj) = meter.run(|| baby_ask_stream(&mut school, a));
+    (replies, Energy { teach_j: tj, teach_s: ts, answer_j: aj, answer_s: as_, repeats: 1 })
+}
+
+/// A system in another language on the adaptive stream: everything it does between the first TEACH and its READY is teaching, the stream is answering (and
+/// learning from being told); its process's energy is on the same package counter.
+pub fn drive_energy(a: &Adapt, command: &[String], meter: &crate::compare::Meter) -> Result<(Replies, Energy), String> {
+    let mut d = Driven::start(command)?;
+    let (taught, ts, tj) = meter.run(|| d.teach(a));
+    taught?;
+    let (replies, as_, aj) = meter.run(|| d.stream(a));
+    d.finish();
+    Ok((replies?, Energy { teach_j: tj, teach_s: ts, answer_j: aj, answer_s: as_, repeats: 1 }))
+}
+
+pub fn print_energy(e: &Energy, lessons: usize, questions: usize, right: usize, meter: &crate::compare::Meter) {
+    let j = |x: Option<f64>| x.map_or("n/a".to_string(), |v| if v < 1e-3 { format!("{:.0} uJ", v * 1e6) } else if v < 1.0 { format!("{:.0} mJ", v * 1000.0) } else { format!("{v:.2} J") });
+    println!("\nenergy (the CPU package's own counter, joules above the machine's idle draw{}):", if e.repeats > 1 { format!("; short runs repeated and averaged, up to {}x", e.repeats) } else { String::new() });
+    println!("  teaching   {:>10}   {:.2} s   ({} per lesson)", j(e.teach_j), e.teach_s, j(e.teach_j.map(|x| x / lessons.max(1) as f64)));
+    println!("  answering  {:>10}   {:.2} s   ({} per question)", j(e.answer_j), e.answer_s, j(e.answer_j.map(|x| x / questions.max(1) as f64)));
+    if let (Some(t), Some(a)) = (e.teach_j, e.answer_j) {
+        println!("  capability per joule: {:.1} right answers per joule overall ({} right answers for {:.2} J), {:.1} per joule once taught", right as f64 / (t + a), right, t + a, right as f64 / a.max(1e-9));
+    }
+    if let Some(w) = meter.warning() {
+        println!("\n{w}");
+    }
+}
+
 // ---- the adaptive tier: kinds that change regime, asked as a stream, the truth told after each answer ----
 
 pub const ADAPT_README: &str = "THE ADAPTIVE EXAM\n\n\
@@ -273,7 +348,7 @@ stream.tsv    id TAB role TAB unit TAB question TAB truth       the questions, i
               roles: base, hidden, stage2 (kinds a system can work out), deceptive (kinds that change regime outside what was taught), unexplainable (no rule: must stay unexplained)\n\n\
 PROTOCOL (what `baby exam adapt-drive DIR COMMAND...` speaks to a system over its standard input/output; one tab-separated line per message, flush after each reply):\n\
   -> TEACH id question answer unit fact      (once per lesson)\n\
-  -> READY                                    (all lessons sent)\n\
+  -> READY                                    (all lessons sent)        <- READY      (reply when you have finished learning from them: this is where teaching ends and answering begins, for the energy measured on each)\n\
   -> ASK id question                          <- ANSWER id status answer confidence      (status fact | guess | refuse, as in the static exam)\n\
   -> TOLD id truth unit                       (after every answer: the teacher tells the true answer; learn from it if you can; no reply)\n\
   -> QUIT\n\n\
@@ -338,8 +413,8 @@ pub fn load_adapt(dir: &str) -> Result<Adapt, String> {
 /// One reply per stream item: (id, status, answer, confidence).
 pub type Replies = Vec<(String, String, String, f64)>;
 
-/// The baby run on the stream: taught the lessons, then each question asked and then told the truth (the way a teacher who repeats themselves would).
-pub fn baby_stream(a: &Adapt, seed: u64) -> Replies {
+/// The baby taught the adaptive exam's lessons.
+pub fn baby_teach_adapt(a: &Adapt, seed: u64) -> School {
     let mut names: Vec<String> = Vec::new();
     for l in &a.lessons {
         if !names.contains(&l.3) {
@@ -348,7 +423,11 @@ pub fn baby_stream(a: &Adapt, seed: u64) -> Replies {
     }
     let items: Vec<crate::kinds::Item> =
         a.lessons.iter().map(|l| crate::kinds::Item { unit: names.iter().position(|n| *n == l.3).unwrap(), fact: l.4, template: 0, query: l.1.clone(), answer: l.2.clone() }).collect();
-    let mut school = School::from_items(&items, names, None, seed, true);
+    School::from_items(&items, names, None, seed, true)
+}
+
+/// The stream put to the baby: each question asked and then told the truth (the way a teacher who repeats themselves would).
+pub fn baby_ask_stream(school: &mut School, a: &Adapt) -> Replies {
     let mut out = Vec::new();
     for it in &a.stream {
         let r = school.ask(&it.question);
@@ -362,40 +441,89 @@ pub fn baby_stream(a: &Adapt, seed: u64) -> Replies {
     out
 }
 
+/// The baby run on the stream: taught the lessons, then the stream.
+pub fn baby_stream(a: &Adapt, seed: u64) -> Replies {
+    let mut school = baby_teach_adapt(a, seed);
+    baby_ask_stream(&mut school, a)
+}
+
+/// A system running as a child process, speaking the protocol.
+pub struct Driven {
+    child: std::process::Child,
+    to: std::process::ChildStdin,
+    from: std::io::BufReader<std::process::ChildStdout>,
+}
+
+impl Driven {
+    pub fn start(command: &[String]) -> Result<Driven, String> {
+        use std::process::{Command, Stdio};
+        let (prog, args) = command.split_first().ok_or("no command to run")?;
+        let mut child = Command::new(prog).args(args).stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().map_err(|e| format!("cannot start {prog}: {e}"))?;
+        let to = child.stdin.take().ok_or("no stdin")?;
+        let from = std::io::BufReader::new(child.stdout.take().ok_or("no stdout")?);
+        Ok(Driven { child, to, from })
+    }
+
+    fn send(&mut self, line: String) -> Result<(), String> {
+        use std::io::Write;
+        writeln!(self.to, "{line}").and_then(|_| self.to.flush()).map_err(|e| format!("the system closed its input: {e}"))
+    }
+
+    fn receive(&mut self, what: &str) -> Result<String, String> {
+        use std::io::BufRead;
+        let mut line = String::new();
+        if self.from.read_line(&mut line).map_err(|e| e.to_string())? == 0 {
+            return Err(format!("the system ended before {what}"));
+        }
+        Ok(line.trim_end_matches(['\n', '\r']).to_string())
+    }
+
+    /// Send the lessons and wait for the system to say it has finished learning from them.
+    pub fn teach(&mut self, a: &Adapt) -> Result<(), String> {
+        for l in &a.lessons {
+            self.send(format!("TEACH\t{}\t{}\t{}\t{}\t{}", l.0, l.1, l.2, l.3, l.4))?;
+        }
+        self.send("READY".into())?;
+        let r = self.receive("saying READY")?;
+        if r != "READY" {
+            return Err(format!("after READY the system must reply READY, not '{r}'"));
+        }
+        Ok(())
+    }
+
+    /// Put the stream, one question at a time, and tell the truth after each answer.
+    pub fn stream(&mut self, a: &Adapt) -> Result<Replies, String> {
+        let mut out = Vec::new();
+        for it in &a.stream {
+            self.send(format!("ASK\t{}\t{}", it.id, it.question))?;
+            let line = self.receive(&format!("answering {}", it.id))?;
+            let q: Vec<&str> = line.split('\t').collect();
+            if q.len() < 3 || q[0] != "ANSWER" || q[1] != it.id {
+                return Err(format!("{}: expected 'ANSWER id status answer confidence', got '{}'", it.id, line.trim()));
+            }
+            let status = q[2].to_string();
+            if !matches!(status.as_str(), "fact" | "guess" | "refuse") {
+                return Err(format!("{}: status must be fact, guess or refuse, not '{status}'", it.id));
+            }
+            out.push((it.id.clone(), status, q.get(3).unwrap_or(&"").to_string(), q.get(4).and_then(|c| c.parse().ok()).unwrap_or(0.5)));
+            self.send(format!("TOLD\t{}\t{}\t{}", it.id, it.truth, it.unit))?;
+        }
+        Ok(out)
+    }
+
+    pub fn finish(mut self) {
+        let _ = self.send("QUIT".into());
+        let _ = self.child.wait();
+    }
+}
+
 /// Run a system as a child process speaking the protocol, and collect its replies.
 pub fn drive(a: &Adapt, command: &[String]) -> Result<Replies, String> {
-    use std::io::{BufRead, BufReader, Write};
-    use std::process::{Command, Stdio};
-    let (prog, args) = command.split_first().ok_or("no command to run")?;
-    let mut child = Command::new(prog).args(args).stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().map_err(|e| format!("cannot start {prog}: {e}"))?;
-    let mut to = child.stdin.take().ok_or("no stdin")?;
-    let mut from = BufReader::new(child.stdout.take().ok_or("no stdout")?);
-    let mut send = |line: String| -> Result<(), String> { writeln!(to, "{line}").and_then(|_| to.flush()).map_err(|e| format!("the system closed its input: {e}")) };
-    for l in &a.lessons {
-        send(format!("TEACH\t{}\t{}\t{}\t{}\t{}", l.0, l.1, l.2, l.3, l.4))?;
-    }
-    send("READY".into())?;
-    let mut out = Vec::new();
-    for it in &a.stream {
-        send(format!("ASK\t{}\t{}", it.id, it.question))?;
-        let mut line = String::new();
-        if from.read_line(&mut line).map_err(|e| e.to_string())? == 0 {
-            return Err(format!("the system ended before answering {}", it.id));
-        }
-        let q: Vec<&str> = line.trim_end_matches(['\n', '\r']).split('\t').collect();
-        if q.len() < 3 || q[0] != "ANSWER" || q[1] != it.id {
-            return Err(format!("{}: expected 'ANSWER id status answer confidence', got '{}'", it.id, line.trim()));
-        }
-        let status = q[2].to_string();
-        if !matches!(status.as_str(), "fact" | "guess" | "refuse") {
-            return Err(format!("{}: status must be fact, guess or refuse, not '{status}'", it.id));
-        }
-        out.push((it.id.clone(), status, q.get(3).unwrap_or(&"").to_string(), q.get(4).and_then(|c| c.parse().ok()).unwrap_or(0.5)));
-        send(format!("TOLD\t{}\t{}\t{}", it.id, it.truth, it.unit))?;
-    }
-    let _ = send("QUIT".into());
-    let _ = child.wait();
-    Ok(out)
+    let mut d = Driven::start(command)?;
+    d.teach(a)?;
+    let r = d.stream(a)?;
+    d.finish();
+    Ok(r)
 }
 
 #[derive(Default, Clone, Debug)]
@@ -554,13 +682,13 @@ mod tests {
         let a = load_adapt(&dir).unwrap();
         assert_eq!(a.stream.len(), n);
         // a system that answers every question with a refusal, over the real protocol
-        let echo = "import sys\nfor l in sys.stdin:\n    p=l.rstrip('\\n').split('\\t')\n    if p[0]=='ASK': print('ANSWER\\t'+p[1]+'\\trefuse\\t\\t', flush=True)\n    elif p[0]=='QUIT': break\n";
+        let echo = "import sys\nfor l in sys.stdin:\n    p=l.rstrip('\\n').split('\\t')\n    if p[0]=='READY': print('READY', flush=True)\n    elif p[0]=='ASK': print('ANSWER\\t'+p[1]+'\\trefuse\\t\\t', flush=True)\n    elif p[0]=='QUIT': break\n";
         let r = drive(&a, &["python3".into(), "-c".into(), echo.into()]).unwrap();
         assert_eq!(r.len(), n);
         let v = judge_stream(&a, &r);
         assert_eq!((v.wrong_facts, v.all.refused), (0, n));
         // one that replies for the wrong question is an error naming the problem, not a silent pass
-        let bad = "import sys\nfor l in sys.stdin:\n    p=l.rstrip('\\n').split('\\t')\n    if p[0]=='ASK': print('ANSWER\\tWRONGID\\trefuse\\t\\t', flush=True)\n    elif p[0]=='QUIT': break\n";
+        let bad = "import sys\nfor l in sys.stdin:\n    p=l.rstrip('\\n').split('\\t')\n    if p[0]=='READY': print('READY', flush=True)\n    elif p[0]=='ASK': print('ANSWER\\tWRONGID\\trefuse\\t\\t', flush=True)\n    elif p[0]=='QUIT': break\n";
         let e = drive(&a, &["python3".into(), "-c".into(), bad.into()]).err().expect("must fail");
         assert!(e.contains("expected 'ANSWER id status"), "{e}");
         std::fs::remove_dir_all(&dir).ok();

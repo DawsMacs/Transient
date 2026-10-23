@@ -366,6 +366,8 @@ description than one with a single fixed learner.
 
 - **2026-10-23** The exam learns to test learning: an adaptive tier gives a system a stream of questions about kinds that look like a simple rule and secretly change regime, and the exam itself runs the system as a child process over a small line protocol (teach, ask, answer, told), so any language can take part and no answer can be seen before it has been given. It is judged on wrong facts (none) and on how much better it does in the last third of the stream than in the first. The baby: no wrong facts in 787 questions, and on the rule-changing kinds right 90.6, then 93.8, then 100 per cent as it is told the truth; a lookup-only Python system stays at nothing. It also costs the baby seven minutes, because every told answer makes it think its unit through again, which is the first number a successor should beat.
 
+- **2026-10-23** Joules in the exam (Entry 7: capability per joule as the machine itself measures it). The exam now reports what teaching and what answering cost on the CPU's own counter, for the baby and for any system run through the pipe protocol. The baby teaches 2,520 lessons for 0.68 J and answers 4,832 questions for 0.28 J: lookup after learning is close to free, about 4,800 right answers per joule overall. But on the adaptive stream, learning from every told answer, it spent 1,419 J, 1.8 J a question, forty times what teaching everything cost, for half a right answer per joule. Adapting is where the baby's energy goes, and doing it without thinking the whole unit through again is the next thing to beat. Honest limits: one run each for the adaptive figures, desktop counter to about thirty per cent, only the processor package.
+
 ---
 
 ## More to come

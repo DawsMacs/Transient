@@ -18,6 +18,8 @@ for raw in sys.stdin:
     kind = parts[0]
     if kind == "TEACH" and len(parts) >= 4:
         memory[parts[2].strip().lower()] = parts[3]
+    elif kind == "READY":
+        print("READY", flush=True)
     elif kind == "ASK" and len(parts) >= 3:
         qid, question = parts[1], parts[2].strip().lower()
         questions[qid] = question

@@ -1498,10 +1498,22 @@ fn cmd_exam(a: &Args) {
                 eprintln!("{e}");
                 std::process::exit(1);
             });
-            let replies = if verb == "adapt-run" {
-                Ok(exam::baby_stream(&adapt, a.get("seed", 1u64)))
-            } else {
-                exam::drive(&adapt, &a.positional[3..].to_vec())
+            // joules by default where the counter is readable; EXAM_NO_JOULES=1 skips it (the command of adapt-drive comes last, so this is not a flag)
+            let meter = compare::Meter::new();
+            let measure = meter.available() && std::env::var("EXAM_NO_JOULES").is_err();
+            let mut energy: Option<exam::Energy> = None;
+            let replies = match (verb, measure) {
+                ("adapt-run", true) => {
+                    let (r, e) = exam::baby_adapt_energy(&adapt, a.get("seed", 1u64), &meter);
+                    energy = Some(e);
+                    Ok(r)
+                }
+                ("adapt-run", false) => Ok(exam::baby_stream(&adapt, a.get("seed", 1u64))),
+                (_, true) => exam::drive_energy(&adapt, &a.positional[3..].to_vec(), &meter).map(|(r, e)| {
+                    energy = Some(e);
+                    r
+                }),
+                (_, false) => exam::drive(&adapt, &a.positional[3..].to_vec()),
             };
             match replies {
                 Ok(r) => {
@@ -1509,7 +1521,12 @@ fn cmd_exam(a: &Args) {
                         let text: String = r.iter().map(|x| format!("{}\t{}\t{}\t{}\n", x.0, x.1, x.2, x.3)).collect();
                         let _ = std::fs::write(out, text);
                     }
-                    exam::print_stream(&exam::judge_stream(&adapt, &r))
+                    let verdict = exam::judge_stream(&adapt, &r);
+                    exam::print_stream(&verdict);
+                    if let Some(e) = &energy {
+                        let right = verdict.all.fact_right + verdict.all.guess_right;
+                        exam::print_energy(e, adapt.lessons.len(), adapt.stream.len(), right, &meter);
+                    }
                 }
                 Err(e) => {
                     eprintln!("{e}");
@@ -1520,12 +1537,25 @@ fn cmd_exam(a: &Args) {
         "run" => match exam::load(&dir) {
             Ok(e) => {
                 let seed: u64 = a.get("seed", 1);
-                let preds = exam::baby_predictions(&e, seed);
+                let meter = compare::Meter::new();
+                let measure = meter.available() && !a.flag("no-joules");
+                let (preds, energy) = if measure {
+                    let (p, en) = exam::baby_static_energy(&e, seed, &meter);
+                    (p, Some(en))
+                } else {
+                    (exam::baby_predictions(&e, seed), None)
+                };
                 if let Some(out) = a.opts.get("out") {
                     let _ = exam::write_predictions(out, &preds);
                 }
                 match exam::judge(&e, &preds) {
-                    Ok(v) => exam::print(&v),
+                    Ok(v) => {
+                        exam::print(&v);
+                        if let Some(en) = &energy {
+                            let right: usize = v.groups.iter().filter(|(g, _)| g.as_str() != "trap").map(|(_, r)| r.fact_right + r.guess_right).sum();
+                            exam::print_energy(en, e.lessons.len(), e.questions.len(), right, &meter);
+                        }
+                    }
                     Err(e) => eprintln!("{e}"),
                 }
             }
