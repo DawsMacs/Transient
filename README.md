@@ -13,7 +13,7 @@
 *adaptive learning*: a system that keeps learning while it is used, decides for itself *how* to learn each kind of thing, and is
 measured by what it costs (operations, memory, estimated joules) rather than by parameter count alone.
 
-The current artifact is `baby/`: about 17k lines of Rust, **no dependencies**, builds offline, 149 tests. It is a research prototype
+The current artifact is `baby/`: about 18k lines of Rust, **no dependencies**, builds offline, 150 tests. It is a research prototype
 evaluated mostly on a synthetic curriculum, with a first look at real word problems (SVAMP, ASDiv) and an entry exam that any
 other system can take. It is not a language model and makes no claim to be one yet.
 
@@ -82,7 +82,7 @@ The scorecard reports **WRONG separately from refused**: a refusal is an accepta
 Requires a stable Rust toolchain (edition 2021). No other dependencies, no network.
 
 ```bash
-cargo test --release --offline         # 149 tests (about 21 s)
+cargo test --release --offline         # 150 tests (about 15 s)
 cargo build --release --offline
 ./target/release/baby school           # teach 13 units (~4 s), print how each was learned and the scorecard
 ./target/release/baby ask "how far apart are two and nine"   # answers, and says how it knew
@@ -131,7 +131,11 @@ All under `baby/src/`.
 | `net.rs`, `model.rs`, `data.rs`, `know.rs`, `life.rs`, `curious.rs`, `rules.rs`, `rng.rs` | the earlier from-scratch network and its experiments, plumbing |
 | `main.rs` | the CLI (`baby <command>`) |
 | `tools/pytorch_baseline.py` | (outside the Rust build) a tuned PyTorch transformer trained and graded on the exported lessons, with measured energy |
+| `platform.rs` | what Transient asks the operating system (memory, energy availability, temporary files); says `n/a` where the system cannot answer |
+| `examples/mathprint.rs` | (an example, not part of the baby) a fingerprint and an accuracy audit of the platform's math library |
+| `golden/` | the answers pinned on the reference platform, and the shell scripts that check them (see below) |
 
+**Languages.** The system is Rust (about 97.6 % of the repository by size, with no dependencies). Python and shell are used for three narrow reasons, and none of them is part of what the baby is: **Python** (`tools/`, three small files) holds the *foreign systems* the entry exam must be able to judge: `exam_baseline.py` and `exam_adapt_baseline.py` are deliberately naive memorizers written in another language to show that the exam's plain files and line protocol work for any system, and `pytorch_baseline.py` is the tuned PyTorch comparison, which needs PyTorch and so cannot be Rust. **Shell** (`golden/check.sh`, `golden/check-wrong-teacher.sh`) is the glue that runs the same commands on every platform (Linux, macOS, Windows through Git Bash, the BSDs, WebAssembly) and compares their output with the pinned answers; it is shell because it only starts programs and compares files. The CI workflows are YAML, and the documents are Markdown.
 ## How results are judged
 
 - **WRONG is reported apart from refused.** Accuracy alone hides bluffing.

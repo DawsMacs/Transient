@@ -3300,7 +3300,7 @@ mod tests {
     #[test]
     fn a_unit_that_only_memorizes_is_not_re_decided_twice_for_one_told_answer() {
         // 29 lessons nothing can explain; the 30th is told through `learn_wondered`, which used to re-decide the unit again right after `learn` had just done so.
-        let answers = ["red", "blue", "green", "gold", "pink", "teal", "grey", "navy", "lime", "plum"];
+        let answers = ["red", "blue", "green", "gold", "pink", "teal", "gray", "navy", "lime", "plum"];
         let items: Vec<Item> = (0..29usize).map(|i| Item { unit: 0, fact: i, template: 0, query: format!("what is code {}", i + 1), answer: answers[(i * 7 + i / 3) % 10].to_string() }).collect();
         let mut a = School::from_items(&items, vec!["code".into()], None, 1, true);
         let mut b = School::from_items(&items, vec!["code".into()], None, 1, true);
