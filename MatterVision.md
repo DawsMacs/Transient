@@ -1,8 +1,8 @@
-# TransientVision
+# MatterVision
 
-**Internal document.** It records why Transient exists, what has been decided, and how each idea is meant to be tested. It is a working
+**Internal document.** It records why Matter exists, what has been decided, and how each idea is meant to be tested. It is a working
 document for Daws and the assistant, not a public page, and nothing on the public site should depend on it. The public record of the
-work is `README.md`, `docs/Direction.md` and `baby/README.md`; the state for resuming work is `TransientHandover.md`.
+work is `README.md`, `docs/Direction.md` and `baby/README.md`; the state for resuming work is `MatterHandover.md`.
 
 Started 2026-10-19. **Rewritten 2026-10-24 at Daws's request:** the wording was made practical and tied to what has been measured. Decisions, dates and
 entry numbers are unchanged (other files cite "Entry 7" and so on). Earlier labels coined for the architecture and for optimizing it were retired
@@ -32,9 +32,9 @@ not shown), **Measured** (a number from a run, with its caveat in `baby/README.m
 
 ## Entry 1 (2026-10-19): The founding hypothesis
 
-**Decision.** Transient pursues one hypothesis, for as long as it takes and whether or not it holds: **a large share of what it costs to run capable AI comes
+**Decision.** Matter pursues one hypothesis, for as long as it takes and whether or not it holds: **a large share of what it costs to run capable AI comes
 from inherited design choices and from software, not from physics, so a differently designed system could reach useful capability on ordinary hardware.**
-Daws is explicit that this is a hunch resting on judgment, not an established result. Most current research bets on smaller gains from scale. Transient goes the other way
+Daws is explicit that this is a hunch resting on judgment, not an established result. Most current research bets on smaller gains from scale. Matter goes the other way
 because the question is worth answering by measurement, and a negative answer redirects the work instead of ending it.
 
 **The reasoning behind the hunch (Daws's, restated).**
@@ -64,7 +64,7 @@ because the question is worth answering by measurement, and a negative answer re
 2. The gain comes mostly from **software and representation**, not new silicon.
 3. That design runs on **ordinary low-end hardware**: a phone, an old laptop.
 
-These are signals, not pass/fail gates: how far Transient's results sit from the current quality-per-joule frontier; whether independent small designs keep finding large efficiency jumps; whether jumps survive more scale. Each says where to dig next.
+These are signals, not pass/fail gates: how far Matter's results sit from the current quality-per-joule frontier; whether independent small designs keep finding large efficiency jumps; whether jumps survive more scale. Each says where to dig next.
 
 ---
 
@@ -118,7 +118,7 @@ Learning from browsing means learning from unvetted text. That needs provenance 
 By any means: **run strong AI on typical consumer hardware without overwhelming the device**, in RAM, storage or otherwise. The architecture that does this is likely different from today's and more effective with Adaptive Learning. The assistant may choose and change approaches, models and units; Entry 2's candidates are starting points, not a plan to follow.
 
 ### "Not overwhelming the device" (working reading, to be corrected)
-The device stays usable while Transient runs. It is a guest, not a tenant. The constraints are measured, not felt:
+The device stays usable while Matter runs. It is a guest, not a tenant. The constraints are measured, not felt:
 - **Resident RAM** (what must stay loaded) and **peak RAM** during learning.
 - **Storage footprint**, and how much of it is read sparsely (cheap) versus loaded whole (expensive).
 - **Memory bandwidth** per answer and per lesson, because data movement is expected to dominate energy (to be confirmed by measurement; see Entry 1).
@@ -182,7 +182,7 @@ The system does not have to be perfect. It has to understand what is true, the r
 Implemented as a ladder: a labeled **guess** (a trusted rule used beyond what was taught or checked), a **checked** range (a confirmed answer extends where it may speak as fact), and **taught** facts. The honesty rule became "never *silently* wrong": WRONG (a stated fact that is false) must stay at 0; a labeled guess may be wrong; what is measured is whether guesses are calibrated and whether one correction fixes the next mistake.
 
 ### What is trusted, and the license
-The license stays AGPL (then still "or later"; Entry 8). Daws accepts the trust involved (the FSF, GitHub, the assistant). He values copyleft's origin. On git: freedom was given so that progress does not need hand-holding, but risk is real, so being careful, precise, planning and asking in risky situations remains the right call. The meaning of the name "Transient" is Daws's to tell, "for the lore".
+The license stays AGPL (then still "or later"; Entry 8). Daws accepts the trust involved (the FSF, GitHub, the assistant). He values copyleft's origin. On git: freedom was given so that progress does not need hand-holding, but risk is real, so being careful, precise, planning and asking in risky situations remains the right call. The meaning of the name "Matter" is Daws's to tell, "for the lore".
 
 ### Decisions in this entry
 - `--careful` is the default (permissive is `--permissive`).
@@ -191,7 +191,7 @@ The license stays AGPL (then still "or later"; Entry 8). Daws accepts the trust 
 - GitHub social preview and topics were set by Daws.
 
 ### Rename (2026-10-21)
-The repository moved from `DawsMacs/TransientAI` to `DawsMacs/Transient`. **TransientAI is the creator of the project** (Daws is its owner and founder); the project, repo, README and banners are called **Transient**. Copyright and license holder unchanged: DawsMacs. Earlier text that names the old repository records the name at the time.
+On 2026-10-21 the repository was renamed so that the project and its creator had separate names: the project, repo, README and banners carried the project's name, and the creator's name stayed with the organization (Daws is its owner and founder). Copyright and license holder unchanged: DawsMacs. Both names were changed again on 2026-10-24 (Entry 11); earlier text that names the old repository records the name at the time, and where that text survives it is written without the old names.
 
 ---
 
@@ -234,11 +234,15 @@ Long-term direction for the assistant to weigh. Tell Daws when it is time to ren
 
 ---
 
-## Entry 11 (2026-10-24): The project is to be renamed
+## Entry 11 (2026-10-24): The project and its creator are renamed
 
-**Decision (Daws).** The project is renamed because the current name may conflict with a registered trademark. Whether it does is unconfirmed, and this repository makes no claim either way: it is a precaution. The new name and the exact scope (the project, the creator's name, the repository, the site and the domain) are Daws's to give and had not been given when this entry was written. The next working session carries the rename out first, on a branch and a pull request, following the plan in `TransientHandover.md` ("FIRST: THE RENAME").
+**Decision (Daws).** After a possible conflict with a registered trademark (unconfirmed: nothing here claims that the old names infringe anything, and this repository makes no legal claim), the project **Transient** is now **Matter**, and its creator **TransientAI** is now the **Matterworm Foundation**. `DawsMacs` (Daws's account, owner, founder and copyright holder) is unchanged. This entry and the dated rename notes in `MatterHandover.md` are the only places that write the two earlier names; they are retired everywhere else, as the three coined labels were (Entry 10 and `CLAUDE.md`). The domain that carried the old creator name (`transientai.org`) is dropped: Daws postponed buying a new one, and the site is served from `https://matterworm.github.io` (GitHub Pages of the `Matterworm` organization) for now. The repositories live in that organization: `Matterworm/Matter` and `Matterworm/matterworm.github.io`.
 
-**Context (assistant).** The rule that the meaning of the project's name is Daws's to tell stays in force for the new name. Nothing in the measurements depends on the name, and no recorded bar moves because of it. Old commits, merged pull request titles and the first blog posts keep the old name; a rename changes what is published from now on, not what was published.
+**What changed (assistant, same day, on the local branch `rename`, approved by Daws).** Every mention in this repository and in the site repository; the banners, the social preview and the site's share image (re-drawn in the same typeface); the two documents `TransientHandover.md` and `TransientVision.md`, now `MatterHandover.md` and `MatterVision.md`; the repository URLs in the docs and in `baby/Cargo.toml` and `REUSE.toml` (they point at `Matterworm/Matter`); on the site, the absolute URLs (canonical links, share tags, sitemap, feed, `robots.txt`) use `https://matterworm.github.io` and the `CNAME` file is removed. The three blog posts were edited to the new names and carry a note saying so.
+
+**What did not change.** Local folder names (`~/Transient`, `~/TransientAI`, `~/transient-data`: the assistant's memory is keyed to the first one). The git history, merged pull request titles and CI run names keep the old names for good. No measurement, threshold or recorded bar moved.
+
+**Context (assistant).** The rule that the meaning of the project's name is Daws's to tell stays in force for "Matter". One thing for Daws to check, not a finding: "Matter" is also the name of a widely used smart-home connectivity standard, so a clearance search for the new name is as worthwhile as it was for the old one (not legal advice).
 
 ## Progress log (assistant-maintained; details live in `baby/README.md`)
 
@@ -289,7 +293,7 @@ Long-term direction for the assistant to weigh. Tell Daws when it is time to ren
   and a unit opens at the sixth. It also reorganizes itself over time (units that follow one rule merge, 13 -> 9; a polluted unit splits). A bug that treated "five minus two" and "two minus five" as one
   lesson had inflated the first cost numbers (93 ms per lesson) and is fixed. Honest limit: 800 tidy lessons is not the world; nothing yet says how this grows.
 
-- **2026-10-20** Published (Daws): the work now lives in a public GitHub repo (`DawsMacs/TransientAI`) under AGPL-3.0-or-later, with a technical README, a banner, SPDX headers, a DCO instead of a CLA, and CI that fails if the scorecard's WRONG column rises above 0.0 %. See Entry 6.
+- **2026-10-20** Published (Daws): the work now lives in a public GitHub repo (under the repository's first name, later renamed; see Entries 7 and 11) under AGPL-3.0-or-later, with a technical README, a banner, SPDX headers, a DCO instead of a CLA, and CI that fails if the scorecard's WRONG column rises above 0.0 %. See Entry 6.
 
 - **2026-10-20** Scale (Daws: nearly anyone, no data center): `baby scale` grew the world to 600 units / 26k lessons / a 10,000-word vocabulary. Learning one more fact stayed flat at ~0.5 ms after the per-lesson table rebuild
   (O(all lessons), 40 ms at 200 units) was made incremental; going back over everything went 99.9 s -> 0.3 s; teaching 26k lessons 127 s -> 2.65 s (no network trained for plain tables). WRONG stayed 0 % on clean lessons. Found and fixed on the way: a cross-validation flaw
@@ -359,8 +363,8 @@ Long-term direction for the assistant to weigh. Tell Daws when it is time to ren
 
 - **2026-10-23** The cost of adapting cut a second time (36 mJ per told answer, 28.5 J for the 787-question stream, 6-7x below the start of the day; teaching + stream 65 J): the same unexplainable units were being re-decided twice per told answer. One more cut I tried (re-deciding memorize-only units less often) was byte-identical on every clean stream and the whole battery but changed two answers on a wrong-teacher stream, one of them a new wrong fact, so it was dropped.
 
-- **2026-10-24** Transient on other platforms, measured instead of assumed (a CI matrix of Linux x86_64 and aarch64, musl, macOS arm64 and Windows, plus a fingerprint and an accuracy audit of each platform's math library, plus golden answers): the math libraries differ by one last-bit step on under 1 % of inputs, and on all five platforms the exam predictions, the adaptive replies and the scorecard are byte-identical to the Linux reference. Say "CI-tested", not "supported"; joules remain Linux with a readable RAPL counter. The open questions (deterministic in-repo math, a hash-order fix, WASI as reference) are listed in `baby/README.md`.
+- **2026-10-24** Matter on other platforms, measured instead of assumed (a CI matrix of Linux x86_64 and aarch64, musl, macOS arm64 and Windows, plus a fingerprint and an accuracy audit of each platform's math library, plus golden answers): the math libraries differ by one last-bit step on under 1 % of inputs, and on all five platforms the exam predictions, the adaptive replies and the scorecard are byte-identical to the Linux reference. Say "CI-tested", not "supported"; joules remain Linux with a readable RAPL counter. The open questions (deterministic in-repo math, a hash-order fix, WASI as reference) are listed in `baby/README.md`.
 
 - **2026-10-24** More machines, and the checks that keep them honest: WebAssembly under Wasmtime (no change to the logic), and 32-bit x86, s390x (big-endian) and riscv64, all give answers byte-identical to the Linux reference, so CI now has thirteen platform rows; a difference on the reference row fails the build, and the answers under a wrong teacher are re-checked weekly. DragonFly BSD was tried and dropped: its tests pass but its packaged Rust crashes the program at startup. The first guide to getting and running it (`docs/Running.md`) was written, and the site's documentation updated.
 
-- **2026-10-24** Rename ordered (Entry 11): the project is to be renamed after a possible trademark conflict (unconfirmed). Nothing was renamed yet; the handover holds an inventory of every place the name lives (about 20 tracked files here, about 25 pages in the site repo, the repository and domain names, the memory folder keyed to the local path) and a step-by-step plan. The new name had not been given.
+- **2026-10-24** Renamed (Entry 11): the project is now Matter and its creator the Matterworm Foundation, after a possible trademark conflict (unconfirmed). Done on the local branch `rename` in both repositories, with the banners, social preview and share image redrawn; awaiting Daws's approval. Still open: the site repository's move into the organization (named `matterworm.github.io`), the pushes and pull requests, and a custom domain whenever Daws buys one.

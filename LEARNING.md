@@ -1,4 +1,4 @@
-# Transient: rethinking how a system learns
+# Matter: rethinking how a system learns
 
 Brainstorm and research notes, 2026-10-15. Not a plan, a map. Tags: **[SOURCED]** read this session (search summaries unless noted;
 check the paper before relying on a number), **[MEMORY]** from my own recollection, unverified, **[IDEA]** a proposal of ours,
@@ -7,7 +7,7 @@ untested. Pessimism below is terrain: it tells us what to measure first and neve
 ## 1. The reframe
 
 Mainstream practice runs one pipeline: pretrain on a huge corpus, post-train, freeze the weights, serve them. "Training" is an event
-that happens once, in a data center, for everyone. Transient does not have to inherit that. Learning can instead be a *continuous,
+that happens once, in a data center, for everyone. Matter does not have to inherit that. Learning can instead be a *continuous,
 budgeted process with several mechanisms on different timescales*, running on the owner's own hardware, where the unit that matters
 is capability gained per joule, per byte read and per token seen. The size of the data is one input to that; how learning is
 implemented is the lever Daws is betting on.

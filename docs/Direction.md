@@ -1,6 +1,6 @@
-# Transient: direction and strategy
+# Matter: direction and strategy
 
-This is the long-form framing that used to be the front page. The technical overview is [`../README.md`](../README.md); the working state is in [`../TransientHandover.md`](../TransientHandover.md).
+This is the long-form framing that used to be the front page. The technical overview is [`../README.md`](../README.md); the working state is in [`../MatterHandover.md`](../MatterHandover.md).
 
 **Status (as of 2026-10-24):** active. `baby/` is a working, tested (150 tests) system: units of lessons, mechanisms chosen by evidence, honest refusals, learning after school, unit discovery, light cost, an entry exam any system can take (with its adaptive and wrong-teacher tiers and a comparison against a plain transformer), and CI on thirteen platform rows (see `baby/README.md` and the handover); the larger architecture and the scale-up are still ahead. Founded 2026-10-15 by Daws. We pursue this whether or not it works; what we learn is
 the point, and a failed hypothesis still redirects the work.
@@ -9,9 +9,9 @@ the point, and a failed hypothesis still redirects the work.
 
 Bring powerful AI to anyone's own hardware, and make it win *differently* from the cloud rather than trying to out-scale it. If a
 few providers and a few countries with massive infrastructure are the only possible way to have capable AI, that is a choice
-of design, not a law of nature. Transient is the attempt to find another way.
+of design, not a law of nature. Matter is the attempt to find another way.
 
-Transient may not turn out to be a model. It might be a model, a set of small models, a memory and tool architecture, a way of
+Matter may not turn out to be a model. It might be a model, a set of small models, a memory and tool architecture, a way of
 spending time and compute, or all of these as one **system of intelligence** designed around consumer hardware. We do not know yet,
 and that is the first thing the work has to find out.
 
@@ -93,19 +93,19 @@ and per second.
 
 ## Learning, not just training
 
-"Pretrain, post-train, freeze" is a convention, not a law. For Transient, learning is a design question of its own: which
+"Pretrain, post-train, freeze" is a convention, not a law. For Matter, learning is a design question of its own: which
 mechanism at which timescale (a store write, a fast-weight update, an overnight sparse consolidation, a rare base run), and how
 efficiently each runs on the owner's hardware. Daws's working belief: data size is not the ceiling, implementation is. See
 [`LEARNING.md`](../LEARNING.md) for the evidence, a ladder of learning timescales, efficiency levers, metrics and first experiments.
 
 ## Language and tooling (decided 2026-10-15: Rust-first, not Rust-only)
 
-The project is the idea, not the language. Rust is the default for everything Transient owns; any layer can use something else
+The project is the idea, not the language. Rust is the default for everything Matter owns; any layer can use something else
 when a measurement says it is better. Pessimism is welcome as input to design (it tells us what to measure first); it never
 decides whether to proceed.
 
 **Why Rust-first**
-- Transient's regime is small models and many small steps, where the cost around the kernels (interpreter, allocation, tokenizing,
+- Matter's regime is small models and many small steps, where the cost around the kernels (interpreter, allocation, tokenizing,
   sampling, process startup, glue) is a bigger share of the total than it is for giant GPU-bound models. Reports of Rust
   rewrites show this: Rust inference servers beating a Python one by ~27% under load with ~20x faster startup, and Rust tokenizers
   5-10x faster [secondhand, from blog and repo claims; direction is plausible, numbers are not rigorous].

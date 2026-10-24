@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 DawsMacs
-//! The questions Transient asks the operating system, and what it says when the system cannot answer.
+//! The questions Matter asks the operating system, and what it says when the system cannot answer.
 //!
 //! Linux answers memory questions from `/proc/self/status`. macOS, Windows, most BSDs and sandboxes without `/proc` cannot, and for
 //! them the answer is "unavailable": reports say `n/a` instead of printing `0 MB`, which would read as a measurement. (Energy and
