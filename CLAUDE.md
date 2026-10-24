@@ -10,7 +10,7 @@ whether or not it works. The code is `baby/` (pure Rust, zero dependencies, buil
 
 ## Start of session
 
-**The rename (2026-10-24) is prepared on the local branch `rename` and waits for Daws's approval** (see "THE RENAME" at the top of `MatterHandover.md` for what was done, what is left and what only he can do). Until it is merged, `main` still carries the old names.
+**The rename (2026-10-24) is finished and live in both repositories** (see "THE RENAME" at the top of `MatterHandover.md`). Nothing about it is open.
 
 1. Read `MatterHandover.md` in full (rewritten 2026-10-21: state, decisions that are Daws's, options, guards, working lessons). It has the state, the numbers, the code map, the plan and what is next, the honest caveats, and the working habits. Then `MatterVision.md` (an **internal** document, rewritten 2026-10-24 at Daws's request in plain, practical
    wording: append dated entries for new decisions, label the assistant's context, tag ideas Decision / Hypothesis / Measured / Open; never link it from public pages).
