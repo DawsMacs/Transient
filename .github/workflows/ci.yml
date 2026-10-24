@@ -119,17 +119,15 @@ jobs:
           esac
 
   # The BSDs, in virtual machines on a Linux runner (cross-platform-actions). Rust's own support: FreeBSD and NetBSD tier 2 with host tools,
-  # OpenBSD and DragonFly tier 3 (so a distribution's Rust package, whatever version it ships). Every step runs INSIDE the VM through the
+  # OpenBSD tier 3 (so the distribution's Rust package, whatever version it ships). DragonFly was tried and dropped on 2026-10-24: its packaged
+  # Rust (1.85.1) crashes the binary at startup inside the standard library's thread-local code ("assertion failed: key as usize != KEY_SENTVAL"),
+  # before any Transient logic runs; the tests themselves passed there. Every step runs INSIDE the VM through the
   # cpa.sh shell. Reported like the other non-reference rows: the tests, the scorecard WRONG gate and the build can fail the job (a real
   # finding); the fingerprint and the golden check only report. The package names below are the first attempt, not verified.
   bsd:
     name: ${{ matrix.name }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    # DragonFly is Rust tier 3 and its packaged Rust (1.85.1) crashes the binary at startup in the standard library's thread-local code
-    # ("assertion failed: key as usize != KEY_SENTVAL"), before any Transient logic runs; the row is kept so that a newer toolchain can be seen,
-    # and may fail without failing the workflow.
-    continue-on-error: ${{ matrix.experimental == true }}
     strategy:
       fail-fast: false
       matrix:
@@ -146,11 +144,6 @@ jobs:
             os: openbsd
             version: '7.9'
             install: (command -v doas >/dev/null && doas pkg_add rust) || sudo pkg_add rust
-          - name: dragonfly-x86_64
-            os: dragonflybsd
-            version: '6.4.2'
-            install: sudo pkg install -y rust
-            experimental: true
     defaults:
       run:
         shell: cpa.sh {0}
