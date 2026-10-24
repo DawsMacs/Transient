@@ -4,19 +4,84 @@ on:
     branches: [main]
   pull_request:
 
+# Nothing here needs to write to the repository or to see a secret.
+permissions:
+  contents: read
+
 jobs:
   test:
-    runs-on: ubuntu-latest
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # A platform that fails is a finding, not a reason to stop the others.
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64-glibc   # the reference
+            os: ubuntu-24.04
+          - name: linux-aarch64-glibc
+            os: ubuntu-24.04-arm
+          - name: linux-x86_64-musl    # same CPU, different C library
+            os: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+          - name: macos-arm64
+            os: macos-15
+          - name: windows-x86_64
+            os: windows-2022
+    env:
+      TARGET_FLAG: ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
+    defaults:
+      run:
+        shell: bash
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      # Third-party actions are pinned by commit, with the tag or branch noted beside each.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+
+      - name: Platform and toolchain (recorded, so a difference can be traced)
+        run: |
+          {
+            echo "### ${{ matrix.name }}"
+            echo '```'
+            rustc -Vv
+            cargo -V
+            uname -a || true
+            echo "powercap: $(ls /sys/class/powercap 2>&1 | head -3 | tr '\n' ' ')"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Build (no dependencies, no network needed)
-        run: cargo build --release --offline
+        run: cargo build --release --offline $TARGET_FLAG
+
       - name: Tests (includes the must-refuse batteries)
-        run: cargo test --release --offline
+        run: cargo test --release --offline $TARGET_FLAG
+
       - name: Scorecard must report 0.0% wrong
         run: |
-          ./target/release/baby school | tee school.out
+          cargo run --release --offline $TARGET_FLAG --bin baby -- school | tee school.out
           rows=$(grep -E '^ +(taught|reworded|never taught|beyond the taught range) ' school.out)
           test "$(echo "$rows" | wc -l)" -eq 4
           if echo "$rows" | grep -vE ' 0\.0% *$'; then echo "WRONG column above 0.0%"; exit 1; fi
+
+      # Differences from the reference are reported, never absorbed: this step warns and does not fail.
+      - name: Math fingerprint (compared with the Linux x86_64 reference)
+        run: |
+          cargo run --release --offline $TARGET_FLAG --example mathprint > mathprint.out
+          echo "::group::mathprint output"; cat mathprint.out; echo "::endgroup::"
+          grep -v '^#' mathprint.out | tr -d '\r' > got.txt
+          grep -v '^#' baby/examples/mathprint.expected | tr -d '\r' > want.txt
+          reference=$(grep '^# reference' baby/examples/mathprint.expected | cut -c3-)
+          if diff -u want.txt got.txt > mathprint.diff; then
+            echo "Math fingerprint on ${{ matrix.name }}: identical to the $reference, on every input tested." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "Math fingerprint on ${{ matrix.name }}: **differs** from the $reference. First differing lines:"
+              echo '```'
+              head -40 mathprint.diff
+              echo '```'
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=Math fingerprint differs on ${{ matrix.name }}::see the job summary"
+          fi

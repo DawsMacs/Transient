@@ -9,7 +9,7 @@ SPDX-PackageDownloadLocation = "https://github.com/DawsMacs/Transient"
 [[annotations]]
 path = [
   "README.md", "CONTRIBUTING.md", "LEARNING.md", "TransientHandover.md", "TransientVision.md", "CLAUDE.md",
-  "docs/**", "baby/README.md",
+  "docs/**", "baby/README.md", "baby/examples/*.expected",
   "Cargo.toml", "Cargo.lock", "baby/Cargo.toml", "REUSE.toml", ".gitignore",
   "assets/**", ".github/**",
 ]
