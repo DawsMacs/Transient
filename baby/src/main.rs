@@ -1454,7 +1454,7 @@ fn cmd_exam(a: &Args) {
     let verb = a.positional.get(1).map(|s| s.as_str()).unwrap_or("");
     let dir = a.positional.get(2).cloned().unwrap_or_default();
     let usage = || {
-        eprintln!("usage: baby exam write DIR [--units N] [--seed N]  |  baby exam score DIR predictions.tsv  |  baby exam run DIR [--out predictions.tsv]");
+        eprintln!("usage: baby exam write DIR [--units N] [--seed N]  |  score DIR predictions.tsv  |  run DIR [--out predictions.tsv]  |  transformer DIR  |  adapt-write DIR [--wrong P --repeat F]  |  adapt-run DIR  |  adapt-drive DIR COMMAND...  |  adapt-transformer DIR");
         std::process::exit(2);
     };
     if dir.is_empty() {
@@ -1984,7 +1984,7 @@ fn main() {
         Some("life") => cmd_life(&args),
         Some("energy") => cmd_energy(&args),
         _ => {
-            eprintln!("usage: baby <school|ask|learn|wonder|sleep|storage|cost|scale|invent|grade|discover|teach|effort|data|train|know|curious|rules|kinds|eval|life|energy> ...  (see the top of src/main.rs)");
+            eprintln!("usage: baby <school|ask|learn|teach|wonder|tutor|sleep|discover|grade|exam|bridge|compare|scale|invent|cost|effort|storage|energy|train|know|curious|rules|kinds|eval|data|life> ...  (the top of src/main.rs lists every option; docs/Running.md says how to get started)");
             std::process::exit(2);
         }
     }
