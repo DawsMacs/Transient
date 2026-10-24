@@ -3,7 +3,7 @@
 
 # Distribution proposal (version 2): running Transient on other platforms without touching its logic
 
-Drafted 2026-10-23, revised 2026-10-24. **Status:** Phase 1 is built and had its first CI run on 2026-10-24 (PR #1; results in section 3.1).
+Drafted 2026-10-23, revised 2026-10-24. **Status:** Phase 1 and the accuracy audit are merged (PRs #1 and #2; results in sections 3.1 and 3.2). Phase 2 is built and awaiting review (section 3.3).
 Phases 2 to 4 are proposals and are not approved. Claims are marked as *read from the source*, *cited*, or *not verified*. This
 is the assistant's reasoning; the decisions are Daws's.
 
@@ -178,15 +178,40 @@ What this says:
 - Whether a one-step difference can change an answer depends on a comparison landing within one step of a tie. The audit's
   exact-case line checks the most likely tie sources. The exam and the Phase 2 goldens test the rest.
 
+### 3.3 Phase 2 as built (goldens, `platform.rs`, one test guard)
+
+**`platform.rs`** (the only new source file) holds the memory questions and the energy message. Linux answers memory questions
+from `/proc/self/status` exactly as before. Where the system cannot answer, the figure is `NaN` internally and reports say `n/a`
+instead of `0 MB`, and the `scale` table row leaves the memory columns out instead of printing zero. The energy message no longer
+tells someone to `chmod` a RAPL file that does not exist (macOS, Windows, a VM). It uses no `unsafe` and no `cfg`: it asks the
+system, and reports "unavailable" when the system does not answer. **This is smaller than the proposal said.** Phase 2 was planned
+to move four functions. Only two things misbehaved on other systems (memory printing as zero, and the energy message);
+`compare::cpu_seconds` and `ledger::Rapl` already return nothing when their files are missing, so they were left alone.
+
+Call sites changed: `main.rs` (the `cost` command and the energy message), `scale.rs`. The revert condition held: with the change,
+`exam run` predictions and `adapt-run` replies are byte-identical to the outputs of the build before it (MD5 checked), the text
+layout of `baby cost` and `baby scale` is identical with numbers masked (checked against a build of `main` in a separate worktree),
+and the `ROW` keys and their order are unchanged. Tests: 149 pass (146 plus 3 for `platform.rs`).
+
+**Test guard** (`exam.rs`, test code only): the Python pipe test now skips unless `python3 --version` runs and exits successfully,
+so a Windows Store stub that starts but fails no longer fails the test.
+
+**Goldens** (`golden/`): `predictions-exam60-seed1.tsv` (4,832 questions), `replies-adapt-seed1.tsv` (787 questions with stated
+rates) and `scorecard-seed1.txt`, with `check.sh` to compare and to update, `PROVENANCE.txt` and a README. Nothing with a timing,
+memory, joules or meter warning is in them. `check.sh` runs the whole generation three times (`GOLDEN_RUNS`), requires the runs to
+agree with each other, and only then compares the first with the goldens; exit status 0 all match, 1 a difference, 2 could not
+run, 3 the runs disagree. `.gitattributes` stops Windows checkout from converting line endings in `golden/` and in the scripts.
+Locally on the reference platform: three runs identical, all three goldens match, and a deliberately altered golden is reported as
+a difference (then restored).
+
+**CI:** each row runs the golden check as a reported step. A difference or a disagreement between runs produces a warning and a
+job summary and does not fail the job; only "could not run" fails it. **Decision for Daws:** on the reference row, should a
+difference fail the job? That would enforce "byte-identical replies" on every logic change, but it also means every deliberate
+change to the answers must be followed by `golden/check.sh update` in the same commit. Until you decide, it only reports.
+
 ## 4. Later phases (not approved)
 
-**Phase 2.** `platform.rs`: the four measurement functions behind `cfg`. Linux code is moved unchanged; elsewhere they return
-"unavailable" and memory prints `n/a`, with no `unsafe`. Then goldens: the scorecard table rows, `exam run --out` predictions and
-`adapt-run --out` replies, never the timings, peak memory, joules or meter warnings. Compare only after three runs per row.
-`golden/**` is marked as binary or LF in `.gitattributes` so Windows checkout cannot look like a platform difference. Each golden
-header records toolchain, OS, CPU and build host. Also one test-only change: the Python pipe test's skip check should skip when
-`python3` cannot actually run (on Windows it may be a Store stub that starts but fails; a guess, unverified). Revert condition for
-`platform.rs`: Linux output must stay byte-identical to the goldens and all tests must pass.
+**Phase 2.** Built; see section 3.3.
 
 **Phase 3.** More rows: FreeBSD, NetBSD, OpenBSD and DragonFly via
 [cross-platform-actions](https://api.github.com/repos/cross-platform-actions/action/releases/latest) (v1.6.0), i686, s390x and
@@ -266,6 +291,6 @@ counted-operations estimate must not be quoted as joules, because it was 34 to 1
 
 ## 8. What approval covers
 
-- **Phase 1 (built, PR #1):** the files in section 3, merged by a normal merge commit once the results section is in.
-- **Next, as a separate PR:** the accuracy audit in `mathprint` (section 3.1).
-- **Phases 2 to 4:** separate approvals, each as its own commit, after the first results table exists.
+- **Phase 1 (merged, PR #1) and the accuracy audit (merged, PR #2).**
+- **Phase 2 (built, awaiting review):** section 3.3, in four commits so each can be reviewed alone: goldens, `platform.rs` with its call sites and the test guard, the CI step, and this text.
+- **Phases 3 and 4:** separate approvals, after the Phase 2 results are in.
