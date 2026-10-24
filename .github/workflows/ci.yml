@@ -121,3 +121,85 @@ jobs:
             3) echo "::warning title=Runs disagree on ${{ matrix.name }}::see the job summary" ;;
             *) echo "::error::the golden check could not run (status $code)"; exit 1 ;;
           esac
+
+  # The BSDs, in virtual machines on a Linux runner (cross-platform-actions). Rust's own support: FreeBSD and NetBSD tier 2 with host tools,
+  # OpenBSD tier 3 (so the distribution's Rust package, whatever version it ships). DragonFly was tried and dropped on 2026-10-24: its packaged
+  # Rust (1.85.1) crashes the binary at startup inside the standard library's thread-local code ("assertion failed: key as usize != KEY_SENTVAL"),
+  # before any Transient logic runs; the tests themselves passed there. Every step runs INSIDE the VM through the
+  # cpa.sh shell. Reported like the other non-reference rows: the tests, the scorecard WRONG gate and the build can fail the job (a real
+  # finding); the fingerprint and the golden check only report. The package names below are the first attempt, not verified.
+  bsd:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: freebsd-x86_64
+            os: freebsd
+            version: '15.1'
+            install: sudo pkg install -y rust
+          - name: netbsd-x86_64
+            os: netbsd
+            version: '10.1'
+            install: sudo pkgin -y install rust
+          - name: openbsd-x86_64
+            os: openbsd
+            version: '7.9'
+            install: (command -v doas >/dev/null && doas pkg_add rust) || sudo pkg_add rust
+    defaults:
+      run:
+        shell: cpa.sh {0}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Start the ${{ matrix.name }} VM
+        uses: cross-platform-actions/action@e0b9770014ba65d5e0815f15b74031c3a635f641 # v1.6.0
+        with:
+          operating_system: ${{ matrix.os }}
+          version: ${{ matrix.version }}
+          architecture: x86-64
+          shell: bash
+          memory: 6G
+          cpu_count: 4
+          sync_files: runner-to-vm
+
+      - name: Toolchain
+        run: |
+          uname -a
+          ${{ matrix.install }}
+          rustc -Vv
+          cargo -V
+
+      - name: Build and tests
+        run: |
+          cargo build --release --offline
+          cargo test --release --offline
+
+      - name: Scorecard must report 0.0% wrong
+        run: |
+          ./target/release/baby school | tee school.out
+          rows=$(grep -E '^ +(taught|reworded|never taught|beyond the taught range) ' school.out)
+          test "$(echo "$rows" | wc -l)" -eq 4
+          if echo "$rows" | grep -vE ' 0\.0% *$'; then echo "WRONG column above 0.0%"; exit 1; fi
+
+      - name: Math fingerprint (reported)
+        run: |
+          cargo run --release --offline --example mathprint > mathprint.out
+          grep -v '^#' mathprint.out | tr -d '\r' > got.txt
+          grep -v '^#' baby/examples/mathprint.expected | tr -d '\r' > want.txt
+          echo "--- this platform's fingerprint (section hashes and the folded-constant lines):"
+          grep -E '^(fp|const) ' mathprint.out
+          if diff -u want.txt got.txt > mathprint.diff; then echo "Math fingerprint on ${{ matrix.name }}: identical to the Linux x86_64 reference."; else echo "Math fingerprint on ${{ matrix.name }}: DIFFERS from the reference (first lines follow)"; head -30 mathprint.diff; fi
+
+      - name: Golden outputs (reported)
+        run: |
+          set +e
+          bash golden/check.sh 2>&1 | tr -d '\r' | grep -E '^(golden|NOT REPRODUCIBLE|the [0-9]+ runs|could not)'
+          echo "golden check status: ${PIPESTATUS[0]}"
+          exit 0
+
+      - name: Math accuracy audit (reported)
+        run: |
+          cargo run --release --offline --example mathprint -- audit | grep -E '^(audit|# audit)' || true

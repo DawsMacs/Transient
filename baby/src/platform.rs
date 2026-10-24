@@ -60,13 +60,18 @@ mod tests {
 
     #[test]
     fn memory_is_either_a_real_figure_or_unavailable_never_zero() {
-        // Linux has /proc/self/status; elsewhere the answer must be NaN, not 0.
+        // A figure is a positive number or NaN, never 0. (A /proc/self/status that EXISTS does not guarantee a VmRSS or VmHWM line: NetBSD's and
+        // DragonFly's procfs have a file by that name in another format, and there the honest answer is NaN, which reports say as n/a.)
         let (now, peak) = (resident_mb(), peak_mb());
-        if std::path::Path::new("/proc/self/status").exists() {
-            assert!(now > 0.0 && peak >= now, "resident {now} MB, peak {peak} MB");
-        } else {
-            assert!(now.is_nan() && peak.is_nan());
+        for (name, v) in [("resident", now), ("peak", peak)] {
+            assert!(v.is_nan() || v > 0.0, "{name} memory must be a positive figure or unavailable, never {v}");
         }
+        if !now.is_nan() && !peak.is_nan() {
+            assert!(peak >= now, "peak {peak} MB is below resident {now} MB");
+        }
+        // where the Linux field is there, we must have read it
+        let linux = std::fs::read_to_string("/proc/self/status").map_or(false, |t| t.lines().any(|l| l.starts_with("VmRSS:")) && t.lines().any(|l| l.starts_with("VmHWM:")));
+        assert_eq!(linux, !now.is_nan() && !peak.is_nan(), "readable on this system: {linux}, resident {now}, peak {peak}");
     }
 
     #[test]
