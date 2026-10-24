@@ -11,6 +11,12 @@
 //! Usage:
 //!   cargo run --release --offline --example mathprint                           print the fingerprint
 //!   cargo run --release --offline --example mathprint -- dump NAME FROM COUNT   list inputs and result bits (to look at a block)
+//!   cargo run --release --offline --example mathprint -- audit                  how far each result is from the correctly rounded one
+//!
+//! The audit compares each f32 result with the f64 result of the same function rounded to f32. The f64 result is accurate to far
+//! below half an f32 step, so the rounded value is the correctly rounded f32 result except for inputs within about one part in a
+//! billion of a rounding boundary. It needs no stored reference: it says how often, and by how many steps, THIS platform is off.
+//! (`powi` is by design not correctly rounded: it multiplies repeatedly, so its error grows with the exponent.)
 //!
 //! Lines beginning with `#` describe the platform and are not part of the comparison.
 
@@ -23,6 +29,8 @@ struct Section {
     note: &'static str,
     len: u64,
     f: fn(u64) -> (f32, f32),
+    /// The same function in f64, applied to the input that `f` reports.
+    reference: fn(f32) -> f64,
 }
 
 /// The inverse-document-frequency weight (`model.rs`, `mechanisms.rs`, `life.rs`, `curious.rs`): ln((1 + heard) / (1 + df)).
@@ -81,16 +89,36 @@ fn powi_b2(i: u64) -> (f32, f32) {
     (t as f32, 0.999f32.powi(t))
 }
 
+fn ref_ln(x: f32) -> f64 {
+    (x as f64).ln()
+}
+fn ref_log2(x: f32) -> f64 {
+    (x as f64).log2()
+}
+fn ref_exp(x: f32) -> f64 {
+    (x as f64).exp()
+}
+fn ref_tanh(x: f32) -> f64 {
+    (x as f64).tanh()
+}
+/// For `powi` the input reported is the exponent; the reference uses `powf`, which does not multiply repeatedly.
+fn ref_b1(t: f32) -> f64 {
+    (0.9f32 as f64).powf(t as f64)
+}
+fn ref_b2(t: f32) -> f64 {
+    (0.999f32 as f64).powf(t as f64)
+}
+
 const SECTIONS: &[Section] = &[
-    Section { name: "idf", note: "ln((1+heard)/(1+df))", len: 5001 * 5001, f: idf },
-    Section { name: "route_gain", note: "ln(1+2*count)", len: 200_001, f: route_gain },
-    Section { name: "route_prior", note: "ln(n+1+rows/100)", len: 10001 * 3201, f: route_prior },
-    Section { name: "log2_int", note: "log2(1..=2000000)", len: 2_000_000, f: log2_int },
-    Section { name: "exp_neg", note: "exp(-k/1024), k to 90 * 1024", len: 90 * 1024 + 1, f: exp_neg },
-    Section { name: "tanh_grid", note: "tanh(k/1024), k in -12..=12", len: 24 * 1024 + 1, f: tanh_grid },
-    Section { name: "ln_prob", note: "ln(k/100000)", len: 100_000, f: ln_prob },
-    Section { name: "powi_b1", note: "0.9^t, t to 100000", len: 100_000, f: powi_b1 },
-    Section { name: "powi_b2", note: "0.999^t, t to 100000", len: 100_000, f: powi_b2 },
+    Section { name: "idf", note: "ln((1+heard)/(1+df))", len: 5001 * 5001, f: idf, reference: ref_ln },
+    Section { name: "route_gain", note: "ln(1+2*count)", len: 200_001, f: route_gain, reference: ref_ln },
+    Section { name: "route_prior", note: "ln(n+1+rows/100)", len: 10001 * 3201, f: route_prior, reference: ref_ln },
+    Section { name: "log2_int", note: "log2(1..=2000000)", len: 2_000_000, f: log2_int, reference: ref_log2 },
+    Section { name: "exp_neg", note: "exp(-k/1024), k to 90 * 1024", len: 90 * 1024 + 1, f: exp_neg, reference: ref_exp },
+    Section { name: "tanh_grid", note: "tanh(k/1024), k in -12..=12", len: 24 * 1024 + 1, f: tanh_grid, reference: ref_tanh },
+    Section { name: "ln_prob", note: "ln(k/100000)", len: 100_000, f: ln_prob, reference: ref_ln },
+    Section { name: "powi_b1", note: "0.9^t, t to 100000", len: 100_000, f: powi_b1, reference: ref_b1 },
+    Section { name: "powi_b2", note: "0.999^t, t to 100000", len: 100_000, f: powi_b2, reference: ref_b2 },
 ];
 
 fn fnv(h: u64, bits: u32) -> u64 {
@@ -152,6 +180,55 @@ fn constants() {
     both!("tanh(0.5)", 0.5f32, tanh);
 }
 
+/// Position of a float on the number line, so that neighbors differ by one: the distance between two floats in steps of the last bit.
+fn ordered(x: f32) -> i64 {
+    let b = x.to_bits();
+    if b >> 31 == 1 { -((b & 0x7fff_ffff) as i64) } else { b as i64 }
+}
+
+fn steps_apart(a: f32, b: f32) -> u64 {
+    (ordered(a) - ordered(b)).unsigned_abs()
+}
+
+fn audit() {
+    println!("# audit: each result against the f64 result rounded to f32 (see the file comment for what that means)");
+    for s in SECTIONS {
+        let (mut exact, mut off1, mut more, mut max, mut worst) = (0u64, 0u64, 0u64, 0u64, 0u32);
+        for i in 0..s.len {
+            let (x, y) = (s.f)(i);
+            let right = ((s.reference)(x)) as f32;
+            if y.is_nan() || right.is_nan() {
+                continue;
+            }
+            match steps_apart(y, right) {
+                0 => exact += 1,
+                1 => off1 += 1,
+                _ => more += 1,
+            }
+            let d = steps_apart(y, right);
+            if d > max {
+                max = d;
+                worst = x.to_bits();
+            }
+        }
+        println!(
+            "audit {:<12} n={:<9} correctly-rounded={:<9} one-step-off={:<8} more-than-one={:<8} worst={} steps (input {:08x})",
+            s.name, s.len, exact, off1, more, max, worst
+        );
+    }
+    exact_cases();
+}
+
+/// Results that are exactly representable, where a comparison can come out as an exact tie: log2 of a power of two is a whole
+/// number, ln(1) is 0, exp(0) is 1, tanh(0) is 0. A library that is off by a step on any of these would break a tie differently.
+fn exact_cases() {
+    let log2_ok = (0..=24).filter(|&k| black_box((1u32 << k) as f32).log2() == k as f32).count();
+    let ln_ok = black_box(1.0f32).ln() == 0.0;
+    let exp_ok = black_box(0.0f32).exp() == 1.0;
+    let tanh_ok = black_box(0.0f32).tanh() == 0.0;
+    println!("audit exact-cases log2(2^k)=k: {log2_ok}/25 ok; ln(1)=0: {ln_ok}; exp(0)=1: {exp_ok}; tanh(0)=0: {tanh_ok}");
+}
+
 fn dump(name: &str, from: u64, count: u64) {
     let Some(s) = SECTIONS.iter().find(|s| s.name == name) else {
         eprintln!("no section {name}; sections: {}", SECTIONS.iter().map(|s| s.name).collect::<Vec<_>>().join(" "));
@@ -167,10 +244,11 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         None => fingerprint(),
+        Some("audit") if args.len() == 1 => audit(),
         Some("dump") if args.len() == 4 => match (args[2].parse(), args[3].parse()) {
             (Ok(from), Ok(count)) => dump(&args[1], from, count),
             _ => eprintln!("usage: mathprint dump NAME FROM COUNT"),
         },
-        _ => eprintln!("usage: mathprint | mathprint dump NAME FROM COUNT"),
+        _ => eprintln!("usage: mathprint | mathprint audit | mathprint dump NAME FROM COUNT"),
     }
 }
