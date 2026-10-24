@@ -40,6 +40,16 @@ fn idf(i: u64) -> (f32, f32) {
     (x, x.ln())
 }
 
+/// As `idf`, for the larger worlds of the scale tests (tens of thousands of lessons): `heard` from 5,001 to about 50,000 in steps of 83, and for each
+/// of them 1,000 values of `df` spread evenly from 0 to `heard`.
+fn idf_wide(i: u64) -> (f32, f32) {
+    let (a, b) = (i / 1000, i % 1000);
+    let heard = black_box((5001 + 83 * a) as u32);
+    let df = black_box(((heard as u64 * b) / 999) as u32);
+    let x = ((1 + heard) as f32) / ((1 + df) as f32);
+    (x, x.ln())
+}
+
 /// The routing gain (`school.rs`): ln(1 + 2 * count).
 fn route_gain(i: u64) -> (f32, f32) {
     let x = 1.0 + 2.0 * black_box(i as u32) as f32;
@@ -111,6 +121,7 @@ fn ref_b2(t: f32) -> f64 {
 
 const SECTIONS: &[Section] = &[
     Section { name: "idf", note: "ln((1+heard)/(1+df))", len: 5001 * 5001, f: idf, reference: ref_ln },
+    Section { name: "idf_wide", note: "ln((1+heard)/(1+df)), heard to 50,000 (a grid)", len: 1000 * 542, f: idf_wide, reference: ref_ln },
     Section { name: "route_gain", note: "ln(1+2*count)", len: 200_001, f: route_gain, reference: ref_ln },
     Section { name: "route_prior", note: "ln(n+1+rows/100)", len: 10001 * 3201, f: route_prior, reference: ref_ln },
     Section { name: "log2_int", note: "log2(1..=2000000)", len: 2_000_000, f: log2_int, reference: ref_log2 },

@@ -101,6 +101,11 @@ blk idf 92 601aaf28fcc715eb
 blk idf 93 505fc6301e4d35c1
 blk idf 94 5b9bbb647ae44578
 blk idf 95 20ef8a14072d49ec
+# idf_wide: ln((1+heard)/(1+df)), heard to 50,000 (a grid)
+fp idf_wide n=542000 all=3d2678ab8182c851
+blk idf_wide 0 0f14947917f49d22
+blk idf_wide 1 8a8fe6c70d116c69
+blk idf_wide 2 547a5d6cb6e84262
 # route_gain: ln(1+2*count)
 fp route_gain n=200001 all=6f5a8360e0886270
 blk route_gain 0 6f5a8360e0886270
