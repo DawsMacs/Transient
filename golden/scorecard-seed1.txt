@@ -1,0 +1,25 @@
+Teaching the baby 792 lessons in 13 units. For each unit it will work out, from facts it holds back, how to learn it.
+
+  unit      learns by held back   built / note
+  capital   remember         0%   memorize only: nothing here can be worked out
+  sum       rule           100%   
+  compare   select         100%   
+  after     rule           100%   
+  double    rule           100%   
+  half      rule           100%   
+  times     program        100%   (first x second)
+  apart     program        100%   (first apart second)
+  code      remember        11%   memorize only: nothing here can be worked out
+  color     remember         0%   memorize only: nothing here can be worked out
+  sound     remember         0%   memorize only: nothing here can be worked out
+  opposite  remember         0%   memorize only: nothing here can be worked out
+  minus     rule           100%   
+
+recognizes a kind of question when one kind of lesson beats the next by at least 0.88
+
+  questions                right   refused    WRONG    of the refused: a guess
+                                                            right        wrong
+  taught                  100.0%      0.0%     0.0%          0.0%         0.0%
+  reworded                100.0%      0.0%     0.0%          0.0%         0.0%
+  never taught             90.2%      9.8%     0.0%          4.9%         0.0%
+  beyond the taught range    0.0%    100.0%     0.0%        100.0%         0.0%
