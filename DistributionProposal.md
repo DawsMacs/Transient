@@ -3,7 +3,7 @@
 
 # Distribution proposal (version 2): running Transient on other platforms without touching its logic
 
-Drafted 2026-10-23, revised 2026-10-24. **Status:** Phase 1 is built locally and awaits a first CI run; it is not committed.
+Drafted 2026-10-23, revised 2026-10-24. **Status:** Phase 1 is built and had its first CI run on 2026-10-24 (PR #1; results in section 3.1).
 Phases 2 to 4 are proposals and are not approved. Claims are marked as *read from the source*, *cited*, or *not verified*. This
 is the assistant's reasoning; the decisions are Daws's.
 
@@ -69,7 +69,7 @@ estimated-energy accounting if the struct layout differs, not any answer.
 *Limits:* the review covered `.keys()`, `.values()`, `.drain()` and loops over the named hash collections, not every `.iter()`
 over each of the 148 hash-collection uses, and `school.rs` was not read in full.
 
-## 3. Phase 1 as built (local, uncommitted)
+## 3. Phase 1 as built (PR #1)
 
 No existing source file changes. Three files:
 
@@ -82,10 +82,42 @@ No existing source file changes. Three files:
 Rows: `ubuntu-24.04` (reference), `ubuntu-24.04-arm`, `x86_64-unknown-linux-musl` on `ubuntu-24.04` (same CPU, different C
 library), `macos-15` (Apple silicon), `windows-2022`.
 
-Checked locally on the reference platform: the fingerprint is identical across three runs and matches the stored reference, the
-scorecard step logic passes, `cargo test --release --offline` passes (146 tests), and the workflow parses as valid YAML. Not yet
-run: the workflow on GitHub. The first run on a new platform may fail a test, and that is a finding. Pushing therefore may turn the
-CI badge red for a platform until it is understood.
+Checked locally before the PR: the fingerprint was identical across three runs and matched the stored reference, the scorecard
+step logic passed, `cargo test --release --offline` passed (146 tests), and the workflow parsed as valid YAML.
+
+### 3.1 First results (PR #1, CI run of 2026-10-24)
+
+**Every gate passed on all five rows.** 146 tests passed on each (Windows and macOS included), the scorecard WRONG gate held, and
+the scorecard output (17 lines) was identical to the reference on all five. All rows used rustc 1.99.1. The reference was built
+with 1.98.1, and the reference row matched it exactly, so the toolchain bump moved nothing.
+
+**The math fingerprint differs on four of five rows.** `ok` means identical to the Linux x86_64 reference, `DIFF` means different bits.
+
+| Row | Word weights, routing, `log2` (decision path) | `exp` | `tanh` | Loss `ln` | `powi` |
+|---|---|---|---|---|---|
+| Linux x86_64 glibc (reference) | reference | reference | reference | reference | reference |
+| Linux aarch64 glibc | ok | ok | DIFF | ok | ok |
+| Linux x86_64 musl | ok | ok | DIFF | ok | ok |
+| macOS arm64 | DIFF | DIFF | DIFF | DIFF | ok |
+| Windows x86_64 | DIFF | DIFF | DIFF | DIFF | DIFF |
+
+How to read it:
+
+- **A green check does not mean bit-identical math.** The fingerprint step only warns; the differences appear in each job's
+  summary and annotations. Any README or website text must say "CI-tested on GitHub's runners", never "supported" or
+  "identical".
+- On macOS and Windows every block of inputs differs on the decision-path functions. **How many inputs differ and by how many
+  bits is not yet measured.** The planned accuracy audit (each f32 result against the f64 result rounded to f32) will say.
+- The identical scorecards are evidence only for the tidy curriculum. The exam and the adaptive streams (Phase 2 goldens) are the
+  real test of whether the near-tie flip can happen. They are compared on Windows and macOS first.
+- `tanh` lives in the old network, not on the decision path. aarch64 and musl differ from glibc x86_64 only there.
+- **Folding, partly confirmed:** on musl the compiler-folded `tanh(0.5)` (`3eec9a9f`, the build machine's glibc) differs from
+  the run-time value (`3eec9a9e`). Every other literal-argument call, including `ln(3)`, gave the same bits folded and at run time
+  on all five rows.
+- `/sys/class/powercap` exists but is empty on the x86_64 runners, so that log line shows the directory, not readable RAPL. A
+  better check is `/sys/class/powercap/intel-rapl:0`.
+- Not covered by CI: other hardware and OS versions, bare-metal energy, and real-world sandboxes. The runners are VMs running the
+  real operating systems, not emulation.
 
 ## 4. Later phases (not approved)
 
@@ -112,7 +144,7 @@ missed), skipped on emulated rows. GitHub may disable scheduled workflows on ina
 |---|---|
 | Order of work | Measure first, change later. Phase 1 changes no existing source. |
 | WASI | **Conditional.** A WASI build carries its own math code, so it may be bit-identical across hosts, which would give a reproducible reference build with no logic change. It enters only if the fingerprint shows disagreement. Its goldens will probably differ from glibc Linux's (it links wasi-libc, which I believe derives from musl), so it needs its own golden set, validated by agreement across hosts (and a second engine if cheap), not by matching Linux. If it ever became the reference, the bars would have to be re-earned on it. That is a version decision for Daws. `scale --sweep` re-launches the program, `adapt-drive` spawns processes, and the Python test spawns `python3`, so the WASI row would run a subset (that WASI blocks process spawning is not confirmed). |
-| Deterministic in-repo math | **Conditional** on the fingerprint disagreeing on a decision-path input. The smallest version replaces the `ln` and `log2` calls on the decision path. It changes Linux's numbers too, so it is a new, labeled version with the bars re-earned, not a port. |
+| Deterministic in-repo math | **Conditional** on the fingerprint disagreeing on a decision-path input. **That trigger is now met on macOS arm64 and Windows** (section 3.1), but no answer has changed yet, so the decision waits for the accuracy audit and the Phase 2 goldens. The smallest version replaces the `ln` and `log2` calls on the decision path. It changes Linux's numbers too, so it is a new, labeled version with the bars re-earned, not a port. |
 | Real peak-memory measurement on non-Linux systems | Not proposed. It needs small `unsafe` blocks, and the units differ ([bytes on macOS, kilobytes on Linux and FreeBSD](https://developer.apple.com/library/ios/documentation/system/conceptual/manpages_iphoneos/man2/getrusage.2.html)). FreeBSD is the cheapest, as its unit matches Linux. |
 | Can a platform port change a recorded bar? | No. |
 | Hash-order dependencies | Logged for Daws; not fixed here. |
@@ -163,9 +195,9 @@ counted-operations estimate must not be quoted as joules, because it was 34 to 1
 
 ## 7. Not verified
 
-- Whether the compiler folds literal-argument math calls using the build machine's library.
+- Whether the compiler folds literal-argument calls with the build machine's library for functions other than `tanh` (it does for `tanh` on musl; no other case showed it).
 - The exact math code path for `wasm32-wasip1`, whether hosts or engines agree, and whether WASI blocks process spawning.
-- Whether `python3` on Windows breaks the pipe test, and whether `str::lines` handles CRLF on Windows (CI will show both).
+- Whether the Python pipe test ran or was skipped on Windows (all 146 tests passed there; the log does not say which). The Windows scorecard matched, which is some evidence that CRLF is not a problem.
 - How many of the 24 calls reach the scorecard or exam path (the fingerprint and goldens will show).
 - Whether the BSD VM runs are fast enough for the full exam, and the QEMU setup for s390x and riscv64.
 - OpenBSD and NetBSD package versions against this project's minimum Rust.
@@ -175,6 +207,6 @@ counted-operations estimate must not be quoted as joules, because it was 34 to 1
 
 ## 8. What approval covers
 
-- **Phase 1 (built):** the three files in section 3. Needs your approval to commit, and to push, which triggers the first CI run on
-  the public repository.
+- **Phase 1 (built, PR #1):** the files in section 3, merged by a normal merge commit once the results section is in.
+- **Next, as a separate PR:** the accuracy audit in `mathprint` (section 3.1).
 - **Phases 2 to 4:** separate approvals, each as its own commit, after the first results table exists.
