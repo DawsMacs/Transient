@@ -26,6 +26,10 @@ jobs:
             target: x86_64-unknown-linux-musl
           - name: macos-arm64
             os: macos-15
+          # Intel macOS: Rust tier 2 (demoted from tier 1). GitHub plans to stop offering Intel macOS runners once the macOS 15 image
+          # retires (around fall 2027, not confirmed to the day), so this row is temporary; keep it while the label exists.
+          - name: macos-x86_64
+            os: macos-15-intel
           - name: windows-x86_64
             os: windows-2022
     env:
