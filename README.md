@@ -17,7 +17,7 @@ The current artifact is `baby/`: about 18k lines of Rust, **no dependencies**, b
 evaluated mostly on a synthetic curriculum, with a first look at real word problems (SVAMP, ASDiv) and an entry exam that any
 other system can take. It is not a language model and makes no claim to be one yet.
 
-Transient is made by **[TransientAI](https://transientai.org)**, an independent research effort (currently one person, Daws Macs). Its
+Transient is made by **[TransientAI](https://transientai.org)**, an independent research effort run by its founder, Daws Macs, and a founding member. Its
 website has an overview, documentation, a progress page and a blog.
 
 > **Status:** active research. Unless a line says otherwise, the numbers below come from tidy synthetic lessons; energy is
@@ -69,7 +69,9 @@ All on the synthetic curriculum in `baby/src/kinds.rs` (13 units, 792 lessons), 
 | **its own reliability bar** | measured from the noise in its lessons (it estimates 9.6 % where the world has 9.7 %) and set just under what a correct rule can reach; at 10 % label noise unseen questions answered 98 % instead of 42 %; clean worlds unchanged |
 | **label noise** (2 % and 5 % of taught answers wrong, 60-200 units, words and digits) | **0 % wrong** on unseen questions; at 2 % essentially as good as clean data (97-100 % of unseen questions right); wrongly taught lessons answered with the truth by voting memory, robust rule fitting and cross-checks |
 | **the entry exam** (`baby exam`, 60 units, 2,520 lessons, 4,832 questions) | taught 100 %, reworded 100 %, never seen 94.9 % as facts + 5.1 % right guesses, beyond range 100 % right guesses; **0 wrong facts, 0 of 140 traps answered**; teaching 0.68 J and answering 0.28 J (59 uJ per question), measured with the CPU's counter |
-| **the adaptive exam** (787 questions on rule-changing kinds, the truth told after each answer) | **0 wrong facts**; the rule-changing kinds climb 90.6 -> 93.8 -> 100 % right across the stream; 268 J to answer and adapt (0.34 J per told answer, down from 1.80 J). A naive Python memorizer scores 0 right at 0.08 J |
+| **the adaptive exam** (787 questions on rule-changing kinds, the truth told after each answer) | **0 wrong facts**; the rule-changing kinds climb 90.6 -> 93.8 -> 100 % right across the stream; the 787-question stream costs 28.5 J to answer and adapt (65 J with the teaching): 36 mJ per told answer, down from 1.80 J, then 0.34 J (cut in two steps with the replies byte-identical), still about 600 times the cost of answering without learning. A naive Python memorizer scores 0 right at 0.08 J |
+| **a teacher who is wrong about a share of the facts** (the exam's wrong-teacher tier: 10 % and 20 % of the facts told wrongly, the same wrong answer every time, 30 % re-asks, seeds 1-3) | wrong facts about facts it was **never** wrongly told: **0 on all six runs** (the first run found a hole of ours, now closed). The baby still believes a teacher who repeats a wrong answer: 14 / 14 / 10 repeats at 10 %, 39 / 25 / 28 at 20 % (a naive memorizer: 32 and 59). Pinned as weekly goldens |
+| **the exam put to a matched transformer** (same lessons, same judge, same meter; 60 units, seeds 1-3; one small untuned model) | the transformer fits what it was taught, then states 1,500-2,800 wrong facts and answers 43-100 % of the traps (the baby: 0 and 0); teaching costs it 11-24x the baby's joules and answering 2.2-2.7x; told each truth as a stream goes on it does **not** get better (19 % right frozen, 11-16 % fine-tuned) |
 | **after a correction** | the law is rebuilt from the numbers the correcting lessons name: 157 of 157 wrong guesses became right guesses after one correction (they were refused before); the law it replaced is kept as a competing explanation until two later lessons separate them |
 | **real word problems** (SVAMP, ASDiv; private data, not in this repo) | labeled guesses only, never stated as fact: two-number problems about 56 % right on SVAMP (35-73 % across six splits; fragile) and 58-60 % on ASDiv; problems with more numbers than the rules use 27-38 %. Which operation the wording means is the ceiling, not a shortage of lessons |
 | storage | school file 29 KB, of which 1.3 KB is what was learned; `--compact` keeps 49 % of the file, still answers all 792 taught lessons, 0 % wrong |
@@ -174,13 +176,14 @@ Two transformers are trained on the same lessons and graded on the same question
 
 ## Roadmap
 
-1. **Scale test, continued:** clean worlds are done to 600 units (learning one lesson is flat). Next: asking about more than numeric programs, discovery at scale, and numeric learning knobs adapted from measurement, a Zipf-shaped vocabulary, discovery at scale (its pair loops are still quadratic).
+1. **Scale test, continued:** clean worlds are done to 600 units (learning one lesson is flat). Next: asking about more than numeric programs, numeric learning knobs adapted from measurement, a Zipf-shaped vocabulary, and discovery at scale (its pair loops are still quadratic).
 2. **Compact lossless storage format**, then incremental and exact updates. (The real energy meter is done: the exam and `compare` read it.)
 3. **Beyond expressions:** mechanisms of a different kind (not a formula), and the baby adapting its own learning knobs; a number
    line it discovers rather than is taught. (Building programs from a learned library, and digits as numbers, are done.)
 4. **Bridge to real data:** first versions done on two word-problem corpora. Next: answers that need three numbers, a factoid corpus, and a pretrained model as the comparison (needs a rented GPU).
-5. **Controlled comparison:** partly done (a matched from-scratch transformer and a tuned PyTorch one, measured joules, three seeds). Next: more sizes, the baby's energy against it on the exam, and a wrong-teacher tier of the adaptive exam.
+5. **Controlled comparison:** done in part: a matched from-scratch transformer and a tuned PyTorch one, measured joules, three seeds; the entry exam, static and adaptive, put to the plain transformer; the wrong-teacher tier of the adaptive exam. Next: a larger or tuned transformer, the wrong-teacher tier for it, and a pretrained model on real text (needs a rented GPU).
 6. **Growth:** a unit that starts tiny and adds capacity only when it saturates (function-preserving growth).
+7. **Cheaper adapting, and teachers who repeat themselves:** adapting is 36 mJ per told answer (about 600 times the cost of answering without learning); the rest of that cost, and the baby's belief in a teacher who repeats a wrong answer (a second independent source is untried), are the open problems in the handover.
 
 ## Ambition
 

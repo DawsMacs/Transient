@@ -8,9 +8,9 @@ still here (`baby train`), because every later idea was tested against it.
 ## Try the baby (the unified one)
 
 ```
-cd ~/Transient
+cd Transient
 cargo build --release --offline
-./target/release/baby school                   # teach it: 13 units of lessons, about 12 seconds; prints how it learned each one
+./target/release/baby school                   # teach it: 13 units of lessons, about a third of a second; prints how it learned each one
 ./target/release/baby ask "what is two times four"
 ./target/release/baby ask "how far apart are two and nine"
 ./target/release/baby ask "the capital of peru"
@@ -30,10 +30,12 @@ Every answer comes with how the baby knew (`worked out by an expression I built,
 `recalled, not worked out`), and every refusal with why (`I haven't met the word...`, `I only memorize this kind of thing and
 nothing I was taught is close enough`, `no kind of lesson I was taught is like this question`).
 
+More recent, each with its section below: `baby tutor` (the baby asks what it wants checked and you answer), `baby exam ...` (the entry exam any system can take, with the adaptive and wrong-teacher tiers and the comparison with a plain transformer), `baby bridge` (real word problems; needs data that is not in the repository), `baby compare` (the controlled comparison), and `bash golden/check.sh` (the answers pinned on the reference platform). How to get, build and run all of this on each platform: [`docs/Running.md`](../docs/Running.md).
+
 The older experiments, each of which has its own section below:
 
 ```
-cargo test --offline                 # 61 tests, including numerical checks of the hand-written backprop
+cargo test --release --offline       # 150 tests, including numerical checks of the hand-written backprop and the must-refuse batteries
 ./target/release/baby kinds          # the nine-unit mechanism comparison behind the school (about 30 s)
 ./target/release/baby life           # five ways of learning, charged in estimated joules
 ./target/release/baby curious        # a baby that chooses what to ask a teacher
@@ -43,7 +45,7 @@ cargo test --offline                 # 61 tests, including numerical checks of t
 ./target/release/baby energy         # what one question and one learning step cost, counted
 ```
 
-## Running on other platforms: five CI platforms, one set of answers (2026-10-24)
+## Running on other platforms: thirteen CI rows, one set of answers (2026-10-24)
 
 The question: does Transient give the same answers off Linux/x86_64, and if not, by how much and where? The rule for the work: **the logic files stay as they are; every platform is compared with what Linux/x86_64 produces; a difference is reported, never absorbed; a platform adds a row to a "tested on" table and cannot move a recorded bar.** Done through branches and pull requests (#1, #2, #3), so `main` never carried an experiment.
 

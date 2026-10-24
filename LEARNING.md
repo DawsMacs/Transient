@@ -84,7 +84,7 @@ and about Daws go in stores; habits and style go in slow, sparse updates; only l
 - **Capability gained per training token, per joule, per byte of weights touched.**
 - **One-shot score:** after a single exposure to a new fact or preference, can it be used correctly an hour or a week later?
 - **Forgetting:** capability on a fixed held-out suite before and after learning (an existing small-model evaluation suite already does this).
-- **Time to adapt on the target device:** what an overnight run on the laptop or S24 can actually accomplish.
+- **Time to adapt on the target device:** what an overnight run on the laptop or a phone can actually accomplish.
 - **Stability:** does repeated nightly learning drift her voice? (Use the 24-30 turn drift set.)
 
 ## 7. Cheap first experiments

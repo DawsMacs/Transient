@@ -392,6 +392,8 @@ description than one with a single fixed learner.
 
 - **2026-10-24** Transient on other platforms, measured instead of assumed (a CI matrix of Linux x86_64 and aarch64, musl, macOS arm64 and Windows, plus a fingerprint and an accuracy audit of each platform's math library, plus golden answers): the math libraries differ by one last-bit step on under 1 % of inputs, and on all five platforms the exam predictions, the adaptive replies and the scorecard are byte-identical to the Linux reference. Say "CI-tested", not "supported"; joules remain Linux with a readable RAPL counter. The open questions (deterministic in-repo math, a hash-order fix, WASI as reference) are listed in `baby/README.md`.
 
+- **2026-10-24** More machines, and the checks that keep them honest: WebAssembly under Wasmtime (no change to the logic), and 32-bit x86, s390x (big-endian) and riscv64, all give answers byte-identical to the Linux reference, so CI now has thirteen platform rows; a difference on the reference row fails the build, and the answers under a wrong teacher are re-checked weekly. DragonFly BSD was tried and dropped: its tests pass but its packaged Rust crashes the program at startup. The first guide to getting and running it (`docs/Running.md`) was written, and the site's documentation updated.
+
 ---
 
 ## More to come
