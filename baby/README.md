@@ -43,6 +43,28 @@ cargo test --offline                 # 61 tests, including numerical checks of t
 ./target/release/baby energy         # what one question and one learning step cost, counted
 ```
 
+## Cutting the cost of adapting: 3.7x per told answer, replies byte-identical (2026-10-23)
+
+The transformer comparison made the baby's adapting the number to beat (0.22 J per told answer). `BABY_PROF=1 baby exam adapt-run` on the clean stream (seed 1, ~100 s) said where it went: **periodic re-decisions** (`relearn_unit` called from `learn_wondered`) 56 calls, 51 s; **`refit_in_place`** 274 calls at 110 ms, 30 s; **library review** 10 s. `RELEARN_DEBUG=1` (new) prints each periodic re-decision with the unit, its facts and what it chose before and after. The finding: **all 56 re-decisions ended where they started** (24 Program to Program, 13 Rule to Rule, 12 Remember to Remember, 2 Select to Select, plus 5 surprised Program); six exact-program units at 25 and 50 facts cost 4-7 s each.
+
+**The change.** A settled exact program (no rivals, not partial, reliable) that still says every one of its lessons exactly, the new one included, is neither refitted (`learn`) nor re-decided every 25 lessons (`learn_wondered`): `School::settled_program_explaining_all`. The argument: a smaller program that fits all the lessons would also have fitted the earlier ones and been chosen; a new vocabulary piece is handled by library review; a contradiction makes the program stop explaining everything, and the full path runs as before. Only programs: a rule's ridge fit does change a little with every extra lesson, so rules and selections keep their refits.
+
+**Checked, not assumed.** The stream's replies (`--out`) are **byte-identical** between the old and new binary on five streams: clean seeds 1, 2, 3, and the wrong-teacher tier at 10 % (seed 2) and 20 % (seed 3). The whole regression battery reads exactly as before (persistent teacher 87.40 / 74.89 / 81.96 % right and 39 / 52 / 45 wrong, all repeats, 0 elsewhere, 0 traps; careful deceptive 331 / 478 / 684 with WRONG 0; hidden 64/64, stage-2 32/36, WRONG 0; scale and noise 0.00; 100 % at 20 and 200 units). A new test (`a_confirming_answer_extends_a_settled_program_without_refitting_it`) pins what the shortcut must still do: keep the confirmation and extend the reach, and stop applying the moment a lesson is contradicted.
+
+**Result, paired and serial on a quiet machine (no meter warning), two rounds:**
+
+| clean adaptive stream, seed 1 | before | after |
+|---|---|---|
+| asking + learning the 787 questions | 179.1 / 174.9 J (98.5 s) | **48.0 / 47.6 J** (24.2 s) |
+| per question (every question is told its answer) | 228 / 222 mJ | **61 / 60 mJ** |
+| teaching the 3,048 lessons | 37.7 / 35.1 J | 33.1 / 33.6 J (unchanged within noise) |
+| teaching + stream | 216.8 / 210.0 J | **81.1 / 81.2 J** |
+| right answers per joule (facts + right labeled guesses), overall | 3.2 / 3.3 | **8.5** |
+
+Against the transformer (previous section): the baby's 60 mJ per told answer is now within ~2x of the transformer's replay fine-tuning (27-34 mJ) and ~20-40x above its told-answer-only fine-tuning (1.6-3 mJ), which does not learn. **What remains** (`BABY_PROF`): about 13 s of periodic re-decisions for rules, selections and memorize-only units (33 calls, all of the kind that ended where they started in the trace), 10 s of full re-decisions inside `learn` (10 calls at ~1 s), and 12 s of initial `learn_items`. The same kind of argument for a rule (skip when the fit still explains every lesson) would change its coefficients, so it needs its own byte-identity test; a geometric back-off for memorize-only units (re-decide at 10, 20, 40, 80 facts) delays noticing a unit that becomes learnable. Neither is done.
+
+**A belief corrected.** The handover said the remaining cost was "`review_programs` (4 rounds of ~11 s), `refit_in_place` and the 25-lesson re-decisions". After this change `review_programs` is 0.02 s: it was not a cost of its own but a consequence of the needless re-decisions (each grew the library and triggered a review). Fixing the cause removed it.
+
 ## The adaptive exam, put to the matched transformer: what it costs to learn from being told (2026-10-23)
 
 `baby exam adapt-transformer DIR [--steps N --replay N]` teaches the plain transformer the adaptive exam's lessons once (3,048 lessons), then puts a copy of it the 787-question stream three ways: **frozen** (never learns), **fine-tune on the told answer only** (3 passes, Adam, lr 0.003), and **fine-tune on the told answer plus 16 replayed old lessons**. Spare answer slots are reserved so a new answer can be learned at all. Each is scored always-answering and refusing-below-0.9, by the same stream judge as the baby, with the same meter. Clean stream, seeds 1 / 2 / 3, run serially after the baby's (`adapt-run`) in the same session.

@@ -13,7 +13,7 @@
 *adaptive learning*: a system that keeps learning while it is used, decides for itself *how* to learn each kind of thing, and is
 measured by what it costs (operations, memory, estimated joules) rather than by parameter count alone.
 
-The current artifact is `baby/`: about 17k lines of Rust, **no dependencies**, builds offline, 144 tests. It is a research prototype
+The current artifact is `baby/`: about 17k lines of Rust, **no dependencies**, builds offline, 145 tests. It is a research prototype
 evaluated mostly on a synthetic curriculum, with a first look at real word problems (SVAMP, ASDiv) and an entry exam that any
 other system can take. It is not a language model and makes no claim to be one yet.
 
@@ -82,7 +82,7 @@ The scorecard reports **WRONG separately from refused**: a refusal is an accepta
 Requires a stable Rust toolchain (edition 2021). No other dependencies, no network.
 
 ```bash
-cargo test --release --offline         # 144 tests (about 21 s)
+cargo test --release --offline         # 145 tests (about 21 s)
 cargo build --release --offline
 ./target/release/baby school           # teach 13 units (~4 s), print how each was learned and the scorecard
 ./target/release/baby ask "how far apart are two and nine"   # answers, and says how it knew

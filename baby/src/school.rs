@@ -2035,9 +2035,15 @@ impl School {
             // (Re-deciding is a cross-validation of every mechanism: it was most of the energy of a stream of told answers, 1.8 J each.)
             // (A unit that can only memorize, and is known not to be workable out, follows the rule `refit_in_place` has for it: look again every ten facts.)
             let facts = self.units[u].facts();
-            let skip = (self.settled_exact(u) && facts % SETTLED_RETHINK_EVERY != 0) || (self.memorize_only_known(u) && facts % 10 != 0);
+            // (and a settled exact PROGRAM that still explains every lesson has nothing to be re-decided at all: the 25-lesson look found the same program every time)
+            let skip = (self.settled_exact(u) && facts % SETTLED_RETHINK_EVERY != 0) || (self.memorize_only_known(u) && facts % 10 != 0) || self.settled_program_explaining_all(u);
             if !skip {
+                let t0 = std::time::Instant::now();
+                let before_state = format!("{:?} ev {:.0} partial {}", self.units[u].chosen, self.units[u].best_evidence(), matches!(&self.units[u].state, Fitted::Program(Some(p)) if p.partial.is_some()));
                 timed("wondered:relearn_unit", || self.relearn_unit(u));
+                if std::env::var("RELEARN_DEBUG").is_ok() {
+                    eprintln!("RELEARN {} facts {} surprised {} {} -> {:?} in {:.2}s", self.units[u].name, facts, learned.surprised, before_state, self.units[u].chosen, t0.elapsed().as_secs_f64());
+                }
             } else if !learned.surprised {
                 let items = self.units[u].lessons.clone();
                 self.units[u].remember = Remembered::from_items(&items);
@@ -2052,6 +2058,19 @@ impl School {
         timed("wondered:review_programs", || self.review_programs());
         timed("wondered:recalibrate_route", || self.maybe_recalibrate_route());
         Ok(learned)
+    }
+
+    /// Does the unit's current explanation say every one of its lessons exactly? (For a settled exact program that is the case where nothing about how to learn
+    /// the unit can have changed: the program is still the smallest that fits, since a smaller one fitting all lessons would have fitted the earlier ones.)
+    fn explains_every_lesson(&self, u: usize) -> bool {
+        let unit = &self.units[u];
+        unit.lessons.iter().all(|l| predict(&unit.state, &l.query, &self.weights).as_deref() == Some(l.answer.as_str()))
+    }
+
+    /// An exact program (no rivals, not partial) that explains every lesson including the one just taken in.
+    fn settled_program_explaining_all(&self, u: usize) -> bool {
+        let unit = &self.units[u];
+        unit.chosen == Mech::Program && self.settled_exact(u) && matches!(&unit.state, Fitted::Program(Some(_))) && self.explains_every_lesson(u)
     }
 
     /// Is unit `u` a rule, selection or exact program with no competing explanation, reliable on the facts held back? (Nothing left to decide about how to learn it.)
@@ -2179,6 +2198,12 @@ impl School {
         if guesser && !repaired_now && self.units[u].facts() % GUESSER_REFIT_EVERY != 0 {
             let items = self.units[u].lessons.clone();
             self.units[u].remember = Remembered::from_items(&items);
+        } else if !repaired_now && self.settled_program_explaining_all(u) {
+            // a settled exact program that already says every lesson, this one too: refitting it would find the same program (see `explains_every_lesson`); the
+            // lesson only extends what it remembers and where it may state facts
+            let items = self.units[u].lessons.clone();
+            self.units[u].remember = Remembered::from_items(&items);
+            self.settle_reach(u);
         } else if !repaired_now {
             if !timed("learn:refit_in_place", || self.refit_in_place(u)) {
                 timed("learn:relearn_unit", || self.relearn_unit(u));
@@ -3254,6 +3279,25 @@ mod tests {
         assert_eq!(s.ask("what is zork 29").answer.as_deref(), Some("11"));
         assert_eq!(s.ask("what is zork 19").answer.as_deref(), Some("10"));
         assert!(s.wonder().is_empty());
+    }
+
+    #[test]
+    fn a_confirming_answer_extends_a_settled_program_without_refitting_it() {
+        // the tens digit, taught on 0..14: a settled exact program. Told 24 -> 2 (it already says so) the program is not refitted or re-decided, but the lesson is
+        // kept and the range it may state facts in grows to reach it.
+        let mut s = numbers_school(|a| a / 10, 14);
+        s.set_careful(true);
+        assert_eq!(s.units[0].program().as_deref(), Some("(first div 10)"));
+        assert!(s.settled_program_explaining_all(0));
+        assert!(s.ask("what is zork 24").answer.is_none(), "beyond what it was taught: a guess, not a fact");
+        s.learn_wondered_sure("what is zork 24", "2", "zork").unwrap();
+        assert!(s.settled_program_explaining_all(0));
+        assert_eq!(s.units[0].program().as_deref(), Some("(first div 10)"));
+        assert_eq!(s.ask("what is zork 24").answer.as_deref(), Some("2"), "the confirmation is kept");
+        assert_eq!(s.ask("what is zork 21").answer.as_deref(), Some("2"), "and the range it may speak in has grown");
+        // a contradiction is NOT confirming: the program no longer explains every lesson and the full path runs
+        s.units[0].lessons.push(Item { unit: 0, fact: 99, template: 0, query: "what is zork 17".into(), answer: "9".into() });
+        assert!(!s.settled_program_explaining_all(0));
     }
 
     #[test]

@@ -386,6 +386,8 @@ description than one with a single fixed learner.
 
 - **2026-10-23** The adaptive exam put to the matched transformer (`baby exam adapt-transformer`): told each truth as the stream goes on, the transformer does not get better (frozen 19 % right, 81 % wrong facts; fine-tuned 11-16 %, no setting tried beat frozen), while the baby holds 0 wrong facts and 64 % facts right plus 24 % right labeled guesses. The measured weak side is the baby's own: adapting costs 0.22 J per told answer against 1.6-34 mJ for fine-tuning (6.5-140x more), 174-183 J for the 787-question stream. That is the number a cheaper, more genuine Adaptive Learning has to beat.
 
+- **2026-10-23** The cost of adapting cut 3.7x with the same answers: stage timers showed every one of 56 periodic re-decisions ended where it started, so a settled exact program that still explains every lesson is no longer refitted or re-decided. The 787-question adaptive stream went from 175-179 J to 48 J (61 mJ per told answer; was 0.22 J), the whole run from 210-217 J to 81 J, replies byte-identical on five streams and the whole battery unchanged. Still ~2x the transformer's replay fine-tuning per told answer, and the transformer does not learn from being told.
+
 ---
 
 ## More to come
