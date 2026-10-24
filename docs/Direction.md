@@ -2,7 +2,7 @@
 
 This is the long-form framing that used to be the front page. The technical overview is [`../README.md`](../README.md); the working state is in [`../TransientHandover.md`](../TransientHandover.md).
 
-**Status (as of 2026-10-20):** active. `baby/` is a working, tested (61 tests) system: units of lessons, mechanisms chosen by evidence, honest refusals, learning after school, unit discovery, light cost (see `baby/README.md` and the handover); the larger architecture and the scale-up are still ahead. Founded 2026-10-15 by Daws. We pursue this whether or not it works; what we learn is
+**Status (as of 2026-10-24):** active. `baby/` is a working, tested (150 tests) system: units of lessons, mechanisms chosen by evidence, honest refusals, learning after school, unit discovery, light cost, an entry exam any system can take (with its adaptive and wrong-teacher tiers and a comparison against a plain transformer), and CI on thirteen platform rows (see `baby/README.md` and the handover); the larger architecture and the scale-up are still ahead. Founded 2026-10-15 by Daws. We pursue this whether or not it works; what we learn is
 the point, and a failed hypothesis still redirects the work.
 
 ## Mission
@@ -89,7 +89,7 @@ and per second.
 - **Phase 1, testbeds:** (a) system experiments, many cheap calls plus stores and verifiers, using an existing evaluation harness; (b) small
   architecture experiments at 10-100M parameters on a rented GPU, tracking quality against parameters, bytes read and FLOPs.
 - **Phase 2, grow what shows promise:** scale the ideas whose curves look good, and combine the architecture with the system.
-- **Phase 3, real devices:** the S24 Ultra and a laptop, measuring latency, power and heat.
+- **Phase 3, real devices:** a phone and a laptop, measuring latency, power and heat.
 - **Checkpoints, not endings:** after each phase ask what the results taught. A hypothesis that fails tells us which axis to
   shift to, which idea to combine, or which piece to carry into other work. The work continues from there.
 
@@ -123,7 +123,7 @@ decides whether to proceed.
   faster. Gains show up around the kernels, and in the confidence to build more aggressive designs. This matches what Daws has seen
   in application code.
 - A concrete snag: the ARM instructions that fast quantized matmul uses (the int8 dot-product and matrix-multiply extensions, which I
-  believe the S24's cores have) were still marked nightly-only in Rust's `std::arch` docs when checked. Options: a nightly
+  believe the phone's cores have) were still marked nightly-only in Rust's `std::arch` docs when checked. Options: a nightly
   toolchain, inline `asm!`, or calling existing C kernels (ggml) over FFI for the hot loop at first.
 - Research velocity: most papers ship PyTorch/CUDA/Triton reference code (selective scans, FlashAttention). Burn has autodiff and
   training; its CubeCL lets one Rust kernel target CUDA, ROCm, Metal, Vulkan, WebGPU and CPU [sourced]. We did not find a ready
