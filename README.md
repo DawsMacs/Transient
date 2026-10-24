@@ -198,8 +198,7 @@ Two transformers are trained on the same lessons and graded on the same question
 
 The long-term target is capable, continually learning AI that fits a consumer device's RAM, storage and power budget, and that
 anyone can run and teach on their own hardware. Whether an architecture like this can reach that is unknown; the repository exists
-to find out by measurement. The reasoning behind the project, in the author's own words, is in
-[`TransientVision.md`](TransientVision.md) and [`docs/Direction.md`](docs/Direction.md).
+to find out by measurement. The strategy and the hardware terrain are in [`docs/Direction.md`](docs/Direction.md).
 
 ## Documents
 
@@ -209,7 +208,6 @@ to find out by measurement. The reasoning behind the project, in the author's ow
 | [`LEARNING.md`](LEARNING.md) | learning-efficiency research notes and sources |
 | [`docs/Running.md`](docs/Running.md) | get, build, run and check Transient on each platform; what is tested where |
 | [`docs/Direction.md`](docs/Direction.md) | strategy, hardware terrain, language choice, candidate architectures |
-| [`TransientVision.md`](TransientVision.md) | the author's dated vision entries |
 | [`TransientHandover.md`](TransientHandover.md) | current state and next steps, for resuming work |
 
 The website, [transientai.org](https://transientai.org), is a separate repository ([`DawsMacs/TransientAI-site`](https://github.com/DawsMacs/TransientAI-site)): overview, documentation, progress and a blog.

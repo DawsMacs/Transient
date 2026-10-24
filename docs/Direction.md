@@ -7,8 +7,6 @@ the point, and a failed hypothesis still redirects the work.
 
 ## Mission
 
-(The why behind it, in Daws's own framing: [`TransientVision.md`](../TransientVision.md), a living document.)
-
 Bring powerful AI to anyone's own hardware, and make it win *differently* from the cloud rather than trying to out-scale it. If a
 few providers and a few countries with massive infrastructure are the only possible way to have capable AI, that is a choice
 of design, not a law of nature. Transient is the attempt to find another way.

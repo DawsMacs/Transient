@@ -1702,7 +1702,7 @@ The road there before `program`, because the dead ends are the useful part:
 | builds abstractions (rules, not tables) | **yes, within a small language**: it builds expressions for forms no fixed mechanism covers (`times`, `apart`) and they reach beyond what it was taught; the language of pieces and the number line are supplied |
 | the learning process itself adapts | **more**: it learns how far to trust a match, picks the mechanism per kind of lesson from its own held-back evidence (new kinds included, no code), and builds a mechanism when none fits; steps, schedule and rate are still fixed |
 | discovers on its own (browsing, other modalities) | **no**: a teacher answers; nothing explores |
-| grows (a bare UMA becoming a learned UMA) | **no**: capacity is fixed up front |
+| grows (starts small, adds capacity only when it saturates) | **no**: capacity is fixed up front |
 
 ## en-US (2026-10-23)
 

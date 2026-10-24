@@ -8,8 +8,8 @@ whether or not it works. The code is `baby/` (pure Rust, zero dependencies, buil
 
 ## Start of session
 
-1. Read `TransientHandover.md` in full (rewritten 2026-10-21: state, decisions that are Daws's, options, guards, working lessons). It has the state, the numbers, the code map, the plan and what is next, the honest caveats, and the working habits. Then `TransientVision.md` (Daws's own entries, in his
-   voice: append dated entries, never rewrite them; assistant context goes in separate labeled sections).
+1. Read `TransientHandover.md` in full (rewritten 2026-10-21: state, decisions that are Daws's, options, guards, working lessons). It has the state, the numbers, the code map, the plan and what is next, the honest caveats, and the working habits. Then `TransientVision.md` (an **internal** document, rewritten 2026-10-24 at Daws's request in plain, practical
+   wording: append dated entries for new decisions, label the assistant's context, tag ideas Decision / Hypothesis / Measured / Open; never link it from public pages).
 2. Run `git pull --ff-only` and `gh pr list --state all` (pull requests wait for the user to merge them), then the two-minute check in the handover (`cargo test --release --offline`; `./target/release/baby school`; the scorecard's WRONG column must read 0.0%; `bash golden/check.sh`).
 
 ## Rules
@@ -19,7 +19,8 @@ whether or not it works. The code is `baby/` (pure Rust, zero dependencies, buil
 - **Honesty over polish.** Report WRONG separately from refused. Record mistakes and rejected hypotheses in `baby/README.md` as they happen. State caveats plainly (synthetic tidy lessons; estimated joules; mechanisms and thresholds are
   the assistant's, not discovered).
 - **Pessimism is input, never a brake.** Daws wants risks phrased as design constraints/terrain/checkpoints that redirect the work. Do not propose kill criteria or stop the project over difficulty; do not claim certainty of success.
-- **Absolute freedom, within the stated goals** (frontier-class intelligence on typical hardware, light on RAM/memory, built around Adaptive Learning, Rust-first, measured in joules not just parameters). Default to doing the plan.
+- **Vocabulary (2026-10-24).** Daws retired three labels he had coined: the architecture acronym beginning with U ("UMA" and its expansion), "Maximization", and "ultragenerative". Do not use or reintroduce them in code, docs, site copy or replies; say what is meant in plain, testable terms (capability per byte, parameter and joule). **Adaptive Learning** is the exception and stays. "Frontier" is an ambition, not a claim: say so wherever it appears.
+- **Absolute freedom, within the stated goals** (frontier-class intelligence on typical hardware as the ambition, light on RAM/memory, built around Adaptive Learning, Rust-first, measured in joules not just parameters). Default to doing the plan.
 - **After every new capability, ask adversarial questions** (the apart/minus/"N less than ten" ambiguity bit three times) and keep batteries of must-refuse questions in the tests.
 - **Do not run system-setting commands** (e.g. the RAPL `chmod`): give Daws the command instead. **This is a git repo** (`origin` = `git@github.com:DawsMacs/Transient.git`, public, AGPL-3.0-only; use his global git account). He has authorized commits and pushes to `origin main` for this work; still ask before force-pushing, adding other remotes or changing repo settings. The repo is public: never commit `.local/` or details of the sibling project.
 - The sibling project `~/Hiraketa` (Nana) has its own `CLAUDE.md`; its offline-mode work is Nana's private research and is separate from Transient.

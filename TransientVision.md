@@ -1,273 +1,236 @@
 # TransientVision
 
-A living record of why Transient exists and what Daws is betting on. Entries are dated and kept in his framing. Where I (the
-assistant) add context, it is in a separate, labeled section so his reasoning stays his. **This is a hunch, not a verified claim,
-and Transient pursues it regardless of how long it takes.**
+**Internal document.** It records why Transient exists, what has been decided, and how each idea is meant to be tested. It is a working
+document for Daws and the assistant, not a public page, and nothing on the public site should depend on it. The public record of the
+work is `README.md`, `docs/Direction.md` and `baby/README.md`; the state for resuming work is `TransientHandover.md`.
 
-Started 2026-10-19.
+Started 2026-10-19. **Rewritten 2026-10-24 at Daws's request:** the wording was made practical and tied to what has been measured. Decisions, dates and
+entry numbers are unchanged (other files cite "Entry 7" and so on). Earlier labels coined for the architecture and for optimizing it were retired
+and are not used; **Adaptive Learning** is the one project term kept. Entries are dated decisions. Where an entry also holds the assistant's
+context, it says so.
 
-**Vocabulary Daws has coined** (directions, not exact definitions; terminology is allowed to shift):
-- **Adaptive Learning**: learning that goes beyond conventional machine learning: continuous, from interaction, with the internals changing.
-- **Maximization**: optimizing a system for the most intelligence in a given computational space.
-- **UMA (Ultragenerative Maximized Architecture)**: the architecture Transient is aiming at. A *bare* UMA is the tiny starting unit;
-  a *learned* UMA has accumulated what it learned (the counterpart of a trained GPT, a usable LLM).
-
----
-
-## Entry 1 (2026-10-19): The iceberg
-
-### The bet
-
-There is an iceberg under the question of how to run frontier intelligence on hardware. Ordinary, low-end hardware has probably been
-underestimated, and not by a little: by an enormous cliff. If AI is built from scratch again, and the right implementation is found,
-the path to an architecture that is far more efficient may be like a maze, with a real way through it that nobody has taken because
-the industry has not been looking there.
-
-Daws is explicit about what kind of belief this is: **a hunch, not a verified claim.** It rests on his personal judgment, including
-non-technical factors, and not on what current research officially establishes. Researchers today mostly bet on smaller scaled
-benefits. Transient goes by the hunch anyway, **however long it takes.**
-
-### The reasoning (Daws's)
-
-1. **History keeps shrinking computers.** In the 1960s and 70s you rented machines the size of furniture or rooms. Today a smartphone
-   in a pocket is more powerful than what NASA flew in the Apollo missions. What looked like it required a building now fits in a hand.
-2. **Hardware will keep improving, and that is good, but it is not the whole story.** There are mathematical ceilings and natural
-   limits we have reached with current implementations. Something like vertical stacking may help, but it is not the kind of
-   breakthrough the single-chip processor was.
-3. **Software has probably been neglected relative to hardware.** Investment and attention have gone far more to hardware than to
-   rethinking the software side.
-4. **Today's models share one inherited design.** Most descend from the transformer architecture Google published in 2017, which
-   OpenAI built ChatGPT on. It has evolved, but almost nothing big has been started from scratch lately; the work has been improving
-   existing implementations.
-5. **The industry went all-in on scale.** Compute exploded, driven by NVIDIA, with skyrocketing demand for GPUs and infrastructure to
-   run AI at mass scale, and with the intensity and energy cost that comes with it. New hardware followed, such as NPUs. But the
-   models were mostly scaled, trained and refined, not reinvented.
-6. **Conclusion:** the neglected area is enormous. Rebuild AI from scratch, find the breakthrough implementation, and the efficiency
-   gain could be the size of an iceberg, not an increment.
-
-### Decision
-
-Transient goes by this hunch. It does not need to win by out-scaling the current approach; it exists to look where the industry has
-mostly not looked, and it will keep looking for as long as it takes.
+**How to read a claim here.** Each idea carries one of four labels: **Decision** (taken by Daws, not reopened without him), **Hypothesis** (believed,
+not shown), **Measured** (a number from a run, with its caveat in `baby/README.md`), **Open** (not started or not resolved).
 
 ---
 
-## Context added by the assistant (labeled, so it can be checked and removed)
+## Where each idea stands (2026-10-24)
 
-These are things that rhyme with the hunch. They do not prove it, and some point the other way; both kinds are listed.
-
-**Evidence that points the same direction**
-- **Software has already out-run hardware at times.** OpenAI's "AI and Efficiency" study found that the compute needed to train a
-  classifier to AlexNet-level accuracy on ImageNet fell **44x between 2012 and 2019**, with algorithmic efficiency doubling about
-  every 16 months. Moore's Law over the same stretch would have given about 11x
-  ([source](https://openai.com/index/ai-and-efficiency/)). For tasks with heavy investment, algorithms gave more than hardware did.
-- **A single optimizer-and-architecture rework cut a benchmark's cost by an order of magnitude.** The nanoGPT speedrun took GPT-2-small
-  training from 45 minutes to about 2 min 20 s on the same hardware class, using about 10x fewer tokens in an early version
-  ([source](https://github.com/KellerJordan/modded-nanogpt)). The "iceberg" at small scale, found by implementation work, not new chips.
-- **Capability density keeps rising.** The size of model needed for a given quality has been halving roughly every 3.5 months
-  ([source](https://alphaxiv.org/abs/2412.04315)). That is the same cliff seen from the model side.
-- **What Transient's own baby measured.** In `baby/`, answering a question is ~14,000 multiply-adds, and **91% of the estimated
-  energy is moving memory, not arithmetic**; one change to how a dot product is written made it 2.5x faster with identical results.
-  A 7-billion-parameter model does roughly 500,000x more arithmetic per token and must pay DRAM prices for every weight. Estimated
-  figures, tiny world, but the shape (energy lives in data movement, and implementation choices move it a lot) fits the hunch.
-- **The transformer's inheritance is real.** Variants (mixture-of-experts, grouped-query attention, FlashAttention, rotary
-  embeddings) are refinements of the 2017 design; alternatives such as state-space models and RWKV exist but have not displaced it
-  at the frontier.
-
-**Things that cut the other way (terrain, not reasons to stop)**
-- Hardware and software have co-evolved: transformers won partly because they map very well onto GPUs. A new architecture has to be
-  efficient on real chips, not just on paper, and may need new kernels.
-- Many ideas that look excellent at small scale fade at large scale; the scaling curve is the test, not a single demo.
-- The "iceberg" could be real yet narrower than hoped (for example, large for knowledge lookup and routing, smaller for open-ended
-  reasoning). The hunch does not say which parts; finding that out is part of the work.
-
-### What the hunch predicts (so it can be tested without ending it)
-
-If there is an iceberg, then, roughly:
-1. Some architecture reaches a given quality using **orders of magnitude less energy per token** than a dense transformer.
-2. The gain comes mostly from **software and representation**, not from new silicon.
-3. That architecture runs on **ordinary low-end hardware**, such as a phone or an old laptop.
-
-Signals to watch rather than pass/fail gates: how far Transient's results sit from the current quality-per-joule frontier; whether
-independent small designs keep finding large efficiency jumps; whether the jumps survive more scale. Each tells us where to dig next.
+| idea | label | where it stands |
+|---|---|---|
+| A differently designed system can reach useful capability on ordinary hardware (the founding hypothesis) | Hypothesis | Untested at scale. Everything built so far is a small system on tidy, synthetic lessons, plus two real-text corpora where it only gives labeled guesses. |
+| Capability per joule, measured by the machine, is the figure of merit | Decision | In use: RAPL counter on Linux; the entry exam reports joules for teaching, answering and adapting. |
+| Adaptive Learning: learning continues from use, and the way of learning adapts too | Decision, partly built | Level 1 (knowledge) works; level 2 (when and how much) is partly measured instead of fixed; level 3 (the mechanism itself) works only inside a language the assistant wrote. See Entry 5. |
+| Capability may respond steeply to small increases in capacity, if the design is dense in what it holds | Hypothesis | Untested. Standard scaling results are smooth, so a steep response would stand out; this needs the controlled comparison at several sizes. |
+| A unit that starts small and grows capacity only when it saturates | Open | Not started: baby's capacity is fixed up front. |
+| Representation need not be tokens | Decision, partly explored | The letters reader beat the word reader on misspellings (Entry 4); answers still come from a fixed list. |
+| Controlled comparison against a matched transformer | Measured in part | Plain Rust transformer and a tuned PyTorch one on the same lessons and exam, at several sizes. A pretrained-model comparison on real text is not done and needs a rented GPU. |
+| "Frontier-class" capability on consumer hardware | Hypothesis, ambition only | Not a target to be claimed; no result is anywhere near it. Judged by capability per joule first, benchmarks later (Entry 7). |
+| Successor system, Novice, rebuilt from scratch | Decision | Not started; waits for a measured ceiling in baby (Entry 10). |
 
 ---
 
-## Entry 2 (2026-10-19): A working unit, Adaptive Learning, and the UMA
+## Entry 1 (2026-10-19): The founding hypothesis
 
-### The shape of the solution
+**Decision.** Transient pursues one hypothesis, for as long as it takes and whether or not it holds: **a large share of what it costs to run capable AI comes
+from inherited design choices and from software, not from physics, so a differently designed system could reach useful capability on ordinary hardware.**
+Daws is explicit that this is a hunch resting on judgment, not an established result. Most current research bets on smaller gains from scale. Transient goes the other way
+because the question is worth answering by measurement, and a negative answer redirects the work instead of ending it.
 
-Probably not a heavy model but a **working unit**: something small that does real work and can grow. The current baby is not the
-breakthrough, only a rough picture of the *variety* worth trying when you refuse the conventional route. Being in Rust and designed
-efficiently, it can be rewarding in itself. Daws invites suggestions: if the assistant finds its own candidate, say so.
+**The reasoning behind the hunch (Daws's, restated).**
+1. Computing keeps shrinking: machines that filled rooms now fit in a pocket, and a phone outperforms the Apollo-era computers.
+2. Hardware will keep improving, but some limits are close (physical and mathematical), and no second jump on the scale of the single-chip processor is in sight.
+3. Software has had less attention than hardware. This is a judgment, not something measured here.
+4. Most deployed models descend from one design, the 2017 transformer. Recent work mostly refines and scales it; little large-scale work starts from a blank page.
+5. The industry committed to scale, with GPU demand and energy use to match. Models were mostly scaled, trained and refined, not redesigned.
+6. So a from-scratch design might find efficiency gains of a different order than tuning does. Daws's image is an iceberg: most of the possible gain lies below what current practice looks at.
 
-### Adaptive Learning (Daws's term)
+**Evidence that points the same way** (assistant's context; sources cited where they exist, figures recalled from them and worth rechecking before quoting externally).
+- OpenAI's "AI and Efficiency" study: the compute to reach AlexNet-level ImageNet accuracy fell 44x between 2012 and 2019 (algorithmic efficiency doubling about every 16 months), against about 11x from Moore's Law
+  over the same stretch ([source](https://openai.com/index/ai-and-efficiency/)).
+- The nanoGPT speedrun cut GPT-2-small training from 45 minutes to about 2 min 20 s on the same hardware class by reworking the optimizer and architecture ([source](https://github.com/KellerJordan/modded-nanogpt)).
+- The size of model needed for a given quality has been roughly halving every 3.5 months ([source](https://alphaxiv.org/abs/2412.04315)).
+- **Measured here:** answering a question in baby costs 59 uJ and adapting to one told answer costs 36 mJ (RAPL, upper bounds on a desktop). Early counted-operation estimates said most of the energy was moving memory, but those estimates later
+  proved about 100x below the measurements, so that *share* is unverified. One change in how a dot product was written made it 2.5x faster with identical results, which is the kind of implementation gain the hypothesis predicts.
+- The transformer's inheritance is real: mixture-of-experts, grouped-query attention, FlashAttention and rotary embeddings refine the 2017 design. State-space models and RWKV exist but have not displaced it at the frontier.
 
-The next big objective, a gamble: learning that surpasses machine learning as practiced and how LLMs learn today.
+**Evidence and terrain that cut the other way** (design constraints, not reasons to stop).
+- Hardware and software co-evolved: transformers won partly because they map well onto GPUs. A new design must be efficient on real chips, not only on paper, and may need new kernels.
+- Ideas that look excellent at small scale often fade at large scale. The scaling curve is the test, not one demo.
+- The gain could be real but narrower than hoped (large for lookup and routing, smaller for open-ended reasoning). Finding out which parts is part of the work.
 
-- It **continuously learns and builds abstract representations**, as LLMs do, **without being fed a dataset**. It learns through
-  interaction: autonomous browsing, different modalities (language first), discovering on its own instead of humans formulating the
-  training. **Control is still needed in the early stages**, but it should look nothing like conventional training.
-- It can be **efficient**: it grows meaningfully instead of absorbing redundancy. It learns rather than being dumped on.
-- It may build a **solid foundation first** (math, physics). **The complexity of reality sets reliability**: math or grammar syntax
-  is simple and can be reliable; something like literature has far more room to be interpreted differently depending on what the
-  learner already knows and has grown into.
-- **The internals adapt and change** instead of staying frozen, including in real time while running. That **blurs the line between
-  a provider training a model and a user simply interacting with one**. It is closer to how humans learn.
+**What the hypothesis predicts, so it can be tested one piece at a time.**
+1. Some design reaches a given quality with **orders of magnitude less energy per answer** than a dense transformer.
+2. The gain comes mostly from **software and representation**, not new silicon.
+3. That design runs on **ordinary low-end hardware**: a phone, an old laptop.
 
-### Maximization and the UMA
-
-- **Maximization** is Daws's term for optimizing a system or model to hold the most intelligence in a given computational space. It is
-  a direction, not a perfect definition, and "intelligence" has subjective parts; both are accepted.
-- The claim: if something is made *densely* intelligent, a tiny increase in scale could produce a dramatic increase in capability,
-  proportionally, like nudging the accelerator and suddenly doing 120 mph. Like a singularity before the big bang: very small, very
-  dense, then growth.
-- The architecture is called a **UMA, Ultragenerative Maximized Architecture**. A bare UMA is the tiny original; a **learned UMA**
-  has accumulated what it learned, like an already-trained GPT or a usable LLM. A learned UMA can be **scaled up** from the original
-  tiny one for greater intelligence, depending on what it can learn.
-
-### How to proceed (Daws's guidance)
-
-- **Flexible, not dogma.** The hypothesis is a vision, not an absolute rule. It could end up a model, a system, or a working unit;
-  the assistant has the freedom to explore.
-- **Run several experiments with different architectures.** Because the units are tiny, running one is cheap, especially if the
-  learning process needs less compute.
-- **Controlled comparison at small scale.** Build or find a **mini LLM of roughly the same size and learning/data as a UMA** and
-  compare them: how much computation each uses, how each works, how each generates. The differences should apply proportionally to
-  larger versions if scaled, imperfectly, but it is a pretty good testing method at this scale.
+These are signals, not pass/fail gates: how far Transient's results sit from the current quality-per-joule frontier; whether independent small designs keep finding large efficiency jumps; whether jumps survive more scale. Each says where to dig next.
 
 ---
 
-## Context and suggestions added by the assistant (labeled; check, edit or delete freely)
+## Entry 2 (2026-10-19): A small working unit, Adaptive Learning, and how to test it
 
-### Where the ideas meet existing research
+### The shape of the solution (Decision: stay flexible)
+Probably not one heavy model but a **small working unit** that does real work and can grow. baby is not the claimed breakthrough; it is a first probe of the kind of thing worth building when the conventional route is not assumed.
+The unit could end up a model, a system, or a set of units. The assistant has freedom to explore and to change approach, and is asked to say when it has its own candidate.
 
-- **Learning from interaction instead of a dataset** is close to *continual / lifelong learning*, *curiosity- and surprise-driven
-  learning*, and *open-ended learning*. Google's Titans update memory when a surprise signal is high, and the continuum-memory
-  work updates different parts at different speeds (see `LEARNING.md`, sources there). Adaptive Learning goes further by also
-  choosing *what to look at*.
-- **"Internals change in real time"** is the territory of fast weights and test-time training, and of sparse updates that touch few
-  parameters to avoid forgetting. The baby's `life` experiment already shows the energy side: skipping lessons it can already
-  answer meant only a third to a half of the lessons needed learning at all (285 of 858 heard for the store method, 402 of 858 for
-  sleep).
-- **"Scale a tiny learned UMA up"** has a concrete technical cousin: *function-preserving growth* (the Net2Net idea of widening or
-  deepening a network while keeping what it computes, from my recollection of Chen et al. 2015). It would let a bare UMA grow into
-  a bigger learned UMA without starting over.
-- **"Complexity of reality sets reliability"** maps onto calibration: the baby's confidence already tracks how well-defined a
-  question is (unknown or unseen questions came out below 0.5). A reliability signal that varies by domain (high for arithmetic,
-  lower for interpretive text) is measurable.
+### Adaptive Learning (the project's term)
+Learning that goes past conventional training:
+- It **continues from interaction** instead of stopping at a fixed training run, building abstractions from what it meets. Early on a teacher stays in the loop; the aim is that the learning looks nothing like a conventional dataset run.
+- It **spends effort where something is new**: a lesson it can already answer is not learned from or stored, so it does not absorb redundancy.
+- Its **internals change while it runs**, which blurs the line between a provider training a model and a user using one.
+- It may **build firmer foundations first** (arithmetic, physics) and treat reliability as depending on how well-defined a domain is: arithmetic can be exact, interpretive text leaves more room for disagreement. This is measurable as calibration by domain.
+- **The learning process itself adapts** (Entry 5).
 
-### The "tiny nudge, huge gain" prediction is testable and sharp
+### Density and growth (Hypothesis)
+If a design holds more capability per byte, parameter or joule, a small increase in capacity might buy a disproportionate gain in capability. Standard scaling studies find smooth power laws, so a steep response would stand out, which makes this a sharp
+prediction to test and not an assumption. Related phenomena exist (sudden generalization after long training, "grokking"; abilities that switch on at a size, though whether those are real or an artifact of the metric is debated). None of it supports the claim; it only says where to look.
+The working picture is a **starting unit** that is tiny, and a **learned state** that accumulates what it learned, which can be scaled up when it saturates. A concrete cousin is function-preserving growth (widen or deepen a network while keeping what it computes; the Net2Net idea, from the assistant's recollection of Chen et al. 2015).
+**Status: Open, not started.**
 
-Standard scaling studies find *smooth* power-law improvement with size, so a steep response to a small scale-up would stand out
-against them, which is what makes it a good bet to test. Related phenomena exist: sudden generalization after long training in
-small networks ("grokking", from my recollection of Power et al. 2022) and abilities that appear to switch on at a size (whether
-those jumps are real or an artifact of the metric is debated). None of this confirms the UMA claim; it says where to look.
+### Operational measure for "more capability in the same space"
+**Capability per unit of resource**, where capability is a score on a fixed suite and the resource is parameters, bytes or estimated joules, reported as separate numbers (not one blended figure, because "capability" has subjective parts). The suite is a shared design decision. In practice the entry exam (Entry 10) is that suite.
 
-### Suggested candidate working units (the assistant's picks, in the order I would try them)
+### How to proceed (Decision)
+- Flexible, not dogma. The hypothesis is a direction, not a rule.
+- Run several experiments with different designs. Units are tiny, so each is cheap.
+- **Controlled comparison at small scale:** a matched small transformer against a candidate, holding fixed parameters, bytes of weights, the *energy learning spent* (the ledger counts it) and data seen. Compare at **three or more sizes** each, since slopes extrapolate and a single size can mislead: quality at equal joules, retention after new learning, adaptation speed to new facts, joules per answer, and how quality changes with a little more scale. Log every configuration so the comparison cannot drift toward the idea we like.
+  **Status: Measured in part** (Progress log, 2026-10-21 and 2026-10-23).
 
-1. **The two-speed unit (episodic store + slow network + sleep).** The baby already is one: write while awake, consolidate while
-   asleep. It reached retrain-level retention at about 1/5 of the energy. Fix its known weakness (the network reads by position) with
-   a position-free reader and it becomes the minimal Adaptive Learning unit. *Experiment:* does consolidation keep rewording
-   robustness; how many lessons per joule.
-2. **The surprise-gated learner.** Learn only when prediction error is high; do nothing when the world matches expectation. This is
-   "no redundancy" as a mechanism. *Measure:* capability gained per joule, and what fraction of experience was skipped.
-3. **The growing unit.** Start tiny; add capacity (hidden units, embedding rows, new answer slots) only when the unit saturates,
-   using function-preserving growth. This is the literal "bare UMA to learned UMA" path. *Experiment:* grown unit vs a unit built
-   large from the start, at equal energy spent.
-4. **The loop-with-memory unit.** A small block reused for a variable number of steps (more steps for harder inputs) plus a store
-   to read and write. Parameters stay tiny while compute adapts per input (looped transformers and tiny recursive models point here).
-   *Experiment:* accuracy vs steps vs joules on rule-like tasks the baby fails (sums).
+### Where this meets existing research (assistant's context)
+- Learning from interaction instead of a dataset is close to continual and lifelong learning, curiosity- and surprise-driven learning, and open-ended learning. Google's Titans update memory when a surprise signal is high; continuum-memory work updates parts at different speeds (`LEARNING.md` has the sources). Adaptive Learning goes further by also choosing what to look at.
+- "Internals change in real time" is the territory of fast weights, test-time training and sparse updates that touch few parameters to avoid forgetting. baby's `life` experiment showed the energy side: skipping lessons it can already answer meant only a third to a half of the lessons needed learning at all.
+- Reliability varying by domain maps onto calibration. baby's confidence already tracks how well-defined a question is.
 
-Candidate (3) with (1) is the closest match to the vision as described; (2) is the cheapest to add to the existing code.
+### Candidate working units (the assistant's picks, with status)
+1. **Two-speed unit (episodic store, slow network, sleep).** Built in the first week; reached retrain-level retention at about a fifth of the energy. Later work moved most of the load to mechanisms chosen per unit (Entry 5).
+2. **Surprise-gated learner:** learn only when prediction error is high. Built (the surprise gate); skips what the unit can already answer.
+3. **Growing unit:** start tiny, add capacity only on saturation, function-preserving. Not started.
+4. **Loop-with-memory unit:** a small block reused for a variable number of steps plus a store (looped transformers and tiny recursive models point here). Not tried.
 
-### How to run the controlled experiment Daws describes
-
-Build a **matched mini transformer** and a UMA candidate and hold fixed what we can: parameter count, bytes of weights, and the
-*energy the learning spent* (the ledger already counts it) as well as data seen. Compare, at **three or more sizes** each, not one:
-quality at equal joules, retention after new learning, adaptation speed to new facts, joules per answer, and how quality changes
-as each is scaled a little. Slopes across sizes are what extrapolate; a single size can mislead. Keep a log of every config so the
-comparison cannot be accidentally tilted toward the idea we like.
-
-### A definition we can start measuring
-
-For Maximization, a first operational proxy (to be argued with): **capability per unit of resource**, where capability is a score on
-a fixed suite and resource is any of parameters, bytes, or estimated joules, reported as separate numbers rather than one
-(because "intelligence" has subjective parts). The suite itself is a design decision to make together.
-
-### Design notes for autonomous learning (constraints, not reasons to hold back)
-
-Learning from autonomous browsing means learning from unvetted text. That needs provenance (where each lesson came from), a way to
-unlearn or quarantine, and a rule for how much a single source can change the unit. Early on, as Daws says, a teacher stays in the
-loop. These are the knobs that make the autonomy safe to turn up gradually.
+### Design constraints for autonomous learning
+Learning from browsing means learning from unvetted text. That needs provenance (where each lesson came from), a way to unlearn or quarantine, and a rule for how much a single source can change the unit. A teacher stays in the loop early on. These are the controls that let the autonomy be turned up gradually. Sources wrong about a whole kind of thing cannot be caught from inside the lessons, so per-source track records belong here (handover, next steps item 4).
 
 ---
 
-## Entry 3 (2026-10-19): The goal, stated plainly, and freedom to explore
+## Entry 3 (2026-10-19): The goal, stated plainly
 
-By any means: **run frontier intelligence on low-end or typical consumer hardware without overwhelming the device**, in RAM,
-memory or otherwise. The architecture that does this is likely **different from today's, and more effective with Adaptive
-Learning (AL)**. The assistant keeps freedom to choose and change approaches, models, systems or working units along the way; the
-suggestions in Entry 2 are starting points, not a plan to follow.
+By any means: **run strong AI on typical consumer hardware without overwhelming the device**, in RAM, storage or otherwise. The architecture that does this is likely different from today's and more effective with Adaptive Learning. The assistant may choose and change approaches, models and units; Entry 2's candidates are starting points, not a plan to follow.
 
-### What "not overwhelming the device" means (the assistant's working reading, to be corrected)
-
-The device must stay usable while Transient runs: it is a guest, not a tenant that takes over. The constraints are measured, not felt:
-- **Resident RAM** (what must stay loaded), and **peak RAM** during learning.
+### "Not overwhelming the device" (working reading, to be corrected)
+The device stays usable while Transient runs. It is a guest, not a tenant. The constraints are measured, not felt:
+- **Resident RAM** (what must stay loaded) and **peak RAM** during learning.
 - **Storage footprint**, and how much of it is read sparsely (cheap) versus loaded whole (expensive).
-- **Memory bandwidth** per answer and per lesson, since moving data is where the energy goes (the baby: ~91% of estimated energy).
-- **Energy and heat**: joules per answer, per lesson, and sustained temperature on a phone.
-- **Background behavior**: nothing that makes the device slow when the user is doing something else; learning gets scheduled for idle time.
+- **Memory bandwidth** per answer and per lesson, because data movement is expected to dominate energy (to be confirmed by measurement; see Entry 1).
+- **Energy and heat:** joules per answer and per lesson; sustained temperature on a phone.
+- **Background behavior:** nothing that slows the device while the user is doing something else; learning is scheduled for idle time.
 
-Proposed reference envelope, to give the work a concrete target (every number negotiable): a *budget* of roughly 1 GB resident RAM
-and a few GB of storage for the learned unit on a 8-12 GB phone or laptop (Daws's S24 Ultra and this 7.5 GB laptop are the real
-test devices), with bigger stores allowed on disk because disk is read sparsely. Smaller tiers (a 2-4 GB phone) are the stretch
-goal. These budgets belong in the experiment logs next to every result.
+Reference envelope (every number negotiable, to appear next to results): about **1 GB resident RAM** and a few GB of storage for the learned unit, on an 8-12 GB phone or laptop. Daws's S24 Ultra and the 7.5 GB development laptop are the real test devices. Bigger stores are allowed on disk because disk is read sparsely. A 2-4 GB phone is the stretch tier.
 
 ---
 
-## Entry 4 (2026-10-19): Not even tokens, and absolute freedom
+## Entry 4 (2026-10-19): Tokens are one choice among several
 
-Working on this and on Adaptive Learning will be a challenge. The deviation may go deeper than architecture: **it might not even
-be the tokens the industry has normalized.** The goal is a completely different route, taking nothing for granted. Daws does not
-oppose using what the industry has learned; the point is to deviate *from scratch* and keep only what earns its place.
+The deviation from convention may go deeper than architecture: the units the model reads need not be the tokens the industry normalized. The goal is a route that takes nothing for granted, keeps what the industry learned only while it earns its place in a measured comparison, and replaces it when something better shows up. Daws does not oppose using what the field has learned.
 
-**Absolute freedom** is given to the assistant on this project, under the stated directives and goals of what Transient must be
-(frontier-class intelligence on ordinary consumer hardware, light on RAM and memory, built around Adaptive Learning, in Rust,
-pursued whether or not it succeeds, honest about evidence).
+**Absolute freedom** is given to the assistant under the stated goals: strong capability on ordinary hardware, light on RAM and memory, built around Adaptive Learning, in Rust, pursued whether or not it succeeds, honest about evidence.
 
-### What this changes in practice (the assistant's reading)
-
-- **Words as units are one choice among several.** The baby already reads whole words from a fixed vocabulary, a smaller version of
-  the industry's token habit. Candidates to try instead: reading *letters* or hashed letter-groups (open vocabulary, no tokenizer,
-  typo-tolerant), reading *meaning-carrying chunks it discovers itself*, or other representations that are learned rather than
-  imposed. The baby's own results already show the representation matters more than the learning trick (the reader change
-  beat every learning-method change).
-- **Industry knowledge is a toolbox, not a template.** Anything borrowed (embeddings, softmax, Adam) is kept only while it earns its
-  place in a measured comparison, and is replaced when something better shows up.
+**What this meant in practice (assistant's reading).** Words are one choice. baby reads whole words from a fixed vocabulary, a small version of the token habit. Alternatives: letters or hashed letter-groups (open vocabulary, no tokenizer, typo-tolerant), or chunks the system discovers itself. **Measured:** the spelling-based reader generalized to misspellings it never met (37% against about 11% on misspelled key words; 61% with noisy training), and the choice of reader mattered more than any learning trick. Borrowed pieces (embeddings, softmax, Adam) stay only while they earn their place.
 
 ---
 
 ## Entry 5 (2026-10-19): The learning process itself adapts
 
-Adaptive Learning is really important here. It is not only that the system adapts to *what* it learns: **the process of learning
-itself can change internally, how it learns**, and that is the real adaptation and the dynamic part. Daws asks the assistant to
-keep going with its own suggestions and not give up.
+The point of Adaptive Learning is not only that the system adapts to *what* it learns: **how it learns also changes**, and that is the dynamic part. Three levels, each deeper than the last:
 
-### What this changes in practice (the assistant's reading)
+| level | what adapts | status (2026-10-24) |
+|---|---|---|
+| 1. Knowledge | new facts, words, corrections | Works in real time. One new lesson costs about half a millisecond, flat from 20 to 600 units. |
+| 2. How much and when | steps per lesson, when to sleep, what to ask, how far to trust a match | Partly. The reliability bar is set from the noise the system measures in its own lessons and its boldness from its own track record; several constants (folds, outlier allowance, search budget) are still the assistant's. |
+| 3. The mechanism | try different ways to learn each kind of thing and keep whichever generalizes on held-back evidence | Works **inside a language the assistant wrote** (remember, rule, select, program, network; an expression search of seven pieces). It invents expressions and vocabulary, not new kinds of learner. |
 
-Three levels of adaptation, each a different depth:
-1. **Adapting the knowledge**: new facts, new words, corrections (the baby does this today).
-2. **Adapting how much and when it learns**: steps per lesson, when to sleep, what to ask, how far to trust a match. Today these are
-   constants chosen by the programmer (steps per lesson 10, sleep every 60, match threshold 0.6-0.75). The step toward Entry 5 is
-   to make each a quantity the baby *measures and adjusts from its own experience*.
-3. **Adapting the learning mechanism itself**: for each kind of thing it meets, try different ways of learning it (write it down,
-   adjust the weights, fit a rule) and keep whichever generalizes, deciding from evidence the baby gathers itself. That is learning
-   to learn at the level of mechanism, not only of numbers.
+No single mechanism wins everywhere: the fact store wins on facts, the network on rewordings after consolidation, programs on rules. A system that can pick, and justify the pick from its own evidence, is closer to the goal than one fixed learner. Entry 10 sets the bar for going further.
 
-The baby's own results already point there: no single mechanism wins everywhere (the fact store wins on facts, the network on
-rewordings after consolidation, and nothing yet on rules). A baby that can pick, and justify the pick, is closer to the
-description than one with a single fixed learner.
+---
+
+## Entry 6 (2026-10-20): Open, and kept open
+
+Daws made a public repository and chose the **AGPL** on purpose. One goal is that this work **stays open for everyone and is not hoarded or closed**. The README is technical rather than philosophical (the ambition may be mentioned, not spelled out), with a banner built from the logo in the Lexend typeface.
+
+**Context (assistant, labeled):**
+- The GPL obliges sharing source only when a program is *distributed*. A company could run a modified version as a hosted service and keep its changes. The AGPL closes that gap: users interacting over a network are entitled to the source. For a project whose point is that capable AI should not be the property of a few providers, that is the clause that matters.
+- A license binds others, not the copyright holder. What stops anyone from closing *other people's* contributions is that contributions arrive under the same license with a DCO sign-off and **no CLA** (the usual route by which projects are later relicensed into closed products).
+- The AGPL governs the software. It does not by itself cover trained or learned files or data people produce with it; if a released learned file should also stay open, that needs its own statement when one is first published.
+- Public means public: anything committed, history included, is permanently visible and may be cached or forked. Private-project notes were kept out for that reason (`.local/` is git-ignored).
+- "Or later" was chosen first; Entry 8 reversed it.
+
+---
+
+## Entry 7 (2026-10-21): What "frontier" means, guessing like a scientist, and what is trusted
+
+### "Frontier" (Decision: an ambition, not a destination)
+The ambition is to bring the *capability level* of very large models (trillions of parameters, run in data centers or as open weights; Daws cited Kimi K3, over 2 trillion parameters with about 40 billion active, a figure not checked here) to ordinary hardware, locally.
+"Frontier" here means: **"I trust this AI in my workflow, education, coding, job or school"**: general-purpose capability. It is vague on purpose, it is an ambition and not a destined goal, and it must not mislead the work. Daws bets on it anyway
+because it could change how intelligence is distributed, so that people without expensive hardware can have it too.
+Of the possible measures, the one that matters is **capability per unit of computation as the machine measures it (joules)**. Benchmarks and chat quality are trend-based and come later, optionally, if the joule measure is substantially met.
+No current result is near this ambition, and public text should say so.
+
+### Careful, but not timid: guess like a scientist (Decision)
+Careful is the default. But a system that cannot find patterns, predict or hypothesize is very restrictive, and one that is always confident is wrong all the time. Scientists guess, form hypotheses, then theories, then establish laws or facts, rigorously. Restraint keeps you in the same loop; **guess, get something wrong, update: that is learning.**
+The system does not have to be perfect. It has to understand what is true, the range of complexity and why, and then learn through trial and error. Today's models need extensive training or post-training to update; **ours can update in real time, which is the main advantage to protect.**
+
+Implemented as a ladder: a labeled **guess** (a trusted rule used beyond what was taught or checked), a **checked** range (a confirmed answer extends where it may speak as fact), and **taught** facts. The honesty rule became "never *silently* wrong": WRONG (a stated fact that is false) must stay at 0; a labeled guess may be wrong; what is measured is whether guesses are calibrated and whether one correction fixes the next mistake.
+
+### What is trusted, and the license
+The license stays AGPL (then still "or later"; Entry 8). Daws accepts the trust involved (the FSF, GitHub, the assistant). He values copyleft's origin. On git: freedom was given so that progress does not need hand-holding, but risk is real, so being careful, precise, planning and asking in risky situations remains the right call. The meaning of the name "Transient" is Daws's to tell, "for the lore".
+
+### Decisions in this entry
+- `--careful` is the default (permissive is `--permissive`).
+- GPU: Daws will rent one for the pretrained-model comparison and says when it is ready. A local iMac (macOS, AMD Radeon 4 GB, 40 GB RAM) was considered and set aside.
+- The energy meter (RAPL) was made readable by Daws himself.
+- GitHub social preview and topics were set by Daws.
+
+### Rename (2026-10-21)
+The repository moved from `DawsMacs/TransientAI` to `DawsMacs/Transient`. **TransientAI is the creator of the project** (Daws is its owner and founder); the project, repo, README and banners are called **Transient**. Copyright and license holder unchanged: DawsMacs. Earlier text that names the old repository records the name at the time.
+
+---
+
+## Entry 8 (2026-10-21): The license becomes AGPL-3.0-only
+
+Daws moved from `AGPL-3.0-or-later` to **`AGPL-3.0-only`** to rely less on any single institution: "or later" makes every future FSF version available to every recipient automatically, which fails open if something goes wrong there. Nobody had viewed the repository yet, so it was an easy moment.
+
+**Context (assistant, labeled):**
+- The license text never changes. "Or later" is an option each recipient may take, and it attaches to old releases too: a recipient of 2026 code could someday choose a weaker "AGPLv4" for their own copy. That was the exposure.
+- `-only` rather than a named proxy now. AGPLv3 §14 allows a notice to name a proxy whose public acceptance of a version permanently authorizes it; it fails closed, but its benefit (adopting a legal fix without contacting every contributor) matters only with outside contributors. As sole copyright holder Daws can add a proxy or "or later" for new releases at any time; tightening the other way cannot be undone for copies already distributed. So `-only` is the reversible choice.
+- Caveat: commits before the change carried `or-later`; anyone who already pulled them keeps that option on those copies.
+- Mechanics: SPDX headers, `Cargo.toml`, `REUSE.toml`, README, CONTRIBUTING, CLAUDE.md and the handover say `AGPL-3.0-only`; `LICENSES/AGPL-3.0-or-later.txt` became `AGPL-3.0-only.txt`. `LICENSE` is the unmodified AGPLv3 text, whose generic "any later version" wording is part of the license itself.
+
+---
+
+## Entry 9 (2026-10-22): Reinforcing from true facts, and making fewer mistakes
+
+Adaptive Learning includes connecting the dots and reinforcing from true facts, **similar to how a person learns and decides which sources to trust**. The system does not have to be right the first time. As it learns better it makes fewer mistakes; models also get things wrong during training and need feedback or retraining.
+Skepticism toward a source that contradicts what the system has good evidence for (hold the answer, ask again, believe it when repeated) is **on by default**, on the assistant's recommendation.
+
+**What was built (assistant, labeled).** An established exact program survives a few contradicting lessons (one lesson against dozens that agree is an outlier, not a new law), and answers that contradict a settled rule are held for a second opinion.
+**Measured:** with slips up to 20% baby keeps 99.9-100% of unseen and beyond-range answers right; against a source that is consistently wrong about particular things it keeps 99.6% at 5% and 88% at 20%, and every wrong fact it states is a fact it was wrongly told.
+**Limit:** a source wrong about a whole kind of thing cannot be caught from inside, because all its lessons agree. Numbers and failures: first section of `baby/README.md`.
+
+---
+
+## Entry 10 (2026-10-22): Genuine Adaptive Learning, and Novice
+
+**Direction (Decision).** baby and its Adaptive Learning keep improving for a good while, and AL should become *genuine* and not a trick: real invention, dynamic architecture, internal rearrangement, efficiency changes, real-time learning and adaptation.
+A future successor is named **Novice**. Every new version is **rebuilt and redesigned from scratch with the previous work used only as reference**, so the work reinvents instead of inheriting inertia. Systems should get lighter, faster, more efficient, more capable, more dynamic, with deeper AL.
+Long-term direction for the assistant to weigh. Tell Daws when it is time to rent the GPU.
+
+**Reading (assistant, labeled).**
+- *Genuine, not a trick.* Today's adaptation is real but chosen by the assistant: it picks among mechanisms written for it, with thresholds set for it, and its invention is a search in a small expression language. The repair step shows the gap: it can rebuild `min(a+b, 30)` only because the language has `min` and the contradiction names a 30.
+  More genuine means the system changing its own language and structure when the old one fails: new operations, new kinds of mechanism, thresholds set from measurement, units split and merged on their own evidence, with each change's cost in joules.
+  **The test: a capability the system gets that no line of code names in advance, shown on a task it was not designed for.**
+- *Novice.* baby stays as the reference and measuring stick. Novice may share nothing with it but goals and benchmarks. baby's batteries therefore become Novice's **entry exam** (`baby exam`, independent of baby's internals, any language through a line protocol): a successor is worth building when it passes what baby passes at lower cost and does something baby cannot.
+- *When.* Starting Novice is a judgment, not a schedule. The assistant says so when baby stops yielding (a ceiling named from measurements), and proposes what to rebuild around. The handover's lists of failures are the design notes. The ceiling named so far: hand-built mechanisms and thresholds, the wording limit on real text, and adapting at roughly 600 times the cost of answering.
+- *GPU.* Not needed yet. The first stage that wants one is the pretrained-model comparison on real text (a 0.5-8B model on SVAMP and a second corpus). The assistant says so before that stage starts.
 
 ---
 
@@ -393,118 +356,3 @@ description than one with a single fixed learner.
 - **2026-10-24** Transient on other platforms, measured instead of assumed (a CI matrix of Linux x86_64 and aarch64, musl, macOS arm64 and Windows, plus a fingerprint and an accuracy audit of each platform's math library, plus golden answers): the math libraries differ by one last-bit step on under 1 % of inputs, and on all five platforms the exam predictions, the adaptive replies and the scorecard are byte-identical to the Linux reference. Say "CI-tested", not "supported"; joules remain Linux with a readable RAPL counter. The open questions (deterministic in-repo math, a hash-order fix, WASI as reference) are listed in `baby/README.md`.
 
 - **2026-10-24** More machines, and the checks that keep them honest: WebAssembly under Wasmtime (no change to the logic), and 32-bit x86, s390x (big-endian) and riscv64, all give answers byte-identical to the Linux reference, so CI now has thirteen platform rows; a difference on the reference row fails the build, and the answers under a wrong teacher are re-checked weekly. DragonFly BSD was tried and dropped: its tests pass but its packaged Rust crashes the program at startup. The first guide to getting and running it (`docs/Running.md`) was written, and the site's documentation updated.
-
----
-
-## More to come
-
-Daws has more decisions to record. Entries below, newest last.
-
----
-
-## Entry 6 (2026-10-20): Open, and kept open
-
-Daws made a public GitHub repository for the work (`DawsMacs/TransientAI`) and chose the **AGPLv3** on purpose. One internal goal is to make sure this
-work **stays open for everyone, and is not hoarded or closed.** The README is to be technical rather than philosophical (the ambition may be mentioned,
-not spelled out as it is in this file), with a banner built from the logo and the Lexend typeface. The assistant keeps the freedom to suggest whether
-"AGPL, or version 3 and later" serves that goal better.
-
-### Context added by the assistant (labeled; check, edit or delete freely)
-
-- **Why a network-copyleft license fits the goal.** The GPL obliges you to share source only when you *distribute* a program. A company can run a modified
-  version as a hosted service, never distribute it, and keep its changes. The AGPL closes that gap: users who interact with a modified version over a
-  network are entitled to its source. For a project whose point is that capable AI should not be the property of a few providers, that is the clause that matters.
-- **"Or later" was chosen (`AGPL-3.0-or-later`).** It lets the FSF's future versions apply, which is the practical way to close loopholes that do not exist yet
-  (the 2007 text predates today's AI services) and keeps the code combinable with other copyleft code as licenses evolve. The cost is trusting the FSF's stewardship
-  of future versions; if that trust ever changes, `-only` can be adopted from then on for new files (a license already granted cannot be taken back). Easy to revert now if Daws prefers `-only`.
-- **A license binds others, not the copyright holder.** As sole copyright holder Daws could still relicense his own code. What prevents anyone, including a future
-  Daws, from closing *other people's* contributions is that contributions come in under the same license with a DCO sign-off and **no CLA** (a CLA is the usual
-  mechanism by which a project is later relicensed into a closed product).
-- **What the AGPL does not cover.** It governs the software. It does not by itself say anything about trained or learned files (`.school`, model weights) or data
-  that people produce with it; if a released learned file should also stay open, that wants its own explicit statement when we first publish one.
-- **Public means public.** Anything committed, including its history, is permanently visible and may be cached or forked. Private-project notes were kept out
-  of the first commit for that reason (`.local/` is git-ignored).
-
-
----
-
-## Entry 7 (2026-10-21): Frontier, guessing like a scientist, and what is trusted
-
-### What "frontier" means here
-
-The ambition is to bring the level of models with trillions of parameters (proprietary ones run through APIs in large data centers, or open-weight ones such as Kimi K3, over 2 trillion parameters, about 40 billion active) to
-ordinary hardware, locally. "Frontier" simply means what is in that range: **"I trust this AI in my workflow, education, coding, job, school"**, general-purpose intelligence. It is vague on purpose. It is **an ambition, not a destined goal**, and it
-must not falsely lead the work elsewhere. Daws still bets on it because it could change how intelligence is distributed globally, so that disadvantaged people can have it too one day without expensive hardware.
-Of the possible measures, the one that matters is **capability per unit of computation as the machine itself measures it (joules)**. Benchmarks and chat quality are trend-based and can change; they come later, optionally, if the joule measure is substantially met.
-
-### Careful, but not timid: the baby should guess like a scientist
-
-Careful becomes the default. But an intelligent system that cannot find patterns, predict or hypothesize would be a very smart and very restrictive system, and one that is always confident would be a chatbot that is wrong all the time.
-The human parallel is the way out: scientists guess, form hypotheses, then theories, then establish laws or facts, and do it rigorously. Risk-taking sometimes pays more than being overly cautious, because restraint keeps you in the same loop; **guess, get something wrong, update: that is learning.**
-The baby does not have to be perfect. It has to understand **what is true, the range of complexity, and why something is true or false**, and then, through trial and error, learn using Adaptive Learning. LLMs need extensive training or post-training to update something; **ours can update in real time, which is the biggest advantage.**
-Keep that in mind in handling this.
-
-### What is trusted, and the license
-
-The license stays **AGPL-3.0-or-later**. Daws accepts the trust it involves (the FSF, and GitHub, and the assistant: "we have to trust many things here"). If the AGPL's nature ever changed in a way he disliked, new releases could go out under AGPL-3.0-only, and older ones remain under what they were granted.
-He trusts the GNU foundation: Stallman went through a lot to invent copyleft. On git: freedom was given so that there is progress without him having to spoon-feed or sit through everything; risk is real, so **being careful, precise, planning, and asking in risky situations is still the right call.**
-**The name "Transient" stays a mystery for now** ("for the lore").
-
-### Decisions in this entry
-- `--careful` becomes the default (permissive is `--permissive`).
-- GPU: Daws will rent one for the controlled comparison with a small transformer (he will say when it is set up); a local iMac (macOS, AMD Radeon 4 GB, 40 GB RAM) was considered and set aside as complicated.
-- The energy meter (RAPL) was made readable by Daws himself.
-- GitHub social preview and topics were set by Daws.
-
-### Context added by the assistant (labeled)
-
-- Daws's ladder (hypothesis, theory, law) is implemented as: a labeled **guess** (a trusted rule used outside the range taught or checked), a **checked** range (a confirmed answer extends where it may speak as fact), and **taught** facts. See the 2026-10-21 section of `baby/README.md`.
-- The honesty rule became "never *silently* wrong": WRONG (a fact stated and false) must stay at 0, a labeled guess may be wrong, and what is measured is whether guesses are calibrated and whether one correction fixes the next mistake.
-
-### Context added by the assistant (labeled): the rename (2026-10-21)
-
-Daws renamed the GitHub repository from `DawsMacs/TransientAI` to `DawsMacs/Transient`. **TransientAI is now the name of the creator of the Transient project** (Daws is its owner and founder); the project, the repo, the README and the banners are called **Transient**. The copyright and license holder is unchanged: DawsMacs, AGPL-3.0-or-later. Earlier entries above that say `DawsMacs/TransientAI` record the name at the time and are left as written; GitHub redirects the old URL.
-
-
----
-
-## Entry 8 (2026-10-21): The license becomes AGPL-3.0-only
-
-Daws decided to move from `AGPL-3.0-or-later` to **`AGPL-3.0-only`**, to rely less on the FSF or any institution: "or later" means every future version the FSF publishes is automatically available to every recipient, which fails open if something goes wrong there. He noted that nobody had yet viewed the repository, so it was an easy moment to change it.
-
-### Context added by the assistant (labeled; check, edit or delete freely)
-
-- **What "or later" does and does not do.** The license text never changes; AGPLv3 stays AGPLv3 and any copy can always be used under it. "Or later" is an *option each recipient may take*, and it attaches to old releases too: a recipient of 2026 code could choose a weaker "AGPLv4" in the future for their own copy and derivatives. That was the exposure.
-- **Why `-only` rather than a proxy now.** AGPLv3 §14 lets a notice name a *proxy* whose public acceptance of a version permanently authorizes it. That fails closed (no proxy statement means v3 stays), but its benefit is adopting a future legal fix without contacting every contributor, which matters only once there are outside contributors. As sole copyright holder, Daws can add a proxy or "or later" for *new* releases at any time; tightening the other way cannot be undone for copies already distributed. So `-only` is the reversible choice.
-- **Honest caveat.** Commits published before this change carried `AGPL-3.0-or-later`; anyone who already pulled them keeps that option on those copies. The change applies from this commit onward.
-- **Mechanics.** SPDX headers, `Cargo.toml`, `REUSE.toml`, README, CONTRIBUTING, CLAUDE.md and the handover now say `AGPL-3.0-only`; `LICENSES/AGPL-3.0-or-later.txt` was renamed `AGPL-3.0-only.txt`. The `LICENSE` file is the unmodified AGPLv3 text, whose generic "any later version" wording is part of the license text itself and is left as is. Earlier entries above that say `-or-later` record the decision at the time and are left as written. The website text was updated to match.
-
----
-
-## Entry 9 (2026-10-22): Reinforcing from true facts, and learning to make fewer mistakes
-
-On the baby learning from a teacher who is sometimes wrong: this is the AL idea, connecting the dots and reinforcing from true facts, **similar to how a human learns and trusts new sources**. The baby does not have to get it right the first time. As AL improves it gets better at learning, so it makes fewer mistakes, rather than needing to be right at once: even models get things wrong during training, and they need to be retrained or go through some feedback process. Skepticism of a source that contradicts what the baby has good evidence for (hold it, ask again, believe it when it is repeated) is to be **on by default**, on the assistant's own recommendation.
-
-### Context added by the assistant (labeled)
-
-- What was built from this: an established exact program survives a few contradicting lessons (one lesson against dozens that agree is an outlier, not a new law), and answers that contradict a settled rule are held for a second opinion. With slips up to 20 % the baby keeps 99.9-100 % of its unseen and beyond-range answers right; against a source that is consistently wrong about particular things it keeps 99.6 % at 5 % and 88 % at 20 %, and every wrong fact it states is a fact it was wrongly told. What it cannot do from inside is catch a source that is wrong about a whole kind of thing: all of that source's lessons would agree with each other. Numbers and failures: first section of `baby/README.md`.
-
-
----
-
-## Entry 10 (2026-10-22): Genuine AL, and Novice, the successor to baby
-
-Daws, on where baby and its Adaptive Learning go (his words, lightly tidied):
-
-We will keep working on baby for quite a while, and I want baby and its AL to improve. As we improve in that field, **AL should become more genuine than a mere trick**: real invention, dynamic architecture, internal rearrangements, efficiency alterations, real-time learning and adaptation, and so on.
-
-There will also be a future successor to baby, which I am naming **Novice**. For every new version we will **rebuild and redesign from scratch and use the previous work only as reference**. This is to make sure we reinvent and genuinely improve rather than build on the inertia of what exists. Our systems should get lighter, faster, more efficient, more intelligent, more capable, more dynamic, with deeper AL.
-
-This is a long-term direction for the assistant to consider; the assistant is still driving the project with the freedom it was given. Also: tell Daws when it is time to rent a GPU.
-
-### Context added by the assistant (labeled; check, edit or delete freely)
-
-- **How I read "genuine, not a trick".** Today the baby's adaptation is real but chosen by me: it picks among mechanisms I wrote (remember, rule, select, program, network), with thresholds I set, and its "invention" is a search inside a language of eight operations I defined. The repair step (2026-10-22) is a small example of the gap: it can rebuild `min(a+b, 30)` only because the language has `min` and the contradiction names a 30. "More genuine" would mean the baby changing *its own language and its own structure* when the old one fails: new operations, new kinds of mechanism, its own thresholds set from measurement, units split, merged and re-routed on their own evidence, and the cost of each such change measured in joules. The test of genuineness I will hold myself to: **a capability the baby gets that no line of the code names in advance**, shown on a task I did not design it for.
-- **How I read "Novice".** Baby stays alive as the reference and the measuring stick; Novice is a clean-sheet design that may share nothing with it but the goals and the benchmarks. The honest consequence is that baby's batteries (the invention battery, the scale test, the teacher experiments, the controlled comparison) become Novice's **entry exam**: a successor is worth building when it passes what baby passes at lower cost, and does something baby cannot. I will keep those tests runnable and independent of baby's internals (the `--export` TSVs and `--pairs` loader already point that way) so they can examine a system with a different design.
-- **When a Novice starts is a judgment, not a schedule.** I will say so when baby's design has stopped yielding (a ceiling I can name from measurements, not a feeling), and propose what Novice should be rebuilt around, rather than carry baby's structure over by habit. Until then baby is where the learning about AL happens, and its failures (the handover's lists) are the design notes for Novice.
-- **GPU:** not needed yet. The first stage that wants one is the pretrained-model comparison on real text (a 0.5-8B model on the SVAMP bridge and a second corpus); I will say so before that stage starts.
