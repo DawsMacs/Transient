@@ -134,7 +134,7 @@ jobs:
   # Rust (1.85.1) crashes the binary at startup inside the standard library's thread-local code ("assertion failed: key as usize != KEY_SENTVAL"),
   # before any Transient logic runs; the tests themselves passed there. Every step runs INSIDE the VM through the
   # cpa.sh shell. Reported like the other non-reference rows: the tests, the scorecard WRONG gate and the build can fail the job (a real
-  # finding); the fingerprint and the golden check only report. The package names below are the first attempt, not verified.
+  # finding); the fingerprint and the golden check only report. Verified on 2026-10-24: FreeBSD 15.1, NetBSD 10.1 and OpenBSD 7.9 passed with these package names.
   bsd:
     name: ${{ matrix.name }}
     runs-on: ubuntu-24.04
@@ -283,7 +283,7 @@ jobs:
   # check including three golden runs). s390x (big-endian, 64-bit) and riscv64 run under QEMU user-mode emulation (qemu-user, with the cross
   # toolchain and libc from Ubuntu's packages, no Docker and no third-party action): slower by a large factor, so one golden run, and the timings
   # and joules mean nothing there. Reported like the other non-reference rows: build, tests and the scorecard WRONG gate can fail the job;
-  # the fingerprint, accuracy audit and golden check only report. The package names and the emulated run times are a first attempt, not verified.
+  # the fingerprint, accuracy audit and golden check only report. Verified on 2026-10-24: all three rows passed on their first run (i686 in about 3.5 minutes, riscv64 in 9, s390x in 12.8).
   emulated:
     name: ${{ matrix.name }}
     runs-on: ubuntu-24.04
