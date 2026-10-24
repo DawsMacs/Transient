@@ -13,7 +13,7 @@
 *adaptive learning*: a system that keeps learning while it is used, decides for itself *how* to learn each kind of thing, and is
 measured by what it costs (operations, memory, estimated joules) rather than by parameter count alone.
 
-The current artifact is `baby/`: about 17k lines of Rust, **no dependencies**, builds offline, 146 tests. It is a research prototype
+The current artifact is `baby/`: about 17k lines of Rust, **no dependencies**, builds offline, 149 tests. It is a research prototype
 evaluated mostly on a synthetic curriculum, with a first look at real word problems (SVAMP, ASDiv) and an entry exam that any
 other system can take. It is not a language model and makes no claim to be one yet.
 
@@ -82,7 +82,7 @@ The scorecard reports **WRONG separately from refused**: a refusal is an accepta
 Requires a stable Rust toolchain (edition 2021). No other dependencies, no network.
 
 ```bash
-cargo test --release --offline         # 146 tests (about 21 s)
+cargo test --release --offline         # 149 tests (about 21 s)
 cargo build --release --offline
 ./target/release/baby school           # teach 13 units (~4 s), print how each was learned and the scorecard
 ./target/release/baby ask "how far apart are two and nine"   # answers, and says how it knew
@@ -102,6 +102,10 @@ standard input and output. `tools/exam_baseline.py` and `tools/exam_adapt_baseli
 
 If the scorecard's WRONG column is ever above 0.0 %, or a refusal battery in `school.rs` starts answering, treat it as a
 regression: honesty is the property this project protects first.
+
+## Platforms
+
+Written in portable Rust with no dependencies and no `unsafe`. **CI-tested on GitHub's runners** (virtual machines running the real operating systems): Linux x86_64 (glibc and musl), Linux aarch64, macOS arm64 and Windows x86_64. On all five the tests pass, the scorecard reads 0.0 % wrong, and the exam and adaptive-stream answers (`golden/`) are byte-identical to the Linux x86_64 reference, although the platforms' math libraries differ in the last bit (`cargo run --release --offline --example mathprint`). That is a result of testing, not a promise of support: other operating systems, versions and hardware are untested. **Measured joules need Linux on hardware with a readable RAPL counter** (not a VM or container); elsewhere the energy report says it is unavailable. Details and the open questions: [`baby/README.md`](baby/README.md), "Running on other platforms".
 
 ## Code map
 

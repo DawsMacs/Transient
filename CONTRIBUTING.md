@@ -36,4 +36,7 @@ New source files start with:
 cargo build --release --offline
 cargo test --release --offline
 ./target/release/baby school      # WRONG must read 0.0 % on every row
+golden/check.sh                   # the exam and adaptive-stream answers must match golden/ byte for byte
 ```
+
+The goldens record what Transient answers on the reference platform (Linux x86_64). If your change is *meant* to change the answers, run `golden/check.sh update` in the same commit and say why in the message; if it is not, a difference is a regression. Changes to `.github/workflows` go through a pull request first (a new platform row can fail for reasons nobody has met yet), so `main` never carries the experiment.

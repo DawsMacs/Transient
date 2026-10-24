@@ -59,7 +59,7 @@ while [ "$i" -le "$RUNS" ]; do
     for f in $FILES; do
         if ! cmp -s "$WORK/run1/$f" "$WORK/run$i/$f"; then
             echo "NOT REPRODUCIBLE on this machine: $f differs between run 1 and run $i."
-            echo "A mismatch with the goldens would prove nothing; look for hash-map ordering first (DistributionProposal.md, section 2.1)."
+            echo "A mismatch with the goldens would prove nothing; look for hash-map ordering first (baby/README.md, "Running on other platforms", latent hazards)."
             exit 3
         fi
     done

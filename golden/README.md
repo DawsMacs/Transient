@@ -2,7 +2,7 @@
 
 What Transient produces on the reference platform (Linux x86_64, glibc), kept so that every other platform can be compared with
 it byte for byte. `check.sh` generates the same outputs on the machine running it and diffs them against these files. See
-`DistributionProposal.md` for the reasoning.
+the section "Running on other platforms" in `baby/README.md` for the reasoning and the results.
 
 | File | What it is |
 |---|---|
@@ -19,7 +19,7 @@ Only deterministic outputs are compared. Timings, memory, joules and meter warni
 - **DIFFERS**: show the difference and say so; do not widen anything or adopt the new output. It means either a platform
   difference (for example a math-library last bit that flipped a decision) or a logic change that was not followed by an update.
 - **NOT REPRODUCIBLE** (exit 3): the runs on one machine disagree with each other, so a comparison would prove nothing. The first
-  suspect is hash-map iteration order (`DistributionProposal.md`, section 2.1).
+  suspect is hash-map iteration order (`baby/README.md`, "Running on other platforms", latent hazards).
 
 ## Updating the goldens
 
