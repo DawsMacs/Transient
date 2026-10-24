@@ -126,6 +126,10 @@ jobs:
     name: ${{ matrix.name }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    # DragonFly is Rust tier 3 and its packaged Rust (1.85.1) crashes the binary at startup in the standard library's thread-local code
+    # ("assertion failed: key as usize != KEY_SENTVAL"), before any Transient logic runs; the row is kept so that a newer toolchain can be seen,
+    # and may fail without failing the workflow.
+    continue-on-error: ${{ matrix.experimental == true }}
     strategy:
       fail-fast: false
       matrix:
@@ -146,6 +150,7 @@ jobs:
             os: dragonflybsd
             version: '6.4.2'
             install: sudo pkg install -y rust
+            experimental: true
     defaults:
       run:
         shell: cpa.sh {0}
@@ -187,6 +192,8 @@ jobs:
           cargo run --release --offline --example mathprint > mathprint.out
           grep -v '^#' mathprint.out | tr -d '\r' > got.txt
           grep -v '^#' baby/examples/mathprint.expected | tr -d '\r' > want.txt
+          echo "--- this platform's fingerprint (section hashes and the folded-constant lines):"
+          grep -E '^(fp|const) ' mathprint.out
           if diff -u want.txt got.txt > mathprint.diff; then echo "Math fingerprint on ${{ matrix.name }}: identical to the Linux x86_64 reference."; else echo "Math fingerprint on ${{ matrix.name }}: DIFFERS from the reference (first lines follow)"; head -30 mathprint.diff; fi
 
       - name: Golden outputs (reported)
