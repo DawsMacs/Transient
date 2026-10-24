@@ -8,6 +8,8 @@ whether or not it works. The code is `baby/` (pure Rust, zero dependencies, buil
 
 ## Start of session
 
+**A rename is pending (ordered 2026-10-24).** Before any other work, read "FIRST: THE RENAME" at the top of `TransientHandover.md`: ask Daws for the new name and scope (it had not been given), then follow that plan on a branch and a pull request. Until the rename lands, the names below stand.
+
 1. Read `TransientHandover.md` in full (rewritten 2026-10-21: state, decisions that are Daws's, options, guards, working lessons). It has the state, the numbers, the code map, the plan and what is next, the honest caveats, and the working habits. Then `TransientVision.md` (an **internal** document, rewritten 2026-10-24 at Daws's request in plain, practical
    wording: append dated entries for new decisions, label the assistant's context, tag ideas Decision / Hypothesis / Measured / Open; never link it from public pages).
 2. Run `git pull --ff-only` and `gh pr list --state all` (pull requests wait for the user to merge them), then the two-minute check in the handover (`cargo test --release --offline`; `./target/release/baby school`; the scorecard's WRONG column must read 0.0%; `bash golden/check.sh`).

@@ -234,6 +234,12 @@ Long-term direction for the assistant to weigh. Tell Daws when it is time to ren
 
 ---
 
+## Entry 11 (2026-10-24): The project is to be renamed
+
+**Decision (Daws).** The project is renamed because the current name may conflict with a registered trademark. Whether it does is unconfirmed, and this repository makes no claim either way: it is a precaution. The new name and the exact scope (the project, the creator's name, the repository, the site and the domain) are Daws's to give and had not been given when this entry was written. The next working session carries the rename out first, on a branch and a pull request, following the plan in `TransientHandover.md` ("FIRST: THE RENAME").
+
+**Context (assistant).** The rule that the meaning of the project's name is Daws's to tell stays in force for the new name. Nothing in the measurements depends on the name, and no recorded bar moves because of it. Old commits, merged pull request titles and the first blog posts keep the old name; a rename changes what is published from now on, not what was published.
+
 ## Progress log (assistant-maintained; details live in `baby/README.md`)
 
 - **2026-10-15** The baby: a 16k-parameter, from-scratch, zero-dependency Rust net that answers a query with one word. Joule ledger.
@@ -356,3 +362,5 @@ Long-term direction for the assistant to weigh. Tell Daws when it is time to ren
 - **2026-10-24** Transient on other platforms, measured instead of assumed (a CI matrix of Linux x86_64 and aarch64, musl, macOS arm64 and Windows, plus a fingerprint and an accuracy audit of each platform's math library, plus golden answers): the math libraries differ by one last-bit step on under 1 % of inputs, and on all five platforms the exam predictions, the adaptive replies and the scorecard are byte-identical to the Linux reference. Say "CI-tested", not "supported"; joules remain Linux with a readable RAPL counter. The open questions (deterministic in-repo math, a hash-order fix, WASI as reference) are listed in `baby/README.md`.
 
 - **2026-10-24** More machines, and the checks that keep them honest: WebAssembly under Wasmtime (no change to the logic), and 32-bit x86, s390x (big-endian) and riscv64, all give answers byte-identical to the Linux reference, so CI now has thirteen platform rows; a difference on the reference row fails the build, and the answers under a wrong teacher are re-checked weekly. DragonFly BSD was tried and dropped: its tests pass but its packaged Rust crashes the program at startup. The first guide to getting and running it (`docs/Running.md`) was written, and the site's documentation updated.
+
+- **2026-10-24** Rename ordered (Entry 11): the project is to be renamed after a possible trademark conflict (unconfirmed). Nothing was renamed yet; the handover holds an inventory of every place the name lives (about 20 tracked files here, about 25 pages in the site repo, the repository and domain names, the memory folder keyed to the local path) and a step-by-step plan. The new name had not been given.
