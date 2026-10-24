@@ -148,8 +148,10 @@ What this says:
 - **Even the reference library is not correctly rounded.** It is within one step for `ln`, `log2` and `exp`, and off by one on
   roughly 0.9% of word-weight inputs. A different library that is also within one step can therefore disagree with it by up to two.
   Differences of this size are not a bug in either platform; they are what "unspecified precision" means.
-- `powi` is by design not correctly rounded (it multiplies repeatedly). The large step counts for 0.999^t are at huge exponents,
-  where the value is tiny and `1 - 0.999^t`, the only thing the optimizer uses, rounds to 1, so they do not matter in practice.
+- `powi` is by design not correctly rounded (it multiplies repeatedly), and its error in 0.999^t grows with the exponent. The
+  optimizer uses `1 - 0.999^t`: at huge exponents the value is tiny and that rounds to 1, but at moderate exponents the error can
+  survive the subtraction. It sits in the old network's training (Adam), not on the decision path, and its effect on any result
+  is not measured.
 - Whether a one-step difference can change an answer depends on a comparison landing within one step of a tie. The audit's
   exact-case line checks the most likely tie sources. The exam and the Phase 2 goldens test the rest.
 
