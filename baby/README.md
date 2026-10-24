@@ -65,6 +65,23 @@ Against the transformer (previous section): the baby's 60 mJ per told answer is 
 
 **A belief corrected.** The handover said the remaining cost was "`review_programs` (4 rounds of ~11 s), `refit_in_place` and the 25-lesson re-decisions". After this change `review_programs` is 0.02 s: it was not a cost of its own but a consequence of the needless re-decisions (each grew the library and triggered a review). Fixing the cause removed it.
 
+### Second cut: a re-decision that only repeats the one just made; and a back-off I rejected (2026-10-23, later)
+
+With the first cut in, `BABY_PROF` and a new trace line (`RELEARN_DEBUG=1` prints `LEARN-RELEARN` for the re-decisions inside `learn`) showed what was left: 33 periodic re-decisions (12.8 s), of which **all the expensive ones were memorize-only units** (the unexplainable `code_*`, `xorfive`, `prime`) at 20 and 30 facts, about 1 s each, and 10 `learn:relearn_unit` calls of ~1 s on the same units at the same boundaries. The same units were re-decided **twice per told answer** at those boundaries: `learn` re-decides a memorize-only unit every ten facts, and `learn_wondered` then re-decided it again from the same lessons and library. `School.just_relearned` records (unit, lesson count, library) when `learn` has just re-decided a unit and left its state as it was (no repair followed); `learn_wondered` skips the second, identical call. Result: periodic re-decisions 12.8 s -> 2.8 s, replies byte-identical. A test (`a_unit_that_only_memorizes_is_not_re_decided_twice_for_one_told_answer`) compares the public path against the spelled-out old one (learn, then re-decide).
+
+**Rejected by the evidence: a back-off for memorize-only units** (re-decide at 10, 20, 40, 80 facts instead of every ten). On the clean stream and three others it was byte-identical and the whole battery read as before; learning from told answers fell from 14.8 s to 8.2 s. But on the **wrong-teacher stream at 20 % (seed 3) it changed two replies**: a `wraptriple` question went from a labeled guess to a stated fact (right), and another from a refusal to a stated fact that was **wrong** (a repeat of a wrongly told fact: 29 repeats against 28; elsewhere still 0). A unit that a wrong lesson has knocked into memorize-only is exactly one that the every-ten-facts look gets back onto its program sooner; the back-off leaves it memorizing longer, and memory then states what it was told. My rule for these cuts was "any changed answer, drop it", so it is dropped (the build with only the duplicate skip was checked on that very stream: identical). *The byte-identity check across a wrong-teacher stream caught what the clean streams and the whole battery could not.*
+
+**Final numbers**, paired and serial on a quiet machine (one run of four was discarded because a compile overlapped it: the meter flagged 62 % other processes and read 560 J):
+
+| clean adaptive stream, seed 1 | original | after cut 1 | after cut 2 |
+|---|---|---|---|
+| asking + learning 787 questions | 175-195 J | 48 J | **28.5 J** (14.4 s) |
+| per told answer | 222-248 mJ | 61 mJ | **36 mJ** |
+| teaching + stream | 210-233 J | 81 J | **65 J** |
+| right answers per joule | 3.0-3.3 | 8.5 | **10.6** |
+
+Per told answer that is **6-7x cheaper than before**, and the same order as the transformer's replay fine-tuning (27-34 mJ) while the baby keeps 0 wrong facts and the transformer does not learn. What is left in the stream: 10 re-decisions inside `learn` on memorize-only units (~10 s of the 14 s, each a cross-validation of every mechanism over lessons nothing can explain), 2.8 s of periodic ones, 12 s of initial `learn_items` (teaching).
+
 ## The adaptive exam, put to the matched transformer: what it costs to learn from being told (2026-10-23)
 
 `baby exam adapt-transformer DIR [--steps N --replay N]` teaches the plain transformer the adaptive exam's lessons once (3,048 lessons), then puts a copy of it the 787-question stream three ways: **frozen** (never learns), **fine-tune on the told answer only** (3 passes, Adam, lr 0.003), and **fine-tune on the told answer plus 16 replayed old lessons**. Spare answer slots are reserved so a new answer can be learned at all. Each is scored always-answering and refusing-below-0.9, by the same stream judge as the baby, with the same meter. Clean stream, seeds 1 / 2 / 3, run serially after the baby's (`adapt-run`) in the same session.

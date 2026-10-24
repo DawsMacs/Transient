@@ -449,6 +449,9 @@ pub struct School {
     cheap_guessers: bool,
     /// For each repaired unit: (lessons when computed, the law it replaced re-derived from its other lessons, how many lessons told since have separated the two laws).
     old_law: std::cell::RefCell<HashMap<String, (usize, Option<Fitted>, usize)>>,
+    /// (unit, its lesson count, the library) at the moment `learn` finished re-deciding that unit and left its state as it was: `learn_wondered` re-deciding the
+    /// same unit from the same lessons and library would only repeat it
+    just_relearned: Option<(usize, usize, String)>,
     /// What the selector was taught from (text, positions of the numbers used) and what it has been told since, so that it can be taught again.
     selector_examples: Vec<(String, Vec<usize>)>,
     /// For each unit, of the held-back lessons that were routed to it, the share that really belonged there (measured only when some unit is a
@@ -650,7 +653,7 @@ impl School {
         weights.lib = library;
         let routing = Routing::build(&units, &line);
         let library_seen = weights.lib.to_lines();
-        let mut school = School { units, weights, routing, line, route_floor: f32::NEG_INFINITY, route_base: f32::NEG_INFINITY, route_ratio: 0.0, calibrated_lessons: 0, seed, library_seen, bar, careful: true, skeptical: true, disputed: Vec::new(), guess_record: [(0, 0); 5], repair_failed: Vec::new(), selector: None, guess_scale: [1.0, 1.0], told_since_retrain: 0, cheap_guessers: false, old_law: Default::default(), selector_examples: Vec::new(), route_precision: Vec::new(), pen: Vec::new() };
+        let mut school = School { units, weights, routing, line, route_floor: f32::NEG_INFINITY, route_base: f32::NEG_INFINITY, route_ratio: 0.0, calibrated_lessons: 0, seed, library_seen, bar, careful: true, skeptical: true, disputed: Vec::new(), guess_record: [(0, 0); 5], repair_failed: Vec::new(), selector: None, guess_scale: [1.0, 1.0], told_since_retrain: 0, cheap_guessers: false, old_law: Default::default(), just_relearned: None, selector_examples: Vec::new(), route_precision: Vec::new(), pen: Vec::new() };
         // How decisive must a question be to count as a recognizable kind? Learned from rewordings of lessons it was taught.
         let own: Vec<&Item> = train.iter().collect();
         let (queries, safety): (Vec<&str>, f32) = match calibration {
@@ -2037,14 +2040,16 @@ impl School {
             let facts = self.units[u].facts();
             // (and a settled exact PROGRAM that still explains every lesson has nothing to be re-decided at all: the 25-lesson look found the same program every time)
             let skip = (self.settled_exact(u) && facts % SETTLED_RETHINK_EVERY != 0) || (self.memorize_only_known(u) && facts % 10 != 0) || self.settled_program_explaining_all(u);
-            if !skip {
+            // (and not when `learn` has just re-decided this very unit from these very lessons and library: that would only repeat it)
+            let repeat = matches!(&self.just_relearned, Some((ju, n, lib)) if *ju == u && *n == self.units[u].lessons.len() && *lib == self.weights.lib.to_lines());
+            if !skip && !repeat {
                 let t0 = std::time::Instant::now();
                 let before_state = format!("{:?} ev {:.0} partial {}", self.units[u].chosen, self.units[u].best_evidence(), matches!(&self.units[u].state, Fitted::Program(Some(p)) if p.partial.is_some()));
                 timed("wondered:relearn_unit", || self.relearn_unit(u));
                 if std::env::var("RELEARN_DEBUG").is_ok() {
                     eprintln!("RELEARN {} facts {} surprised {} {} -> {:?} in {:.2}s", self.units[u].name, facts, learned.surprised, before_state, self.units[u].chosen, t0.elapsed().as_secs_f64());
                 }
-            } else if !learned.surprised {
+            } else if skip && !learned.surprised {
                 let items = self.units[u].lessons.clone();
                 self.units[u].remember = Remembered::from_items(&items);
                 if self.units[u].chosen == Mech::Remember {
@@ -2100,6 +2105,7 @@ impl School {
     /// unit the question resembles, if it recognizes a kind at all. Then the unit's way of learning is worked out again.
     pub fn learn(&mut self, query: &str, answer: &str, unit: Option<&str>) -> Result<Learned, String> {
         mechanisms::set_reliable(self.bar);
+        self.just_relearned = None;
         let tokens = tokenize(query);
         if tokens.is_empty() {
             return Err("nothing to learn: the question is empty".into());
@@ -2205,10 +2211,20 @@ impl School {
             self.units[u].remember = Remembered::from_items(&items);
             self.settle_reach(u);
         } else if !repaired_now {
+            let mut relearned = false;
             if !timed("learn:refit_in_place", || self.refit_in_place(u)) {
+                let t0 = std::time::Instant::now();
+                let (was_chosen, was_ev) = (self.units[u].chosen, self.units[u].best_evidence());
                 timed("learn:relearn_unit", || self.relearn_unit(u));
+                if std::env::var("RELEARN_DEBUG").is_ok() {
+                    eprintln!("LEARN-RELEARN {} lessons {} facts {} {:?} ev {:.0} -> {:?} in {:.2}s", self.units[u].name, self.units[u].lessons.len(), self.units[u].facts(), was_chosen, was_ev, self.units[u].chosen, t0.elapsed().as_secs_f64());
+                }
+                relearned = true;
             }
-            timed("learn:repair_regime", || self.repair_regime(u));
+            let repaired = timed("learn:repair_regime", || self.repair_regime(u));
+            if relearned && !repaired {
+                self.just_relearned = Some((u, self.units[u].lessons.len(), self.weights.lib.to_lines()));
+            }
         }
         let unit = &self.units[u];
         let learned = Learned { unit: unit.name.clone(), opened, corrected, was, now: unit.chosen, held_back: unit.best_evidence(), facts: unit.facts(), surprised: true, disputed: false };
@@ -2997,7 +3013,7 @@ impl School {
         weights.lib = library;
         let routing = Routing::build(&units, &line);
         let library_seen = weights.lib.to_lines();
-        let mut school = School { units, weights, routing, line, route_floor, route_base, route_ratio, calibrated_lessons: 0, seed, library_seen, bar, careful, skeptical: true, disputed, guess_record, repair_failed: Vec::new(), selector, guess_scale, told_since_retrain: 0, cheap_guessers: false, old_law: Default::default(), selector_examples: Vec::new(), route_precision: Vec::new(), pen };
+        let mut school = School { units, weights, routing, line, route_floor, route_base, route_ratio, calibrated_lessons: 0, seed, library_seen, bar, careful, skeptical: true, disputed, guess_record, repair_failed: Vec::new(), selector, guess_scale, told_since_retrain: 0, cheap_guessers: false, old_law: Default::default(), just_relearned: None, selector_examples: Vec::new(), route_precision: Vec::new(), pen };
         school.calibrated_lessons = school.total_lessons();
         school.settle_all_reach();
         Ok(school)
@@ -3279,6 +3295,26 @@ mod tests {
         assert_eq!(s.ask("what is zork 29").answer.as_deref(), Some("11"));
         assert_eq!(s.ask("what is zork 19").answer.as_deref(), Some("10"));
         assert!(s.wonder().is_empty());
+    }
+
+    #[test]
+    fn a_unit_that_only_memorizes_is_not_re_decided_twice_for_one_told_answer() {
+        // 29 lessons nothing can explain; the 30th is told through `learn_wondered`, which used to re-decide the unit again right after `learn` had just done so.
+        let answers = ["red", "blue", "green", "gold", "pink", "teal", "grey", "navy", "lime", "plum"];
+        let items: Vec<Item> = (0..29usize).map(|i| Item { unit: 0, fact: i, template: 0, query: format!("what is code {}", i + 1), answer: answers[(i * 7 + i / 3) % 10].to_string() }).collect();
+        let mut a = School::from_items(&items, vec!["code".into()], None, 1, true);
+        let mut b = School::from_items(&items, vec!["code".into()], None, 1, true);
+        assert!(a.memorize_only_known(0));
+        // a: the public path; b: what it used to do, spelled out (learn, then re-decide the unit again)
+        a.learn_wondered_sure("what is code 30", "plum", "code").unwrap();
+        b.learn("what is code 30", "plum", Some("code")).unwrap();
+        b.relearn_unit(0);
+        assert_eq!((a.units[0].chosen, a.units[0].lessons.len()), (b.units[0].chosen, b.units[0].lessons.len()));
+        assert_eq!(a.units[0].best_evidence(), b.units[0].best_evidence());
+        for i in [1usize, 15, 29, 30] {
+            let q = format!("what is code {i}");
+            assert_eq!(a.ask(&q).answer, b.ask(&q).answer, "{q}");
+        }
     }
 
     #[test]

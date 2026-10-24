@@ -613,8 +613,12 @@ pub fn baby_teach_adapt(a: &Adapt, seed: u64) -> School {
 /// The stream put to the baby: each question asked and then told the truth (the way a teacher who repeats themselves would).
 pub fn baby_ask_stream(school: &mut School, a: &Adapt) -> Replies {
     let mut out = Vec::new();
+    let (mut ask_s, mut learn_s) = (0.0f64, 0.0f64);
+    let prof = std::env::var("BABY_PROF").is_ok();
     for it in &a.stream {
+        let t_ask = std::time::Instant::now();
         let r = school.ask(&it.question);
+        ask_s += t_ask.elapsed().as_secs_f64();
         if std::env::var("STREAM_UNIT").map_or(false, |u| u == it.unit) {
             let ui = school.units.iter().position(|x| x.name == it.unit);
             println!("[{}] {} -> {:?} guess {:?} | {}\n      truth {} told {}   unit now: {}", it.id, it.question, r.answer, r.guess.as_ref().map(|g| g.answer.clone()), r.how.chars().take(160).collect::<String>(), it.truth, it.told, ui.map_or(String::new(), |u| format!("{} | program {:?} repair {:?}", school.describe_unit_open(u), school.units[u].program(), school.units[u].repair_info())));
@@ -624,7 +628,12 @@ pub fn baby_ask_stream(school: &mut School, a: &Adapt) -> Replies {
             (None, Some(g)) => (it.id.clone(), "guess".into(), g.answer, g.rate as f64),
             (None, None) => (it.id.clone(), "refuse".into(), String::new(), 0.0),
         });
+        let t_learn = std::time::Instant::now();
         let _ = school.learn_wondered_sure(&it.question, &it.told, &it.unit);
+        learn_s += t_learn.elapsed().as_secs_f64();
+    }
+    if prof {
+        eprintln!("PROF stream: asking {ask_s:.2} s, learning from told answers {learn_s:.2} s");
     }
     out
 }

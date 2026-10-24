@@ -388,6 +388,8 @@ description than one with a single fixed learner.
 
 - **2026-10-23** The cost of adapting cut 3.7x with the same answers: stage timers showed every one of 56 periodic re-decisions ended where it started, so a settled exact program that still explains every lesson is no longer refitted or re-decided. The 787-question adaptive stream went from 175-179 J to 48 J (61 mJ per told answer; was 0.22 J), the whole run from 210-217 J to 81 J, replies byte-identical on five streams and the whole battery unchanged. Still ~2x the transformer's replay fine-tuning per told answer, and the transformer does not learn from being told.
 
+- **2026-10-23** The cost of adapting cut a second time (36 mJ per told answer, 28.5 J for the 787-question stream, 6-7x below the start of the day; teaching + stream 65 J): the same unexplainable units were being re-decided twice per told answer. One more cut I tried (re-deciding memorize-only units less often) was byte-identical on every clean stream and the whole battery but changed two answers on a wrong-teacher stream, one of them a new wrong fact, so it was dropped.
+
 ---
 
 ## More to come
