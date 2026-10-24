@@ -96,3 +96,24 @@ jobs:
             tr -d '\r' < audit.out | grep -v '^#'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # Reported, not failing: a golden that differs is a finding (a platform difference, or goldens that need updating on
+      # purpose). Three runs per row must first agree with each other, or the comparison would prove nothing.
+      - name: Golden outputs (compared with the Linux x86_64 reference)
+        timeout-minutes: 25
+        run: |
+          set +e
+          bash golden/check.sh 2>&1 | tee golden.out
+          code=${PIPESTATUS[0]}
+          {
+            echo "Golden outputs on ${{ matrix.name }}:"
+            echo '```'
+            tr -d '\r' < golden.out | grep -E '^(golden|NOT REPRODUCIBLE|the [0-9]+ runs|could not)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          case $code in
+            0) ;;
+            1) echo "::warning title=Goldens differ on ${{ matrix.name }}::see the job summary" ;;
+            3) echo "::warning title=Runs disagree on ${{ matrix.name }}::see the job summary" ;;
+            *) echo "::error::the golden check could not run (status $code)"; exit 1 ;;
+          esac
