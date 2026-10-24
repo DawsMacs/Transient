@@ -979,8 +979,9 @@ mod tests {
 
     #[test]
     fn a_system_in_another_language_is_driven_over_pipes_and_a_misbehaving_one_is_reported() {
-        if std::process::Command::new("python3").arg("--version").output().is_err() {
-            return; // (no python here: nothing to drive)
+        // (no working python here: nothing to drive. On Windows `python3` can be a Store stub that starts but fails, so check it ran.)
+        if !std::process::Command::new("python3").arg("--version").output().map_or(false, |o| o.status.success()) {
+            return;
         }
         let dir = std::env::temp_dir().join(format!("adapt_{}", std::process::id()));
         let dir = dir.to_string_lossy().to_string();

@@ -390,6 +390,8 @@ description than one with a single fixed learner.
 
 - **2026-10-23** The cost of adapting cut a second time (36 mJ per told answer, 28.5 J for the 787-question stream, 6-7x below the start of the day; teaching + stream 65 J): the same unexplainable units were being re-decided twice per told answer. One more cut I tried (re-deciding memorize-only units less often) was byte-identical on every clean stream and the whole battery but changed two answers on a wrong-teacher stream, one of them a new wrong fact, so it was dropped.
 
+- **2026-10-24** Transient on other platforms, measured instead of assumed (a CI matrix of Linux x86_64 and aarch64, musl, macOS arm64 and Windows, plus a fingerprint and an accuracy audit of each platform's math library, plus golden answers): the math libraries differ by one last-bit step on under 1 % of inputs, and on all five platforms the exam predictions, the adaptive replies and the scorecard are byte-identical to the Linux reference. Say "CI-tested", not "supported"; joules remain Linux with a readable RAPL counter. The open questions (deterministic in-repo math, a hash-order fix, WASI as reference) are listed in `baby/README.md`.
+
 ---
 
 ## More to come

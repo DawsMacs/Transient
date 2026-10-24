@@ -21,6 +21,7 @@
 use crate::data::NUM;
 use crate::kinds::{Item, World};
 use crate::ledger::{EnergyModel, Ledger};
+use crate::platform;
 use crate::rng::Rng;
 use crate::school::School;
 use std::collections::HashMap;
@@ -339,13 +340,6 @@ pub fn generate(c: &Config) -> ScaleWorld {
 // ---------------------------------------------------------------------------------------------------------------------------
 // The measurements.
 
-fn mem_kb(key: &str) -> f64 {
-    std::fs::read_to_string("/proc/self/status")
-        .ok()
-        .and_then(|t| t.lines().find(|l| l.starts_with(key)).and_then(|l| l.split_whitespace().nth(1).and_then(|n| n.parse::<f64>().ok())))
-        .unwrap_or(0.0)
-}
-
 #[derive(Default, Clone, Copy)]
 pub struct Tally {
     pub right: usize,
@@ -410,14 +404,14 @@ pub fn run(c: &Config, reorg: bool, grade_cap: usize) -> Vec<(&'static str, f64)
     let sw = generate(c);
     let gen_s = t.elapsed().as_secs_f64();
     let lessons = sw.world.train.len();
-    let baseline_mb = mem_kb("VmRSS:") / 1024.0;
+    let baseline_mb = platform::resident_mb();
     println!("== {} units, {} lessons, vocabulary of {} subjects, noise {:.0}%, typos {:.0}%, seed {} (world built in {:.2} s)", c.units, lessons, c.entities, 100.0 * c.noise, 100.0 * c.typos, c.seed, gen_s);
 
     // Teaching from nothing.
     let t = Instant::now();
     let mut school = School::from_items(&sw.world.train, sw.names.clone(), Some(&sw.world.reworded), c.seed, true);
     let teach_s = t.elapsed().as_secs_f64();
-    let (rss, peak) = (mem_kb("VmRSS:") / 1024.0, mem_kb("VmHWM:") / 1024.0);
+    let (rss, peak) = (platform::resident_mb(), platform::peak_mb());
     let mut by_mech: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
     let mut agree = 0usize;
     for (u, unit) in school.units.iter().enumerate() {
@@ -425,8 +419,8 @@ pub fn run(c: &Config, reorg: bool, grade_cap: usize) -> Vec<(&'static str, f64)
         agree += (unit.chosen.name() == sw.expect[u]) as usize;
     }
     println!(
-        "  teaching from nothing: {:.2} s ({:.2} ms per lesson); memory {:.0} MB resident, {:.0} MB peak (generator + test data alone: {:.0} MB)",
-        teach_s, 1000.0 * teach_s / lessons as f64, rss, peak, baseline_mb
+        "  teaching from nothing: {:.2} s ({:.2} ms per lesson); memory {} resident, {} peak (generator + test data alone: {})",
+        teach_s, 1000.0 * teach_s / lessons as f64, platform::fmt_mb(rss, 0), platform::fmt_mb(peak, 0), platform::fmt_mb(baseline_mb, 0)
     );
     println!("  reliability bar it chose: {:.2} (it measures {:.1}% of its lessons as wrong; the world has {:.1}%)", school.bar(), 100.0 * crate::mechanisms::estimate_noise(&(0..sw.names.len()).map(|u| sw.world.train.iter().filter(|i| i.unit == u).cloned().collect()).collect::<Vec<_>>()), 100.0 * sw.corrupted.len() as f64 / lessons.max(1) as f64);
     println!("  chose {:?}; {:.1}% of units got the mechanism they should (facts: remember, sums: rule, ...)", by_mech, 100.0 * agree as f64 / c.units as f64);
@@ -436,7 +430,7 @@ pub fn run(c: &Config, reorg: bool, grade_cap: usize) -> Vec<(&'static str, f64)
             unit.name, sw.expect[u], unit.chosen.name(), unit.evidence[0], unit.evidence[1], unit.evidence[2], unit.evidence[3], unit.evidence[4], unit.facts()
         );
     }
-    row.extend([("units", c.units as f64), ("lessons", lessons as f64), ("vocab", school.known_words().len() as f64), ("teach_s", teach_s), ("rss_mb", rss), ("peak_mb", peak), ("agree", 100.0 * agree as f64 / c.units as f64)]);
+    row.extend([("units", c.units as f64), ("lessons", lessons as f64), ("vocab", school.known_words().len() as f64), ("teach_s", teach_s), ("rss_mb", rss), ("peak_mb", peak), ("agree", 100.0 * agree as f64 / c.units as f64)].into_iter().filter(|(_, v)| !v.is_nan()));
 
     // The scorecard, WRONG apart from refused.
     println!("  scorecard (up to {grade_cap} questions each):");

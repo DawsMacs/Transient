@@ -1,0 +1,5 @@
+# Golden outputs are compared byte for byte, so git must never convert their line endings on checkout (Windows would otherwise
+# turn every newline into CRLF and look like a platform difference). Shell scripts must keep LF or bash cannot run them.
+golden/* -text
+*.sh text eol=lf
+baby/examples/mathprint.expected text eol=lf

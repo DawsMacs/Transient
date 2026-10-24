@@ -15,6 +15,7 @@ whether or not it works. The code is `baby/` (pure Rust, zero dependencies, buil
 ## Rules
 
 - **Communication protocol: en-US.** All writing (code, identifiers, comments, runtime strings, docs, site copy, commit messages, replies) is en-US: spelling and vocabulary (color, behavior, license, organize, recognize, center, percent, toward). This holds from now on for all work, not only for Novice (which, rebuilt from scratch, is en-US from its first line). Stick with en-US; check new text before committing.
+- **Goldens and pull requests.** The exam and adaptive-stream answers are pinned in `golden/` (`golden/check.sh`); a change that is meant to change answers runs `golden/check.sh update` in the same commit and says why. Changes to `.github/workflows` go through a pull request, and the user merges.
 - **Honesty over polish.** Report WRONG separately from refused. Record mistakes and rejected hypotheses in `baby/README.md` as they happen. State caveats plainly (synthetic tidy lessons; estimated joules; mechanisms and thresholds are
   the assistant's, not discovered).
 - **Pessimism is input, never a brake.** Daws wants risks phrased as design constraints/terrain/checkpoints that redirect the work. Do not propose kill criteria or stop the project over difficulty; do not claim certainty of success.
