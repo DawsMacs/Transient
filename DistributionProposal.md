@@ -75,7 +75,7 @@ No existing source file changes. Three files:
 
 | File | What it does |
 |---|---|
-| `baby/examples/mathprint.rs` | The **math fingerprint**. Evaluates `ln`, `log2`, `exp`, `tanh` and `powi` over the ranges the code reaches (about 60 million evaluations) and prints a 64-bit hash of all result bits, plus one hash per 262,144 inputs to show where a difference starts. Ranges: word weights `ln((1+heard)/(1+df))` with heard and df each up to 5,000 (real-text runs teach thousands of lessons); routing gain up to 200,000 counts; routing prior with up to 10,000 rows and 3,200 lessons per unit; `log2` of 1 to 2,000,000 (the search budget is 1,000,000); softmax `exp` down to underflow; `tanh` over -12 to 12; loss `ln` of probabilities; and the optimizer's 0.9^t and 0.999^t. Runs under 2 seconds. It also prints each literal-argument call twice, as the compiler may fold it and forced at run time. "Identical" means identical on those inputs only; a run larger than these ranges is not covered. `mathprint dump NAME FROM COUNT` lists the actual values in a block. |
+| `baby/examples/mathprint.rs` | The **math fingerprint**. Evaluates `ln`, `log2`, `exp`, `tanh` and `powi` over the ranges the code reaches (about 60 million evaluations) and prints a 64-bit hash of all result bits, plus one hash per 262,144 inputs to show where a difference starts. Ranges: word weights `ln((1+heard)/(1+df))` with heard and df each up to 5,000 (real-text runs teach thousands of lessons); routing gain up to 200,000 counts; routing prior with up to 10,000 rows and 3,200 lessons per unit; `log2` of 1 to 2,000,000 (the search budget is 1,000,000); softmax `exp` down to underflow; `tanh` over -12 to 12; loss `ln` of probabilities; and the optimizer's 0.9^t and 0.999^t. Runs under 2 seconds. It also prints each literal-argument call twice, as the compiler may fold it and forced at run time. "Identical" means identical on those inputs only; a run larger than these ranges is not covered. `mathprint dump NAME FROM COUNT` lists the actual values in a block, and `mathprint audit` measures accuracy (section 3.2). |
 | `baby/examples/mathprint.expected` | The reference, generated on Linux x86_64, glibc 2.39, rustc 1.98.1. Lines starting with `#` are ignored when comparing. |
 | `.github/workflows/ci.yml` | The existing workflow, extended into a matrix. Actions pinned by commit, `permissions: contents: read`, no secrets. Each row records `rustc -Vv`, the OS and whether `/sys/class/powercap` exists, then runs build, tests, the scorecard WRONG gate (unchanged), and the fingerprint comparison. A fingerprint difference produces a warning and a job summary and does not fail the job; a failed test or a WRONG above 0.0% still fails it. |
 
@@ -107,7 +107,7 @@ How to read it:
   summary and annotations. Any README or website text must say "CI-tested on GitHub's runners", never "supported" or
   "identical".
 - On macOS and Windows every block of inputs differs on the decision-path functions. **How many inputs differ and by how many
-  bits is not yet measured.** The planned accuracy audit (each f32 result against the f64 result rounded to f32) will say.
+  bits is measured by the accuracy audit (section 3.2), whose other-platform results are pending.**
 - The identical scorecards are evidence only for the tidy curriculum. The exam and the adaptive streams (Phase 2 goldens) are the
   real test of whether the near-tie flip can happen. They are compared on Windows and macOS first.
 - `tanh` lives in the old network, not on the decision path. aarch64 and musl differ from glibc x86_64 only there.
@@ -118,6 +118,40 @@ How to read it:
   better check is `/sys/class/powercap/intel-rapl:0`.
 - Not covered by CI: other hardware and OS versions, bare-metal energy, and real-world sandboxes. The runners are VMs running the
   real operating systems, not emulation.
+
+### 3.2 The accuracy audit (`mathprint audit`)
+
+Compares every result with the f64 result of the same function rounded to f32. The f64 value is accurate to far below half an f32
+step, so the rounded value is the correctly rounded f32 result except for inputs within about one part in a billion of a rounding
+boundary. It needs no stored reference: it says how often, and by how many steps, a platform is off. The CI matrix runs it on every
+row and puts the table in the job summary (reported, never failing).
+
+**Reference platform (Linux x86_64, glibc 2.39, rustc 1.98.1), measured 2026-10-24:**
+
+| Section | Inputs | Correctly rounded | One step off | More than one step off | Worst |
+|---|---|---|---|---|---|
+| word weights `ln` | 25,010,001 | 99.14% | 215,705 | 0 | 1 step |
+| routing gain `ln` | 200,001 | 99.98% | 32 | 0 | 1 step |
+| routing prior `ln` | 32,013,201 | 99.97% | 9,681 | 0 | 1 step |
+| `log2` | 2,000,000 | 99.99% | 177 | 0 | 1 step |
+| `exp` | 92,161 | 99.94% | 57 | 0 | 1 step |
+| `tanh` | 24,577 | 95.45% | 1,102 | 16 | 2 steps |
+| loss `ln` | 100,000 | 99.28% | 722 | 0 | 1 step |
+| `powi` 0.9^t | 100,000 | 99.14% | 42 | 821 | 46 steps |
+| `powi` 0.999^t | 100,000 | 2.92% | 1,386 | 95,698 | 12,119 steps |
+
+All exactly representable results came out exact on the reference: `log2(2^k) = k` for all 25 values of k, `ln(1) = 0`,
+`exp(0) = 1`, `tanh(0) = 0`. Ties built on those are safe there.
+
+What this says:
+
+- **Even the reference library is not correctly rounded.** It is within one step for `ln`, `log2` and `exp`, and off by one on
+  roughly 0.9% of word-weight inputs. A different library that is also within one step can therefore disagree with it by up to two.
+  Differences of this size are not a bug in either platform; they are what "unspecified precision" means.
+- `powi` is by design not correctly rounded (it multiplies repeatedly). The large step counts for 0.999^t are at huge exponents,
+  where the value is tiny and `1 - 0.999^t`, the only thing the optimizer uses, rounds to 1, so they do not matter in practice.
+- Whether a one-step difference can change an answer depends on a comparison landing within one step of a tie. The audit's
+  exact-case line checks the most likely tie sources. The exam and the Phase 2 goldens test the rest.
 
 ## 4. Later phases (not approved)
 

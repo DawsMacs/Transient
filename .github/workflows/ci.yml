@@ -85,3 +85,14 @@ jobs:
             } | tee -a "$GITHUB_STEP_SUMMARY"
             echo "::warning title=Math fingerprint differs on ${{ matrix.name }}::see the job summary"
           fi
+
+      # Reported only: how far this platform's results are from the correctly rounded ones. Never fails the job.
+      - name: Math accuracy audit (reported)
+        run: |
+          cargo run --release --offline $TARGET_FLAG --example mathprint -- audit | tee audit.out
+          {
+            echo "Math accuracy audit on ${{ matrix.name }}:"
+            echo '```'
+            tr -d '\r' < audit.out | grep -v '^#'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
