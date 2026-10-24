@@ -107,7 +107,7 @@ How to read it:
   summary and annotations. Any README or website text must say "CI-tested on GitHub's runners", never "supported" or
   "identical".
 - On macOS and Windows every block of inputs differs on the decision-path functions. **How many inputs differ and by how many
-  bits is measured by the accuracy audit (section 3.2), whose other-platform results are pending.**
+  bits is measured by the accuracy audit (section 3.2): at most one step from the correctly rounded value for `ln`, `log2` and `exp` on every row.**
 - The identical scorecards are evidence only for the tidy curriculum. The exam and the adaptive streams (Phase 2 goldens) are the
   real test of whether the near-tie flip can happen. They are compared on Windows and macOS first.
 - `tanh` lives in the old network, not on the decision path. aarch64 and musl differ from glibc x86_64 only there.
@@ -143,8 +143,31 @@ row and puts the table in the job summary (reported, never failing).
 All exactly representable results came out exact on the reference: `log2(2^k) = k` for all 25 values of k, `ln(1) = 0`,
 `exp(0) = 1`, `tanh(0) = 0`. Ties built on those are safe there.
 
+**All five rows (PR #2's CI run, 2026-10-24).** Share of inputs that are one step off the correctly rounded result, and the worst
+distance in steps. No row has any `ln`, `log2` or `exp` input more than one step off.
+
+| Section | Linux x86_64 glibc | Linux aarch64 glibc | Linux x86_64 musl | macOS arm64 | Windows x86_64 |
+|---|---|---|---|---|---|
+| word weights `ln` | 0.862%, worst 1 | 0.862%, 1 | 0.862%, 1 | 0.003%, 1 | 0.264%, 1 |
+| routing gain `ln` | 0.016%, 1 | 0.016%, 1 | 0.016%, 1 | 0%, 0 | 0.007%, 1 |
+| routing prior `ln` | 0.030%, 1 | 0.030%, 1 | 0.030%, 1 | 0%, 0 | 0.016%, 1 |
+| `log2` | 0.009%, 1 | 0.009%, 1 | 0.009%, 1 | 0%, 0 | 0.626%, 1 |
+| `exp` | 0.062%, 1 | 0.062%, 1 | 0.062%, 1 | 0.595%, 1 | 0.010%, 1 |
+| `tanh` | 4.484% plus 16 two-step, worst 2 | 4.492% plus 16 two-step, 2 | 3.312%, 1 | 0.260%, 1 | 1.416%, 1 |
+| loss `ln` | 0.722%, 1 | 0.722%, 1 | 0.722%, 1 | 0%, 0 | 0.271%, 1 |
+| `powi` 0.9^t | 0.042% plus 821 further off, worst 46 | same | same | same | 0.006%, 1 |
+| `powi` 0.999^t | 1.386% plus 95,698 further off, worst 12,119 | same | same | same | 0.008%, 1 |
+
+Exactly representable results (`log2(2^k) = k` for all 25 values of k, `ln(1) = 0`, `exp(0) = 1`, `tanh(0) = 0`) were exact on
+all five rows, so ties built on them cannot break differently on any of these platforms.
+
 What this says:
 
+- **The reference is not the truth.** For `ln` and `log2` the Linux library (the same results on x86_64, aarch64 and musl) is the
+  least accurate of the three families; macOS is almost exactly correctly rounded for them, but is worse than glibc for `exp`;
+  Windows is best for `exp` and worst for `log2` (0.626% one step off). A platform that "differs" from the reference is not
+  therefore wrong. Two libraries that are each within one step of correct can disagree with each other by up to two.
+- `powi` gives identical results on Linux and macOS, and is within one step on Windows.
 - **Even the reference library is not correctly rounded.** It is within one step for `ln`, `log2` and `exp`, and off by one on
   roughly 0.9% of word-weight inputs. A different library that is also within one step can therefore disagree with it by up to two.
   Differences of this size are not a bug in either platform; they are what "unspecified precision" means.
