@@ -51,6 +51,7 @@ mod mechanisms;
 mod memory;
 mod model;
 mod net;
+mod platform;
 mod program;
 mod quantity;
 mod rng;
@@ -877,9 +878,7 @@ fn cmd_energy(a: &Args) {
             );
             println!("Estimate said {} per question: the gap is what a general-purpose CPU spends around the arithmetic.", fmt_joules(em.joules(&ask)));
         }
-        _ => println!(
-            "Real energy not measured: this user cannot read {RAPL_PATH}/energy_uj. To allow it until reboot:\n  sudo chmod a+r {RAPL_PATH}/energy_uj"
-        ),
+        _ => println!("{}", platform::energy_unavailable(RAPL_PATH)),
     }
 }
 
@@ -1371,13 +1370,6 @@ fn cmd_sleep(a: &Args) {
     }
 }
 
-fn peak_memory_kb() -> u64 {
-    std::fs::read_to_string("/proc/self/status")
-        .ok()
-        .and_then(|t| t.lines().find(|l| l.starts_with("VmHWM")).and_then(|l| l.split_whitespace().nth(1).and_then(|n| n.parse().ok())))
-        .unwrap_or(0)
-}
-
 /// `baby scale`: the world gets bigger; does learning stay light and the baby stay honest? One size per process (so peak memory is honest);
 /// `--sweep` runs several sizes by starting this program once per size and prints the table at the end.
 fn cmd_scale(a: &Args) {
@@ -1680,16 +1672,16 @@ fn cmd_tutor(a: &Args) {
 fn cmd_cost(a: &Args) {
     let seed: u64 = a.get("seed", 1);
     let world = kinds::world(seed);
-    let baseline = peak_memory_kb();
+    let baseline = platform::peak_mb();
     println!("What does it cost to teach the baby? Measured on this laptop, one core, no GPU. (The CPU's energy counter is off limits here, so: time and memory.)\n");
 
     let t = std::time::Instant::now();
     let mut school = school::School::train(&world, seed, true);
     let teach = t.elapsed().as_secs_f64();
-    let after_teach = peak_memory_kb();
+    let after_teach = platform::peak_mb();
     println!(
-        "  teaching it from nothing: {} lessons in {} units, {:.2} s, peak memory {:.1} MB (the program alone: {:.1} MB)",
-        world.train.len(), school.units.len(), teach, after_teach as f64 / 1024.0, baseline as f64 / 1024.0
+        "  teaching it from nothing: {} lessons in {} units, {:.2} s, peak memory {} (the program alone: {})",
+        world.train.len(), school.units.len(), teach, platform::fmt_mb(after_teach, 1), platform::fmt_mb(baseline, 1)
     );
 
     // Lessons it can already work out: the surprise gate.
@@ -1748,7 +1740,7 @@ fn cmd_cost(a: &Args) {
         "  going back over everything: reorganizing ({} merges, {} splits) {:.2} s; forgetting what is explained ({} of {} lessons kept) {:.2} s",
         r.merged.len(), r.split.len(), rs, c.after, c.before, t.elapsed().as_secs_f64()
     );
-    println!("\n  peak memory over all of it: {:.1} MB.", peak_memory_kb() as f64 / 1024.0);
+    println!("\n  peak memory over all of it: {}.", platform::fmt_mb(platform::peak_mb(), 1));
     println!("\nA person could run this on a phone. What it does not tell you: how this grows when the lessons are millions of sentences instead of 800 tidy ones.");
 }
 
