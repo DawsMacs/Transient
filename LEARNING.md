@@ -118,10 +118,6 @@ proof.
 - How should learning be governed and made inspectable so an owner can see and undo what the system learned?
 - Safety of self-modifying systems (poisoning through retrieved or conversational data): needs its own design.
 
-## 9. Link to other work
-
-A separate, private project (a small offline model with tools and an evaluation harness) is the baseline for the old train-then-freeze pipeline and the measuring instrument for section 7. Its notes are not part of this repository.
-
 ## Sources
 
 - Sparse memory finetuning: https://arxiv.org/pdf/2510.15103

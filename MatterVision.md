@@ -161,7 +161,7 @@ Daws made a public repository and chose the **AGPL** on purpose. One goal is tha
 - The GPL obliges sharing source only when a program is *distributed*. A company could run a modified version as a hosted service and keep its changes. The AGPL closes that gap: users interacting over a network are entitled to the source. For a project whose point is that capable AI should not be the property of a few providers, that is the clause that matters.
 - A license binds others, not the copyright holder. What stops anyone from closing *other people's* contributions is that contributions arrive under the same license with a DCO sign-off and **no CLA** (the usual route by which projects are later relicensed into closed products).
 - The AGPL governs the software. It does not by itself cover trained or learned files or data people produce with it; if a released learned file should also stay open, that needs its own statement when one is first published.
-- Public means public: anything committed, history included, is permanently visible and may be cached or forked. Private-project notes were kept out for that reason (`.local/` is git-ignored).
+- Public means public: anything committed, history included, is permanently visible and may be cached or forked. Private notes were kept out for that reason (`.local/` is git-ignored).
 - "Or later" was chosen first; Entry 8 reversed it.
 
 ---

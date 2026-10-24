@@ -44,10 +44,6 @@ good enough on the rest. It does not need to win every benchmark to win where it
 - Nobody I found has put sub-billion models, effectively unlimited external knowledge, specialist adapters and local compute
   budgets together as one designed thing. The opening is real.
 
-## Relationship to other work
-
-A separate, private project (a chat client with a small offline model) shares some of the lessons and the Rust tooling. It is not part of this repository.
-
 ## The terrain (facts that shape the design, not reasons to stop)
 
 - **Decoding is memory-bandwidth-bound.** Speed is roughly bandwidth divided by bytes read per token (Snapdragon 8 Gen 3: rated
