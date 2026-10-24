@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Copyright (C) 2026 DawsMacs
 #
-# Compares what this platform's build of Transient produces with the committed goldens (see golden/README.md).
+# Compares what this platform's build of Matter produces with the committed goldens (see golden/README.md).
 #
 #   golden/check.sh            generate the outputs GOLDEN_RUNS times (default 3), require the runs to agree with each other,
 #                              then compare the first run with the goldens

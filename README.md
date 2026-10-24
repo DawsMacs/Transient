@@ -1,15 +1,15 @@
 <p align="center">
-  <img src="assets/banner.svg#gh-dark-mode-only" alt="Transient" width="69%">
-  <img src="assets/banner-light.svg#gh-light-mode-only" alt="Transient" width="69%">
+  <img src="assets/banner.svg#gh-dark-mode-only" alt="Matter" width="69%">
+  <img src="assets/banner-light.svg#gh-light-mode-only" alt="Matter" width="69%">
 </p>
 
 <p align="center">
   <a href="LICENSE"><img alt="License: AGPL-3.0-only" src="https://img.shields.io/badge/license-AGPL--3.0--only-blue"></a>
-  <a href="https://github.com/DawsMacs/Transient/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/DawsMacs/Transient/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/Matterworm/Matter/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Matterworm/Matter/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Rust, zero dependencies" src="https://img.shields.io/badge/rust-zero%20dependencies-orange">
 </p>
 
-**Transient is an experimental learning system written in Rust, built to run on ordinary consumer hardware.** It explores
+**Matter is an experimental learning system written in Rust, built to run on ordinary consumer hardware.** It explores
 *adaptive learning*: a system that keeps learning while it is used, decides for itself *how* to learn each kind of thing, and is
 measured by what it costs (operations, memory, estimated joules) rather than by parameter count alone.
 
@@ -17,7 +17,7 @@ The current artifact is `baby/`: about 18k lines of Rust, **no dependencies**, b
 evaluated mostly on a synthetic curriculum, with a first look at real word problems (SVAMP, ASDiv) and an entry exam that any
 other system can take. It is not a language model and makes no claim to be one yet.
 
-Transient is made by **[TransientAI](https://transientai.org)**, an independent research effort run by its founder, Daws Macs, and a founding member. Its
+Matter is made by the **[Matterworm Foundation](https://matterworm.github.io)**, an independent research effort run by its founder, Daws Macs, and a founding member. Its
 website has an overview, documentation, a progress page and a blog.
 
 > **Status:** active research. Unless a line says otherwise, the numbers below come from tidy synthetic lessons; energy is
@@ -142,7 +142,7 @@ All under `baby/src/`.
 | `net.rs`, `model.rs`, `data.rs`, `know.rs`, `life.rs`, `curious.rs`, `rules.rs`, `rng.rs` | the earlier from-scratch network and its experiments, plumbing |
 | `main.rs` | the CLI (`baby <command>`) |
 | `tools/pytorch_baseline.py` | (outside the Rust build) a tuned PyTorch transformer trained and graded on the exported lessons, with measured energy |
-| `platform.rs` | what Transient asks the operating system (memory, energy availability, temporary files); says `n/a` where the system cannot answer |
+| `platform.rs` | what Matter asks the operating system (memory, energy availability, temporary files); says `n/a` where the system cannot answer |
 | `examples/mathprint.rs` | (an example, not part of the baby) a fingerprint and an accuracy audit of the platform's math library |
 | `golden/` | the answers pinned on the reference platform, and the shell scripts that check them (see below) |
 
@@ -206,11 +206,11 @@ to find out by measurement. The strategy and the hardware terrain are in [`docs/
 |---|---|
 | [`baby/README.md`](baby/README.md) | the experiment log: every result, dead end and bug, newest first |
 | [`LEARNING.md`](LEARNING.md) | learning-efficiency research notes and sources |
-| [`docs/Running.md`](docs/Running.md) | get, build, run and check Transient on each platform; what is tested where |
+| [`docs/Running.md`](docs/Running.md) | get, build, run and check Matter on each platform; what is tested where |
 | [`docs/Direction.md`](docs/Direction.md) | strategy, hardware terrain, language choice, candidate architectures |
-| [`TransientHandover.md`](TransientHandover.md) | current state and next steps, for resuming work |
+| [`MatterHandover.md`](MatterHandover.md) | current state and next steps, for resuming work |
 
-The website, [transientai.org](https://transientai.org), is a separate repository ([`DawsMacs/TransientAI-site`](https://github.com/DawsMacs/TransientAI-site)): overview, documentation, progress and a blog.
+The website, [matterworm.github.io](https://matterworm.github.io), is a separate repository ([`Matterworm/matterworm.github.io`](https://github.com/Matterworm/matterworm.github.io)): overview, documentation, progress and a blog.
 
 ## License
 

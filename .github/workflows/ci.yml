@@ -132,7 +132,7 @@ jobs:
   # The BSDs, in virtual machines on a Linux runner (cross-platform-actions). Rust's own support: FreeBSD and NetBSD tier 2 with host tools,
   # OpenBSD tier 3 (so the distribution's Rust package, whatever version it ships). DragonFly was tried and dropped on 2026-10-24: its packaged
   # Rust (1.85.1) crashes the binary at startup inside the standard library's thread-local code ("assertion failed: key as usize != KEY_SENTVAL"),
-  # before any Transient logic runs; the tests themselves passed there. Every step runs INSIDE the VM through the
+  # before any Matter logic runs; the tests themselves passed there. Every step runs INSIDE the VM through the
   # cpa.sh shell. Reported like the other non-reference rows: the tests, the scorecard WRONG gate and the build can fail the job (a real
   # finding); the fingerprint and the golden check only report. Verified on 2026-10-24: FreeBSD 15.1, NetBSD 10.1 and OpenBSD 7.9 passed with these package names.
   bsd:

@@ -3,9 +3,9 @@ name = "baby"
 version = "0.1.0"
 edition = "2021"
 license = "AGPL-3.0-only"
-repository = "https://github.com/DawsMacs/Transient"
+repository = "https://github.com/Matterworm/Matter"
 readme = "../README.md"
 publish = false
-description = "Transient's baby: a dependency-free learning system that chooses how to learn each kind of lesson, says how it knew, and refuses when it should."
+description = "Matter's baby: a dependency-free learning system that chooses how to learn each kind of lesson, says how it knew, and refuses when it should."
 
 [dependencies]

@@ -1,6 +1,6 @@
 # Contributing
 
-Transient is open research and is licensed `AGPL-3.0-only`. Contributions are welcome under the same license.
+Matter is open research and is licensed `AGPL-3.0-only`. Contributions are welcome under the same license.
 
 ## License and sign-off (DCO, no CLA)
 
@@ -39,8 +39,8 @@ cargo test --release --offline
 golden/check.sh                   # the exam and adaptive-stream answers must match golden/ byte for byte
 ```
 
-The goldens record what Transient answers on the reference platform (Linux x86_64). If your change is *meant* to change the answers, run `golden/check.sh update` in the same commit and say why in the message; if it is not, a difference is a regression. Changes to `.github/workflows` go through a pull request first (a new platform row can fail for reasons nobody has met yet), so `main` never carries the experiment.
+The goldens record what Matter answers on the reference platform (Linux x86_64). If your change is *meant* to change the answers, run `golden/check.sh update` in the same commit and say why in the message; if it is not, a difference is a regression. Changes to `.github/workflows` go through a pull request first (a new platform row can fail for reasons nobody has met yet), so `main` never carries the experiment.
 
 ## Pull requests and CI
 
-Work on a branch and open a pull request; the maintainer merges. CI builds and tests every change on thirteen platform rows (Linux in several flavors, macOS, Windows, three BSDs, WebAssembly, and 32-bit and big-endian Linux). The reference row (Linux x86_64) must be green, and a golden difference there fails the build. On any other row a failure is a **finding**: say what the platform did and why, rather than widening a threshold or skipping the row. [`docs/Running.md`](docs/Running.md) explains how to build and run Transient on each platform. A pull request template and issue templates ask for the details that matter (platform, `rustc -Vv`, the exact question).
+Work on a branch and open a pull request; the maintainer merges. CI builds and tests every change on thirteen platform rows (Linux in several flavors, macOS, Windows, three BSDs, WebAssembly, and 32-bit and big-endian Linux). The reference row (Linux x86_64) must be green, and a golden difference there fails the build. On any other row a failure is a **finding**: say what the platform did and why, rather than widening a threshold or skipping the row. [`docs/Running.md`](docs/Running.md) explains how to build and run Matter on each platform. A pull request template and issue templates ask for the details that matter (platform, `rustc -Vv`, the exact question).

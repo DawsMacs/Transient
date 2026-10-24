@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
 <!-- Copyright (C) 2026 DawsMacs -->
 
-# Running Transient
+# Running Matter
 
 How to get the code, build it, run it and check it, one section per platform. Everything here was run, or comes from a CI log, on the dates given in
 [`baby/README.md`](../baby/README.md) ("Running on other platforms"). Where something was **not** tried, it says so.
@@ -23,13 +23,13 @@ a minute and a half on a recent desktop (one to four minutes on the CI machines)
 | 32-bit x86, s390x (big-endian), riscv64 | [Other processors](#other-processors) | CI, native or QEMU emulation |
 | DragonFly BSD | [Coming later](#coming-later) | not yet |
 
-Anything not in this table is **untested**, which does not mean it fails: Transient is portable Rust with no dependencies and no `unsafe`, so a system with a
+Anything not in this table is **untested**, which does not mean it fails: Matter is portable Rust with no dependencies and no `unsafe`, so a system with a
 working Rust toolchain has a good chance. If you try one, please tell us how it went (see [Reporting](#reporting-a-problem-or-a-result)).
 
 **In a hurry, and you already have Rust and git?** On Linux, macOS or a BSD:
 
 ```bash
-git clone https://github.com/DawsMacs/Transient.git && cd Transient
+git clone https://github.com/Matterworm/Matter.git && cd Matter
 cargo build --release --offline && ./target/release/baby school
 ```
 
@@ -39,9 +39,9 @@ cargo build --release --offline && ./target/release/baby school
 
 | way | what you need | size | notes |
 |---|---|---|---|
-| `git clone https://github.com/DawsMacs/Transient.git` | git | about 1.5 MB (the whole history) | no account or key needed; use the SSH address if you have write access |
+| `git clone https://github.com/Matterworm/Matter.git` | git | about 1.5 MB (the whole history) | no account or key needed; use the SSH address if you have write access |
 | "Code → Download ZIP" on GitHub | a browser | about 0.5 MB | no history; you can build it the same way |
-| `cargo install --git https://github.com/DawsMacs/Transient baby` | Rust | downloads and builds in about a minute | puts a `baby` command in `~/.cargo/bin`; tried on 2026-10-24 on Linux and it works; it installs only the `baby` program, not the tests, the goldens or the Python tools |
+| `cargo install --git https://github.com/Matterworm/Matter baby` | Rust | downloads and builds in about a minute | puts a `baby` command in `~/.cargo/bin`; tried on 2026-10-24 on Linux and it works; it installs only the `baby` program, not the tests, the goldens or the Python tools |
 
 Within a clone, `cargo install --path baby` does the same from your local copy (about 76 seconds, tried).
 
@@ -98,8 +98,8 @@ On Alpine, `apk add rust cargo` is the easy way and gives the musl build.
 ### 3. Build, test and run
 
 ```bash
-git clone https://github.com/DawsMacs/Transient.git
-cd Transient
+git clone https://github.com/Matterworm/Matter.git
+cd Matter
 cargo build --release --offline
 cargo test --release --offline                  # 150 tests, about 15 s
 ./target/release/baby school                    # teaches 13 units, prints how each was learned and the scorecard
@@ -134,8 +134,8 @@ Or, if you use Homebrew: `brew install rust`.
 ### 3. Build, test and run
 
 ```bash
-git clone https://github.com/DawsMacs/Transient.git
-cd Transient
+git clone https://github.com/Matterworm/Matter.git
+cd Matter
 cargo build --release --offline
 cargo test --release --offline                  # 150 tests, about 15 s
 ./target/release/baby school
@@ -167,8 +167,8 @@ Download and run `rustup-init.exe` from [rustup.rs](https://rustup.rs). If the M
 In Git Bash the Linux commands work as written:
 
 ```bash
-git clone https://github.com/DawsMacs/Transient.git
-cd Transient
+git clone https://github.com/Matterworm/Matter.git
+cd Matter
 cargo build --release --offline
 cargo test --release --offline
 ./target/release/baby.exe school
@@ -193,8 +193,8 @@ Then run [the check](#checking-your-build) in Git Bash (`bash golden/check.sh`).
 
 ```bash
 sudo pkg install -y rust git          # as root, or with doas
-git clone https://github.com/DawsMacs/Transient.git
-cd Transient
+git clone https://github.com/Matterworm/Matter.git
+cd Matter
 cargo build --release --offline
 cargo test --release --offline        # 150 tests
 ./target/release/baby school
@@ -212,8 +212,8 @@ from the NetBSD pkgsrc binary packages first.
 
 ```bash
 sudo pkgin -y install rust git        # as root, or with sudo if you set it up
-git clone https://github.com/DawsMacs/Transient.git
-cd Transient
+git clone https://github.com/Matterworm/Matter.git
+cd Matter
 cargo build --release --offline
 cargo test --release --offline        # 150 tests
 ./target/release/baby school
@@ -231,8 +231,8 @@ system's package, as CI does).
 
 ```bash
 doas pkg_add rust git                 # or sudo, if you use it
-git clone https://github.com/DawsMacs/Transient.git
-cd Transient
+git clone https://github.com/Matterworm/Matter.git
+cd Matter
 cargo build --release --offline
 cargo test --release --offline        # 150 tests
 ./target/release/baby school
@@ -245,7 +245,7 @@ Then run [the check](#checking-your-build).
 
 ## WebAssembly (WASI)
 
-**Tested in CI:** `wasm32-wasip1` under [Wasmtime](https://wasmtime.dev) 50.0.0, on Linux. This runs Transient in a sandbox: it can see only the folders you give
+**Tested in CI:** `wasm32-wasip1` under [Wasmtime](https://wasmtime.dev) 50.0.0, on Linux. This runs Matter in a sandbox: it can see only the folders you give
 it. It is the way to run it on a system with no native build.
 
 ### 1. Install Rust, the target and Wasmtime
@@ -300,7 +300,7 @@ seconds, and any timing or energy reading from them is meaningless. Real s390x a
 
 - **Measured joules need Linux on hardware with a readable RAPL counter** (a bare-metal machine whose processor exposes it at `/sys/class/powercap/intel-rapl:0`; not a
   virtual machine or container; I have only verified this on an Intel desktop). The counter is root-only on current kernels. Making it readable is a system
-  setting, so Transient never does it for you; if you want measured energy, run this yourself (it resets at reboot):
+  setting, so Matter never does it for you; if you want measured energy, run this yourself (it resets at reboot):
   `sudo chmod a+r /sys/class/powercap/intel-rapl:0/energy_uj`. Without it the energy report says it is unavailable.
 - **Peak memory** is reported only where the system says it (`/proc/self/status` on Linux). Elsewhere it prints `n/a`, never zero.
 
@@ -308,7 +308,7 @@ seconds, and any timing or energy reading from them is meaningless. Real s390x a
 
 - **Update:** `git pull --ff-only`, then build again (`cargo build --release --offline`) and re-run the check. If you used `cargo install`, run it again with `--force`.
 - **Remove:** delete the folder you cloned (the build is in its `target/` folder, and the saved schools are in `runs/`). If you used `cargo install`, run
-  `cargo uninstall baby`. Transient keeps its files in the folder you run it in (`runs/`), plus temporary files in your system's temp folder (or `TMPDIR`) for a few commands.
+  `cargo uninstall baby`. Matter keeps its files in the folder you run it in (`runs/`), plus temporary files in your system's temp folder (or `TMPDIR`) for a few commands.
 
 ## What is tested where
 
@@ -340,11 +340,11 @@ other versions, other hardware and real s390x or riscv64 machines were not tried
 - *`--offline` errors about the network*: there are no dependencies, so it should not happen; run `cargo build --release` without the flag and tell us.
 - *`bash: golden/check.sh` fails on Windows*: run it in Git Bash, not PowerShell.
 - *A test fails*: run it alone with `cargo test --release --offline NAME -- --nocapture` and open an issue with the platform, the Rust version (`rustc -Vv`) and the output.
-- *The Python tools under `tools/`* need `python3` (and `pytorch_baseline.py` needs PyTorch); they are only for the exam's comparison systems and are not needed to run Transient.
+- *The Python tools under `tools/`* need `python3` (and `pytorch_baseline.py` needs PyTorch); they are only for the exam's comparison systems and are not needed to run Matter.
 
 ## Reporting a problem or a result
 
-Open an issue on [GitHub](https://github.com/DawsMacs/Transient/issues) (there is a template for a wrong answer and one for a bug). For a platform, say
+Open an issue on [GitHub](https://github.com/Matterworm/Matter/issues) (there is a template for a wrong answer and one for a bug). For a platform, say
 the operating system and version, the processor, the output of `rustc -Vv`, and what you ran. A platform that works is as useful to hear about as one that does
 not, and a golden that differs from `golden/` on another platform is a finding we want.
 

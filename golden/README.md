@@ -1,6 +1,6 @@
 # Golden outputs
 
-What Transient produces on the reference platform (Linux x86_64, glibc), kept so that every other platform can be compared with
+What Matter produces on the reference platform (Linux x86_64, glibc), kept so that every other platform can be compared with
 it byte for byte. `check.sh` generates the same outputs on the machine running it and diffs them against these files. See
 the section "Running on other platforms" in `baby/README.md` for the reasoning and the results.
 

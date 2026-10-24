@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 DawsMacs
-//! A fingerprint of this platform's math library, on the inputs Transient actually uses.
+//! A fingerprint of this platform's math library, on the inputs Matter actually uses.
 //!
 //! Rust's `exp`, `ln`, `log2`, `tanh` and `powi` are documented as having unspecified precision: the last bit may differ between
 //! platforms, C libraries and Rust versions. `+ - * /` and `sqrt` are exact everywhere. This program evaluates the platform-
 //! dependent functions over the ranges the code reaches and prints a 64-bit hash of every result's bits (plus one hash per block of
 //! 262,144 inputs, to say where a difference starts). Two platforms whose output matches have the same last bits on all of those
-//! inputs. It touches none of Transient's code; it only calls the same standard-library functions the same way.
+//! inputs. It touches none of Matter's code; it only calls the same standard-library functions the same way.
 //!
 //! Usage:
 //!   cargo run --release --offline --example mathprint                           print the fingerprint

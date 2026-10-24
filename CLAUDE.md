@@ -1,16 +1,18 @@
-# Transient repo instructions
+# Matter repo instructions
 
-**Naming (2026-10-21):** the project and the repo are **Transient** (`DawsMacs/Transient`). **TransientAI** is the name of the *creator* of Transient (as OpenAI is to ChatGPT); Daws is its owner, founder and creator, so
-copyright and license headers naming `DawsMacs` are correct. Never call the project "TransientAI"; the meaning of the name "Transient" is Daws's to tell, so never guess it in docs.
+**Naming (2026-10-24):** the project and the repo are **Matter** (`Matterworm/Matter`). The **Matterworm Foundation** is the *creator* of Matter (as OpenAI is to ChatGPT); Daws is its owner, founder and creator, so
+copyright and license headers naming `DawsMacs` are correct. Never call the project "Matterworm" or "Matterworm Foundation"; the meaning of the name "Matter" is Daws's to tell, so never guess it in docs.
+The project and its creator were renamed on 2026-10-24 after a possible trademark conflict (unconfirmed). **The two earlier names are retired: do not use them in code, docs, site copy, commit messages or replies**
+(they are written down once, in `MatterVision.md` Entry 11, and in the dated rename notes of `MatterHandover.md`; the site is served from the GitHub address `matterworm.github.io` for now, because Daws postponed buying a domain).
 
-Transient is Daws's long-horizon project: a light, adaptive "system of intelligence" meant to run on ordinary consumer hardware, winning differently from cloud models (not out-scaling them). It is pursued
+Matter is Daws's long-horizon project: a light, adaptive "system of intelligence" meant to run on ordinary consumer hardware, winning differently from cloud models (not out-scaling them). It is pursued
 whether or not it works. The code is `baby/` (pure Rust, zero dependencies, builds offline).
 
 ## Start of session
 
-**A rename is pending (ordered 2026-10-24).** Before any other work, read "FIRST: THE RENAME" at the top of `TransientHandover.md`: ask Daws for the new name and scope (it had not been given), then follow that plan on a branch and a pull request. Until the rename lands, the names below stand.
+**The rename (2026-10-24) is prepared on the local branch `rename` and waits for Daws's approval** (see "THE RENAME" at the top of `MatterHandover.md` for what was done, what is left and what only he can do). Until it is merged, `main` still carries the old names.
 
-1. Read `TransientHandover.md` in full (rewritten 2026-10-21: state, decisions that are Daws's, options, guards, working lessons). It has the state, the numbers, the code map, the plan and what is next, the honest caveats, and the working habits. Then `TransientVision.md` (an **internal** document, rewritten 2026-10-24 at Daws's request in plain, practical
+1. Read `MatterHandover.md` in full (rewritten 2026-10-21: state, decisions that are Daws's, options, guards, working lessons). It has the state, the numbers, the code map, the plan and what is next, the honest caveats, and the working habits. Then `MatterVision.md` (an **internal** document, rewritten 2026-10-24 at Daws's request in plain, practical
    wording: append dated entries for new decisions, label the assistant's context, tag ideas Decision / Hypothesis / Measured / Open; never link it from public pages).
 2. Run `git pull --ff-only` and `gh pr list --state all` (pull requests wait for the user to merge them), then the two-minute check in the handover (`cargo test --release --offline`; `./target/release/baby school`; the scorecard's WRONG column must read 0.0%; `bash golden/check.sh`).
 
@@ -24,5 +26,5 @@ whether or not it works. The code is `baby/` (pure Rust, zero dependencies, buil
 - **Vocabulary (2026-10-24).** Daws retired three labels he had coined: the architecture acronym beginning with U ("UMA" and its expansion), "Maximization", and "ultragenerative". Do not use or reintroduce them in code, docs, site copy or replies; say what is meant in plain, testable terms (capability per byte, parameter and joule). **Adaptive Learning** is the exception and stays. "Frontier" is an ambition, not a claim: say so wherever it appears.
 - **Absolute freedom, within the stated goals** (frontier-class intelligence on typical hardware as the ambition, light on RAM/memory, built around Adaptive Learning, Rust-first, measured in joules not just parameters). Default to doing the plan.
 - **After every new capability, ask adversarial questions** (the apart/minus/"N less than ten" ambiguity bit three times) and keep batteries of must-refuse questions in the tests.
-- **Do not run system-setting commands** (e.g. the RAPL `chmod`): give Daws the command instead. **This is a git repo** (`origin` = `git@github.com:DawsMacs/Transient.git`, public, AGPL-3.0-only; use his global git account). He has authorized commits and pushes to `origin main` for this work; still ask before force-pushing, adding other remotes or changing repo settings. The repo is public: never commit `.local/` or details of the sibling project.
-- The sibling project `~/Hiraketa` (Nana) has its own `CLAUDE.md`; its offline-mode work is Nana's private research and is separate from Transient.
+- **Do not run system-setting commands** (e.g. the RAPL `chmod`): give Daws the command instead. **This is a git repo** (`origin` = `git@github.com:Matterworm/Matter.git`, public, AGPL-3.0-only; use his global git account). He has authorized commits and pushes to `origin main` for this work; still ask before force-pushing, adding other remotes or changing repo settings. The repo is public: never commit `.local/` or details of the sibling project.
+- The sibling project `~/Hiraketa` (Nana) has its own `CLAUDE.md`; its offline-mode work is Nana's private research and is separate from Matter.

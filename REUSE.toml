@@ -1,14 +1,14 @@
-# REUSE (https://reuse.software) licensing declaration for Transient.
+# REUSE (https://reuse.software) licensing declaration for Matter.
 #
 # Source files carry their own SPDX headers. This file covers everything that cannot: documentation,
 # manifests, the lock file, images, CI configuration. The license texts live in LICENSES/ and LICENSE.
 version = 1
-SPDX-PackageName = "Transient"
-SPDX-PackageDownloadLocation = "https://github.com/DawsMacs/Transient"
+SPDX-PackageName = "Matter"
+SPDX-PackageDownloadLocation = "https://github.com/Matterworm/Matter"
 
 [[annotations]]
 path = [
-  "README.md", "CONTRIBUTING.md", "LEARNING.md", "TransientHandover.md", "TransientVision.md", "CLAUDE.md",
+  "README.md", "CONTRIBUTING.md", "LEARNING.md", "MatterHandover.md", "MatterVision.md", "CLAUDE.md",
   "docs/**", "baby/README.md", "baby/examples/*.expected", "golden/**", ".gitattributes",
   "Cargo.toml", "Cargo.lock", "baby/Cargo.toml", "REUSE.toml", ".gitignore",
   "assets/**", ".github/**",

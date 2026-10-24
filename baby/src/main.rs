@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 DawsMacs
-//! baby: Transient's learning system. It is taught units of lessons, chooses how to learn each one, says how it knew, and refuses when it should.
+//! baby: Matter's learning system. It is taught units of lessons, chooses how to learn each one, says how it knew, and refuses when it should.
 //! (It began as a tiny network that read a short query and said one word; `baby train` is still that.)
 //!
 //!   baby school [--seed N] [--out PATH]     TEACH THE BABY (the unified one): units of lessons, each learned the way evidence says
