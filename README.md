@@ -79,7 +79,7 @@ The scorecard reports **WRONG separately from refused**: a refusal is an accepta
 
 ## Quick start
 
-Requires a stable Rust toolchain (edition 2021). No other dependencies, no network.
+Requires a stable Rust toolchain (edition 2021). No other dependencies, no network. **Full instructions for every platform (download options, Windows, the BSDs, WebAssembly, what is tested where): [`docs/Running.md`](docs/Running.md).**
 
 ```bash
 cargo test --release --offline         # 150 tests (about 15 s)
@@ -195,6 +195,7 @@ to find out by measurement. The reasoning behind the project, in the author's ow
 |---|---|
 | [`baby/README.md`](baby/README.md) | the experiment log: every result, dead end and bug, newest first |
 | [`LEARNING.md`](LEARNING.md) | learning-efficiency research notes and sources |
+| [`docs/Running.md`](docs/Running.md) | get, build, run and check Transient on each platform; what is tested where |
 | [`docs/Direction.md`](docs/Direction.md) | strategy, hardware terrain, language choice, candidate architectures |
 | [`TransientVision.md`](TransientVision.md) | the author's dated vision entries |
 | [`TransientHandover.md`](TransientHandover.md) | current state and next steps, for resuming work |
