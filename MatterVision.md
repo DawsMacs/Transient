@@ -240,7 +240,7 @@ Long-term direction for the assistant to weigh. Tell Daws when it is time to ren
 
 **What changed (assistant, same day, on the local branch `rename`, approved by Daws).** Every mention in this repository and in the site repository; the banners, the social preview and the site's share image (re-drawn in the same typeface); the two documents `TransientHandover.md` and `TransientVision.md`, now `MatterHandover.md` and `MatterVision.md`; the repository URLs in the docs and in `baby/Cargo.toml` and `REUSE.toml` (they point at `Matterworm/Matter`); on the site, the absolute URLs (canonical links, share tags, sitemap, feed, `robots.txt`) use `https://matterworm.github.io` and the `CNAME` file is removed. The three blog posts were edited to the new names and carry a note saying so.
 
-**What did not change.** Local folder names (`~/Transient`, `~/TransientAI`, `~/transient-data`: the assistant's memory is keyed to the first one). The git history, merged pull request titles and CI run names keep the old names for good. No measurement, threshold or recorded bar moved.
+**What did not change.** The data folder `~/transient-data` (a local name). Daws later moved the local clones to `~/Matterworm/Matter` and `~/Matterworm/Website`. The git history, merged pull request titles and CI run names keep the old names for good. No measurement, threshold or recorded bar moved.
 
 **Context (assistant).** The rule that the meaning of the project's name is Daws's to tell stays in force for "Matter". One thing for Daws to check, not a finding: "Matter" is also the name of a widely used smart-home connectivity standard, so a clearance search for the new name is as worthwhile as it was for the old one (not legal advice).
 
