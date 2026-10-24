@@ -195,3 +195,7 @@ jobs:
           bash golden/check.sh 2>&1 | tr -d '\r' | grep -E '^(golden|NOT REPRODUCIBLE|the [0-9]+ runs|could not)'
           echo "golden check status: ${PIPESTATUS[0]}"
           exit 0
+
+      - name: Math accuracy audit (reported)
+        run: |
+          cargo run --release --offline --example mathprint -- audit | grep -E '^(audit|# audit)' || true
