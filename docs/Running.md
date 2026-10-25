@@ -21,7 +21,7 @@ a minute and a half on a recent desktop (one to four minutes on the CI machines)
 | OpenBSD | [OpenBSD](#openbsd) | CI, virtual machine |
 | Any system with a WebAssembly runtime (sandboxed) | [WebAssembly (WASI)](#webassembly-wasi) | CI, under Wasmtime |
 | 32-bit x86, s390x (big-endian), riscv64 | [Other processors](#other-processors) | CI, native or QEMU emulation |
-| DragonFly BSD | [Coming later](#coming-later) | not yet |
+| DragonFly BSD | [DragonFly BSD](#dragonfly-bsd) | not tested: the first try crashed at startup; a workaround is described, untested |
 
 Anything not in this table is **untested**, which does not mean it fails: Matter is portable Rust with no dependencies and no `unsafe`, so a system with a
 working Rust toolchain has a good chance. If you try one, please tell us how it went (see [Reporting](#reporting-a-problem-or-a-result)).
@@ -243,6 +243,42 @@ Then run [the check](#checking-your-build).
 
 ---
 
+## DragonFly BSD
+
+**Not tested in CI.** We tried DragonFly 6.4.2, x86_64, in a virtual machine on 2026-10-24, with its packaged Rust (1.85.1, a "tier 3" target). The 149 tests
+passed, but running `baby` died at startup with `fatal runtime error: assertion failed: key as usize != KEY_SENTVAL`, inside Rust's standard library, before any
+of Matter's code ran. A second try on 2026-10-25 could not even install Rust: the virtual machine could not resolve DragonFly's package host that day.
+
+**What is probably happening (an explanation from reading, not yet confirmed here).** The same error was reported to Rust as
+[rust-lang/rust#112180](https://github.com/rust-lang/rust/issues/112180): on DragonFly, a program that is not linked against the thread library can be handed
+thread-local key 0 by `pthread_key_create`, and Rust's standard library treats 0 as "not set yet" and aborts. A comment on that issue says that with link-time
+optimization the linker drops the thread library when nothing in the program asks for it. Matter's release profile uses full link-time optimization
+(`lto = true`), and the tests passed because the test program starts threads, which keeps the thread library linked. That fits everything we saw. The Rust issue was
+closed as "not planned" in June 2025 without a fix. Matter's own thread-local (the reliability bar in `baby/src/mechanisms.rs`) is a plain number with no
+destructor and is not what triggers it.
+
+**Source.** The code is at [github.com/Matterworm/Matter](https://github.com/Matterworm/Matter) (AGPL-3.0-only); get it as described in
+[Getting the code](#getting-the-code). There is no prebuilt binary, and the Linux build cannot be used here: DragonFly removed its Linux emulation in 2016 and
+2017 ([the commit](https://lists.dragonflybsd.org/pipermail/commits/2017-February/714870.html)), and as far as we found it only ran 32-bit programs.
+
+**To try building from source (the workaround is untested):**
+
+```bash
+sudo pkg install -y rust git          # as root, or with doas
+git clone https://github.com/Matterworm/Matter.git
+cd Matter
+CARGO_PROFILE_RELEASE_LTO=false cargo build --release --offline     # build without link-time optimization
+CARGO_PROFILE_RELEASE_LTO=false cargo test --release --offline      # 152 tests
+./target/release/baby school
+```
+
+Then run [the check](#checking-your-build), including `bash golden/check.sh`: building without link-time optimization should not change any answer, but that has
+not been checked on this system, and the program may run a little slower. If `baby school` still dies with the same message, please tell us (see
+[Reporting](#reporting-a-problem-or-a-result)) with the output of `uname -a` and `rustc -Vv`: a report from a real DragonFly machine, or a newer Rust there, is
+what we are missing.
+
+---
+
 ## WebAssembly (WASI)
 
 **Tested in CI:** `wasm32-wasip1` under [Wasmtime](https://wasmtime.dev) 50.0.0, on Linux. This runs Matter in a sandbox: it can see only the folders you give
@@ -350,8 +386,6 @@ not, and a golden that differs from `golden/` on another platform is a finding w
 
 ## Coming later
 
-- **DragonFly BSD** is planned for later. We tried it: the tests pass, but the binary built with its packaged Rust (1.85.1) crashes at startup, inside the
-  standard library, so it is not in the tested list. We intend to bring it back once there is a Rust toolchain there that runs it (details in the experiment
-  log, [`baby/README.md`](../baby/README.md)).
+- **DragonFly BSD in CI** once a build there is known to run: see [DragonFly BSD](#dragonfly-bsd) for what we know and the workaround to try.
 - **Prebuilt binaries and a first release** are not decided yet; until then, build from source as above.
 - **Real peak memory outside Linux** (it prints `n/a` today).
