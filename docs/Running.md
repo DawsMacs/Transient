@@ -7,7 +7,7 @@ How to get the code, build it, run it and check it, one section per platform. Ev
 [`baby/README.md`](../baby/README.md) ("Running on other platforms"). Where something was **not** tried, it says so.
 
 There are **no prebuilt binaries and no releases yet**: you build from source. The build has no dependencies and needs no network (`--offline`), takes about
-a minute and a half on a recent desktop (one to four minutes on the CI machines), and the 152 tests take about 15 seconds.
+a minute and a half on a recent desktop (one to four minutes on the CI machines), and the 153 tests take about 15 seconds.
 
 ## Pick your platform
 
@@ -21,7 +21,7 @@ a minute and a half on a recent desktop (one to four minutes on the CI machines)
 | OpenBSD | [OpenBSD](#openbsd) | CI, virtual machine |
 | Any system with a WebAssembly runtime (sandboxed) | [WebAssembly (WASI)](#webassembly-wasi) | CI, under Wasmtime |
 | 32-bit x86, s390x (big-endian), riscv64 | [Other processors](#other-processors) | CI, native or QEMU emulation |
-| DragonFly BSD | [DragonFly BSD](#dragonfly-bsd) | CI, virtual machine (link-time optimization off) |
+| DragonFly BSD | [DragonFly BSD](#dragonfly-bsd) | CI, virtual machine |
 
 Anything not in this table is **untested**, which does not mean it fails: Matter is portable Rust with no dependencies and no `unsafe`, so a system with a
 working Rust toolchain has a good chance. If you try one, please tell us how it went (see [Reporting](#reporting-a-problem-or-a-result)).
@@ -101,7 +101,7 @@ On Alpine, `apk add rust cargo` is the easy way and gives the musl build.
 git clone https://github.com/Matterworm/Matter.git
 cd Matter
 cargo build --release --offline
-cargo test --release --offline                  # 152 tests, about 15 s
+cargo test --release --offline                  # 153 tests, about 15 s
 ./target/release/baby school                    # teaches 13 units, prints how each was learned and the scorecard
 ./target/release/baby ask "how far apart are two and nine"
 ```
@@ -137,7 +137,7 @@ Or, if you use Homebrew: `brew install rust`.
 git clone https://github.com/Matterworm/Matter.git
 cd Matter
 cargo build --release --offline
-cargo test --release --offline                  # 152 tests, about 15 s
+cargo test --release --offline                  # 153 tests, about 15 s
 ./target/release/baby school
 ./target/release/baby ask "how far apart are two and nine"
 ```
@@ -196,7 +196,7 @@ sudo pkg install -y rust git          # as root, or with doas
 git clone https://github.com/Matterworm/Matter.git
 cd Matter
 cargo build --release --offline
-cargo test --release --offline        # 152 tests
+cargo test --release --offline        # 153 tests
 ./target/release/baby school
 ./target/release/baby ask "how far apart are two and nine"
 ```
@@ -215,7 +215,7 @@ sudo pkgin -y install rust git        # as root, or with sudo if you set it up
 git clone https://github.com/Matterworm/Matter.git
 cd Matter
 cargo build --release --offline
-cargo test --release --offline        # 152 tests
+cargo test --release --offline        # 153 tests
 ./target/release/baby school
 ./target/release/baby ask "how far apart are two and nine"
 ```
@@ -234,7 +234,7 @@ doas pkg_add rust git                 # or sudo, if you use it
 git clone https://github.com/Matterworm/Matter.git
 cd Matter
 cargo build --release --offline
-cargo test --release --offline        # 152 tests
+cargo test --release --offline        # 153 tests
 ./target/release/baby school
 ./target/release/baby ask "how far apart are two and nine"
 ```
@@ -245,36 +245,34 @@ Then run [the check](#checking-your-build).
 
 ## DragonFly BSD
 
-**Tested in CI:** DragonFly 6.4.2, x86_64, in a virtual machine, with the packaged Rust (1.85.1, a "tier 3" target), **built without link-time
-optimization** (see below: with the default build the program dies at startup). The 152 tests pass, the scorecard reads 0.0% wrong, and the exam predictions, the
-adaptive-stream replies and the scorecard are byte-identical to the Linux reference (2026-10-25).
-
-**Why the default build fails here.** The first try (2026-10-24) passed the tests, but running `baby` died with `fatal runtime error: assertion failed:
-key as usize != KEY_SENTVAL`, inside Rust's standard library, before any of Matter's code ran. It is
-[rust-lang/rust#112180](https://github.com/rust-lang/rust/issues/112180): on DragonFly, a program that is not linked against the thread library can be handed
-thread-local key 0 by `pthread_key_create`, and the standard library treats 0 as "not set yet" and aborts. With link-time optimization the linker drops the thread library
-when nothing in the program asks for it, and Matter's release profile uses it (`lto = true`); the tests passed because the test program starts threads. We
-reproduced the crash with the default build on 2026-10-25 and confirmed that the same source built with link-time optimization off runs. The Rust issue was closed
-as "not planned" in June 2025 without a fix.
-
-**Source.** The code is at [github.com/Matterworm/Matter](https://github.com/Matterworm/Matter) (AGPL-3.0-only); get it as described in
-[Getting the code](#getting-the-code). There is no prebuilt binary, and the Linux build cannot be used here: DragonFly removed its Linux emulation in 2016 and
-2017 ([the commit](https://lists.dragonflybsd.org/pipermail/commits/2017-February/714870.html)), and as far as we found it only ran 32-bit programs.
+**Tested in CI:** DragonFly 6.4.2, x86_64, in a virtual machine, with the packaged Rust (1.85.1, a "tier 3" target), default release build. The 153 tests pass,
+the scorecard reads 0.0% wrong, and the exam predictions, the adaptive-stream replies and the scorecard are byte-identical to the Linux reference (2026-10-25).
 
 ```bash
 sudo pkg install -y rust git          # as root, or with doas
 git clone https://github.com/Matterworm/Matter.git
 cd Matter
-CARGO_PROFILE_RELEASE_LTO=false cargo build --release --offline     # without link-time optimization: required here
-CARGO_PROFILE_RELEASE_LTO=false cargo test --release --offline      # 152 tests
+cargo build --release --offline
+cargo test --release --offline        # 153 tests
 ./target/release/baby school
+./target/release/baby ask "how far apart are two and nine"
 ```
 
-Use the same `CARGO_PROFILE_RELEASE_LTO=false` prefix on every `cargo` command (a build without it replaces the working program with the crashing one), or make it
-permanent for your user: `mkdir -p ~/.cargo && printf '[profile.release]\nlto = false\n' >> ~/.cargo/config.toml` (CI does this). Then run
-[the check](#checking-your-build). Energy is not measured here, and the math library differs from the reference in the last bit of some results (as on other
-systems; the answers still match). The program may run a little slower without link-time optimization (not measured). If `baby school` still dies with the same message, please tell
-us (see [Reporting](#reporting-a-problem-or-a-result)) with the output of `uname -a` and `rustc -Vv`.
+Then run [the check](#checking-your-build). Energy is not measured here, and the math library differs from the reference in the last bit of some results (as on other
+systems; the accuracy audit shows `ln`, `log2` and `exp` at most one step from the correctly rounded value, `tanh` at most two, and the answers still match).
+
+**Source.** The code is at [github.com/Matterworm/Matter](https://github.com/Matterworm/Matter) (AGPL-3.0-only); get it as described in
+[Getting the code](#getting-the-code). There is no prebuilt binary, and the Linux build cannot be used here: DragonFly removed its Linux emulation in 2016 and
+2017 ([the commit](https://lists.dragonflybsd.org/pipermail/commits/2017-February/714870.html)), and as far as we found it only ran 32-bit programs.
+
+**What went wrong the first time, and the fix.** The first try (2026-10-24) passed the tests, but running `baby` died with `fatal runtime error: assertion failed:
+key as usize != KEY_SENTVAL`, inside Rust's standard library, before any of Matter's code ran. It is
+[rust-lang/rust#112180](https://github.com/rust-lang/rust/issues/112180): on DragonFly, a program that is not linked against the thread library can be handed
+thread-local key 0 by `pthread_key_create`, and the standard library treats 0 as "not set yet" and aborts. With link-time optimization (which Matter's release
+profile uses) the linker drops the thread library when nothing in the program asks for it; the tests passed because the test program starts threads. Matter
+now starts one short thread at startup on DragonFly (`platform::keep_thread_library_linked`; it does nothing anywhere else), which keeps the library linked. Before
+that, building with `CARGO_PROFILE_RELEASE_LTO=false` also made the program run. The Rust issue was closed as "not planned" in June 2025 without a fix. If an older
+checkout dies with the message above, update it, or build it with that variable set on every `cargo` command.
 
 ---
 

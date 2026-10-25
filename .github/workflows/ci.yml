@@ -130,11 +130,10 @@ jobs:
           esac
 
   # The BSDs, in virtual machines on a Linux runner (cross-platform-actions). Rust's own support: FreeBSD and NetBSD tier 2 with host tools,
-  # OpenBSD and DragonFly tier 3 (so the distribution's Rust package, whatever version it ships). DragonFly (6.4.2, Rust 1.85.1) needs link-time
-  # optimization switched off: with it, the binary dies at startup inside the standard library ("assertion failed: key as usize != KEY_SENTVAL",
-  # rust-lang/rust#112180: the linker drops DragonFly's thread library, so pthread_key_create answers key 0), while the tests pass because the test
-  # program starts threads. Without it (`lto = false` in the VM's own cargo config, set by the `setup` entry) the scorecard, the 152 tests and all
-  # three goldens matched the Linux reference on 2026-10-25. Every step runs INSIDE the VM through the
+  # OpenBSD and DragonFly tier 3 (so the distribution's Rust package, whatever version it ships). DragonFly (6.4.2, Rust 1.85.1) is built with the
+  # DEFAULT release profile (link-time optimization on): on DragonFly the linker would drop the thread library and the binary would die at startup
+  # ("assertion failed: key as usize != KEY_SENTVAL", rust-lang/rust#112180), so `platform::keep_thread_library_linked` starts one thread there.
+  # (The row was first made to pass with `lto = false` in the VM's cargo config; see docs/Running.md.) Every step runs INSIDE the VM through the
   # cpa.sh shell. Reported like the other non-reference rows: the tests, the scorecard WRONG gate and the build can fail the job (a real
   # finding); the fingerprint and the golden check only report. Verified on 2026-10-24: FreeBSD 15.1, NetBSD 10.1 and OpenBSD 7.9 passed with these package names.
   bsd:
@@ -161,7 +160,6 @@ jobs:
             os: dragonflybsd
             version: '6.4.2'
             install: for i in 1 2 3; do sudo pkg install -y rust && break; sleep 20; done
-            setup: mkdir -p ~/.cargo && echo '[profile.release]' > ~/.cargo/config.toml && echo 'lto = false' >> ~/.cargo/config.toml
     defaults:
       run:
         shell: cpa.sh {0}
