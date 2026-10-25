@@ -20,6 +20,9 @@ other system can take. It is not a language model and makes no claim to be one y
 Matter is made by the **[Matterworm Foundation](https://matterworm.github.io)**, an independent research effort run by its founder, Daws Macs, and a founding member. Its
 website has an overview, documentation, a progress page and a blog.
 
+> **Where the work is:** `baby/` is the frozen reference. The main line is [`novice/`](novice/README.md), rebuilt from scratch, which explains what it
+> is told in one currency (bits), is built to rewrite its own language, and has a joule budget for every milestone. It has just started: see its README.
+
 > **Status:** active research. Unless a line says otherwise, the numbers below come from tidy synthetic lessons; energy is
 > *measured* with the CPU's own counter where stated, and *estimated* from counted operations where not. Read
 > [Limitations](#limitations) before drawing conclusions.

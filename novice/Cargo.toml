@@ -1,0 +1,19 @@
+[package]
+name = "novice"
+version = "0.0.1"
+edition = "2021"
+license = "AGPL-3.0-only"
+repository = "https://github.com/Matterworm/Matter"
+readme = "README.md"
+publish = false
+description = "Novice: a dependency-free system that explains what it is told in one currency (bits), rewrites its own language, and keeps count of its joules."
+
+[dependencies]
+
+# Novice is its own workspace on purpose: it builds, tests and locks without touching baby's workspace, lock file or CI.
+[workspace]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

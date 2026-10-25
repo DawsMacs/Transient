@@ -10,7 +10,7 @@ SPDX-PackageDownloadLocation = "https://github.com/Matterworm/Matter"
 path = [
   "README.md", "CONTRIBUTING.md", "LEARNING.md",
   "docs/**", "baby/README.md", "baby/examples/*.expected", "golden/**", ".gitattributes",
-  "Cargo.toml", "Cargo.lock", "baby/Cargo.toml", "REUSE.toml", ".gitignore",
+  "Cargo.toml", "Cargo.lock", "baby/Cargo.toml", "novice/README.md", "novice/Cargo.toml", "novice/Cargo.lock", "REUSE.toml", ".gitignore",
   "assets/**", ".github/**",
 ]
 precedence = "aggregate"
