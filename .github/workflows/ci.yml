@@ -130,9 +130,11 @@ jobs:
           esac
 
   # The BSDs, in virtual machines on a Linux runner (cross-platform-actions). Rust's own support: FreeBSD and NetBSD tier 2 with host tools,
-  # OpenBSD tier 3 (so the distribution's Rust package, whatever version it ships). DragonFly was tried and dropped on 2026-10-24: its packaged
-  # Rust (1.85.1) crashes the binary at startup inside the standard library's thread-local code ("assertion failed: key as usize != KEY_SENTVAL"),
-  # before any Matter logic runs; the tests themselves passed there. Every step runs INSIDE the VM through the
+  # OpenBSD and DragonFly tier 3 (so the distribution's Rust package, whatever version it ships). DragonFly (6.4.2, Rust 1.85.1) needs link-time
+  # optimization switched off: with it, the binary dies at startup inside the standard library ("assertion failed: key as usize != KEY_SENTVAL",
+  # rust-lang/rust#112180: the linker drops DragonFly's thread library, so pthread_key_create answers key 0), while the tests pass because the test
+  # program starts threads. Without it (`lto = false` in the VM's own cargo config, set by the `setup` entry) the scorecard, the 152 tests and all
+  # three goldens matched the Linux reference on 2026-10-25. Every step runs INSIDE the VM through the
   # cpa.sh shell. Reported like the other non-reference rows: the tests, the scorecard WRONG gate and the build can fail the job (a real
   # finding); the fingerprint and the golden check only report. Verified on 2026-10-24: FreeBSD 15.1, NetBSD 10.1 and OpenBSD 7.9 passed with these package names.
   bsd:
@@ -155,6 +157,11 @@ jobs:
             os: openbsd
             version: '7.9'
             install: (command -v doas >/dev/null && doas pkg_add rust) || sudo pkg_add rust
+          - name: dragonfly-x86_64
+            os: dragonflybsd
+            version: '6.4.2'
+            install: for i in 1 2 3; do sudo pkg install -y rust && break; sleep 20; done
+            setup: mkdir -p ~/.cargo && echo '[profile.release]' > ~/.cargo/config.toml && echo 'lto = false' >> ~/.cargo/config.toml
     defaults:
       run:
         shell: cpa.sh {0}
@@ -176,8 +183,10 @@ jobs:
         run: |
           uname -a
           ${{ matrix.install }}
+          ${{ matrix.setup }}
           rustc -Vv
           cargo -V
+          cat ~/.cargo/config.toml 2>/dev/null || true
 
       - name: Build and tests
         run: |
