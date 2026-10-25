@@ -13,7 +13,7 @@
 *adaptive learning*: a system that keeps learning while it is used, decides for itself *how* to learn each kind of thing, and is
 measured by what it costs (operations, memory, estimated joules) rather than by parameter count alone.
 
-The current artifact is `baby/`: about 18k lines of Rust, **no dependencies**, builds offline, 152 tests. It is a research prototype
+The current artifact is `baby/`: about 18k lines of Rust, **no dependencies**, builds offline, 153 tests. It is a research prototype
 evaluated mostly on a synthetic curriculum, with a first look at real word problems (SVAMP, ASDiv) and an entry exam that any
 other system can take. It is not a language model and makes no claim to be one yet.
 
@@ -94,7 +94,7 @@ Requires a stable Rust toolchain (edition 2021). No other dependencies, no netwo
 Download options, checking your build, updating, troubleshooting and what is tested where are in [`docs/Running.md`](docs/Running.md). With Rust and git already installed, on Linux, macOS or a BSD:
 
 ```bash
-cargo test --release --offline         # 152 tests (about 15 s)
+cargo test --release --offline         # 153 tests (about 15 s)
 cargo build --release --offline
 ./target/release/baby school           # teach 13 units (~4 s), print how each was learned and the scorecard
 ./target/release/baby ask "how far apart are two and nine"   # answers, and says how it knew
@@ -117,7 +117,7 @@ regression: honesty is the property this project protects first.
 
 ## Platforms
 
-Written in portable Rust with no dependencies and no `unsafe`. **CI-tested on GitHub's runners** (virtual machines running the real operating systems): Linux x86_64 (glibc and musl), Linux aarch64, macOS arm64 and x86_64, Windows x86_64, FreeBSD, NetBSD, OpenBSD and DragonFly BSD (in virtual machines; DragonFly needs link-time optimization switched off, see its section), WebAssembly (WASI) under Wasmtime, and 32-bit x86, s390x (big-endian) and riscv64 Linux (the last two under QEMU emulation). On all of them the tests pass, the scorecard reads 0.0 % wrong, and the exam and adaptive-stream answers (`golden/`) are byte-identical to the Linux x86_64 reference, although the platforms' math libraries differ in the last bit (`cargo run --release --offline --example mathprint`). That is a result of testing, not a promise of support: other operating systems, versions and hardware are untested (DragonFly BSD is planned for later; see [`docs/Running.md`](docs/Running.md)). **Measured joules need Linux on hardware with a readable RAPL counter** (not a VM or container); elsewhere the energy report says it is unavailable. Details and the open questions: [`baby/README.md`](baby/README.md), "Running on other platforms".
+Written in portable Rust with no dependencies and no `unsafe`. **CI-tested on GitHub's runners** (virtual machines running the real operating systems): Linux x86_64 (glibc and musl), Linux aarch64, macOS arm64 and x86_64, Windows x86_64, FreeBSD, NetBSD, OpenBSD and DragonFly BSD (in virtual machines), WebAssembly (WASI) under Wasmtime, and 32-bit x86, s390x (big-endian) and riscv64 Linux (the last two under QEMU emulation). On all of them the tests pass, the scorecard reads 0.0 % wrong, and the exam and adaptive-stream answers (`golden/`) are byte-identical to the Linux x86_64 reference, although the platforms' math libraries differ in the last bit (`cargo run --release --offline --example mathprint`). That is a result of testing, not a promise of support: other operating systems, versions and hardware are untested (DragonFly BSD is planned for later; see [`docs/Running.md`](docs/Running.md)). **Measured joules need Linux on hardware with a readable RAPL counter** (not a VM or container); elsewhere the energy report says it is unavailable. Details and the open questions: [`baby/README.md`](baby/README.md), "Running on other platforms".
 
 ## Code map
 

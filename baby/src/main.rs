@@ -1746,6 +1746,7 @@ fn cmd_cost(a: &Args) {
 }
 
 fn main() {
+    platform::keep_thread_library_linked();
     let raw: Vec<String> = std::env::args().skip(1).collect();
     let args = Args::parse(&raw);
     if let Some(bar) = args.opts.get("bar").and_then(|b| b.parse::<f32>().ok()) {

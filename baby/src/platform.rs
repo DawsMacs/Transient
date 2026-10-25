@@ -7,6 +7,17 @@
 //! CPU time have the same Linux-only sources, `ledger::Rapl` and `compare::cpu_seconds`; they already return nothing when their
 //! files are missing, so they need no change.) Nothing here uses `unsafe` or a dependency.
 
+/// DragonFly BSD only: keep the system's thread library linked. On DragonFly a program that is not linked against it is handed thread-local key 0 by
+/// `pthread_key_create`, and Rust's standard library aborts at startup on 0 (rust-lang/rust#112180); with link-time optimization (`lto = true` in the
+/// release profile) the linker drops the library when nothing in the program uses it. Starting one thread, which needs `pthread_create`, is such a use. The
+/// test is `cfg!`, a constant, so the code is compiled everywhere and does nothing but on DragonFly; no answer depends on it. (The same program built with
+/// `lto = false` also runs there, which is how it was first fixed in CI.)
+pub fn keep_thread_library_linked() {
+    if cfg!(target_os = "dragonfly") {
+        let _ = std::thread::spawn(|| {}).join();
+    }
+}
+
 /// A directory for temporary files. `std::env::temp_dir()` panics on WASI ("not supported by WASI yet"), so `TMPDIR` is read first (on Unix the standard
 /// function does exactly that, so nothing changes there); a WASI run sets it, for example `wasmtime run --dir /tmp --env TMPDIR=/tmp`.
 pub fn temp_dir() -> std::path::PathBuf {
@@ -64,6 +75,13 @@ pub fn energy_unavailable(rapl_path: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn keeping_the_thread_library_linked_is_harmless_everywhere() {
+        // a no-op off DragonFly, one short thread on it: either way the program goes on and can call it again
+        keep_thread_library_linked();
+        keep_thread_library_linked();
+    }
 
     #[test]
     fn temporary_names_are_unique_and_need_no_process_id() {
