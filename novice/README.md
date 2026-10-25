@@ -2,7 +2,7 @@
 
 The main line of work in Matter, **rebuilt from scratch**. [`baby`](../baby/README.md) is frozen as the reference and the measuring stick; Novice shares no code with it. What carries over is the [entry exam](../baby/README.md) (a plain-file and line-protocol judge that any system, in any language, can take), the goldens-and-platform habits, and the rules below.
 
-> **Status (2026-10-25): started; rungs 0 to 2 done on the tidy adaptive exam.** It finds the kinds of question itself, explains most of them with programs priced in bits, builds later explanations from earlier ones, and states no wrong fact. See "Results so far" for the numbers and, just as important, for what they do not show. Joules are not measured yet (the energy counter was unreadable this session); work is reported as counted evaluations and wall time.
+> **Status (2026-10-25): started; rungs 0 to 2 done on the tidy adaptive exam.** It finds the kinds of question itself, explains most of them with programs priced in bits, builds later explanations from earlier ones, and states no wrong fact. See "Results so far" for the numbers and, just as important, for what they do not show. Joules are not measured yet (the energy counter was unreadable this session); work is reported as counted evaluations and wall time. The cost of learning was cut 25-fold after the first version (see "Cost").
 
 Labels used below: **Hypothesis** (believed, not shown), **Measured** (a number from a run), **Open** (not started).
 
@@ -57,49 +57,68 @@ Each rung has the test that would show it works, and a joule line to fill in.
 | 3 | rival explanations scored in bits | on the 14 streams of baby's wrong-teacher work: as few believed mistakes as baby's, with **no tuned count** | Open |
 | 4 | sources | with a second, right source added, repeats fall in kinds that have no law to check against | Open |
 | 5 | the language grows | a kind that needs an operation Novice does not start with, from worlds written apart from the learner, solved by a primitive it made | first step only: earlier kinds become words (see below); the test itself is open |
-| 6 | answers get cheaper | joules per answer on a fixed set of questions fall as it learns, wrong facts stay 0, and the break-even point (learning joules spent against answer joules saved) is reported | Open |
+| 6 | answers get cheaper | joules per answer on a fixed set of questions fall as it learns, wrong facts stay 0, and the break-even point (learning joules spent against answer joules saved) is reported | first step: learning cost 25-fold lower than the first learner, and composition 116 times cheaper than enumeration; no joules, no curve yet |
 
 Rungs 0 to 4 are the first milestone (the tidy exam, with a source tag). Rung 5 is the test of "genuine"; the worlds for it are written by a process that the learner's author does not read until the review, so the learner cannot be tuned to them. Rung 6 is the bet itself.
 
 ## Results so far (2026-10-25)
 
-Measured on the adaptive exam (`baby exam adapt-write DIR --seed S`: 45 kinds, 3,048 lessons, a stream of 787 questions with the truth told after each answer), the same files for both systems, one desktop core, no joules. "Right" = stated as a fact and right, plus right guesses; the judge's thirds are the first, middle and last third of the stream.
+Measured on the adaptive exam (`baby exam adapt-write DIR --seed S`: 45 kinds, 3,048 lessons, a stream of 787 questions with the truth told after each answer), the same files for both systems, one desktop core, no joules. "Facts right" and "wrong guesses" are shares of all 787 questions; the judge's thirds are the first, middle and last third of the stream.
 
 | seed | system | wrong facts | facts right | wrong guesses | refused | right, 1st third → last third | wall time |
 |---|---|---|---|---|---|---|---|
-| 1 | Novice | **0** | 67.7 % | 0.8 % | 11.2 % | 86.7 → 88.5 % | 5.3 s |
+| 1 | Novice | **0** | 67.7 % | 0.6 % | 11.2 % | 87.1 → 88.5 % | 0.33 s |
 | 1 | baby | 0 | 64.2 % | 1.5 % | 11.4 % | 85.2 → 87.8 % | 15.6 s |
-| 2 | Novice | **0** | 68.1 % | 0.8 % | 11.2 % | 85.9 → 91.2 % | 5.3 s |
+| 2 | Novice | **0** | 68.1 % | 0.8 % | 11.2 % | 85.9 → 91.2 % | 0.40 s |
 | 2 | baby | 0 | 64.8 % | 1.5 % | 11.2 % | 84.4 → 90.8 % | 17.5 s |
-| 3 | Novice | **0** | 68.6 % | 0.8 % | 11.2 % | 87.5 → 90.1 % | 5.3 s |
+| 3 | Novice | **0** | 68.6 % | 0.6 % | 11.2 % | 87.8 → 90.1 % | 0.40 s |
 | 3 | baby | 0 | 64.4 % | 1.5 % | 11.2 % | 86.7 → 89.7 % | 16.9 s |
 
-The kinds that change their rule outside what was taught (a sum that saturates at 30, one that wraps at 40) climb from 88.6 / 80.0 % right (seeds 2, 3) to 100 % in Novice, from 71.4 / 68.0 % to 96.4 / 97.4 % in baby. The 11.2 % refused are the same in both: the six kinds that have no rule it can say (a prime test, an exclusive-or, four arbitrary codes), which cannot be answered before they are told.
+The kinds that change their rule outside what was taught (a sum that saturates at 30, one that wraps at 40) climb from 84.0-90.6 % right in the first third to 100 % by the last in Novice (seeds 1 to 3), and from 68.0-78.1 % to 92.3-97.4 % in baby. The 11.2 % refused are the same in both: the six kinds that have no rule it can say (a prime test, an exclusive-or, four arbitrary codes), which cannot be answered before they are told.
 
-**What it found, with no labels and no menu of mechanisms** (seed 1): `x + y`, `x - y`, `x + 1`, `div(x, 2)`, `max(x, y) - min(x, y)`, `x * 3`, `div(x, 10) + mod(x, 10)`, `mod(x + y, 40)` (the 40 is the number a refuted `x + y` got wrong: it said 45 where the truth was 5), `min(x + y, 3 * 10)`, and, from words it had earned, `successor(sum_of_squares(x, y))`, `halve(sum_of_squares(x, y))` and `square(average(x, y))`. Five kinds became words that the language then used; the other 34 explained kinds did not.
+**What it found, with no labels and no menu of mechanisms** (seed 1): `x + y`, `x - y`, `x + 1`, `div(x, 2)`, `max(x, y) - min(x, y)`, `x * 3`, `div(x, 10) + mod(x, 10)`, `mod(x + y, 40)` (the 40 is the number a refuted `x + y` got wrong: it said 45 where the truth was 5), `min(x + y, 3 * 10)`, and, built on words it had earned, `sum_of_squares(x, y) + 1`, `div(sum_of_squares(x, y), 2)` and `average(x, y) * average(x, y)`. Two kinds became words (sum of squares, average); the other 37 explained kinds did not.
+
+### Cost
+
+Counted evaluations (one operation applied at one point), seed 1; the work is almost all in teaching, because a told answer that a believed program already gives costs a few dozen evaluations. Every row has 0 wrong facts except where noted.
+
+| version | evaluations | wall | what changed |
+|---|---|---|---|
+| first learner | 486 M | 5.3 s | every rival found by enumerating programs two nodes larger than the best |
+| rivals by editing the best program | 323 M | 4.4 s | **a wrong fact on seed 2** (below): reverted |
+| repair first, data-constants stage dropped | 120 M | 2.7 s | a refuted program is edited with the numbers its mistakes name before anything is searched; the widest stage changed no answer on three seeds, so it went |
+| the last level is checked, not built | 58 M | 1.3 s | rivals are enumerated again (completeness), but the largest level is only tested against the data, and nearly every candidate fails at its first or second point |
+| a kind as `h(word(x, y))` | **19 M** | **0.33 s** | if the answers are a function of a known word's output, only a one-variable program is searched |
+
+The last row is the one that matters for the bet below. Three stage-2 kinds are explained by composition (seeds 1 to 3: 352 K, 360 K and 356 K evaluations for the three together, about 117 K each). Enumerating with the same 29 words cost 13.6 M each: **about 116 times less for that step**, and about 20 times less for the whole kind (roughly 0.7 M against 14.2 M) once the failed plain pass that runs first is counted. This is the first evidence of the effect rung 6 is after (explaining a new kind gets cheaper when more kinds are known). It is one effect on one tidy exam, not yet a curve, and the cost of answering a question was never the expensive part.
 
 **Caveats, plainly.**
 - **The exam is tidy and was written by the same author as the learner.** The kinds are small arithmetic rules over the integers 0 to 15. The operations Novice starts with (`+ - * min max div mod`) are my choice and fit that domain; that the exam is passed says nothing about worlds the starting operations cannot express. Two of the six unexplainable kinds (a prime test and an exclusive-or) have a rule that the starting operations cannot say; rung 5 is where that is tested properly.
-- **Words are only a first step toward a language that grows.** Earlier explanations become words; no new primitive is ever made. The five words in the table are compositions of the starting operations.
-- **Comparison with baby is not a fair fight on cost.** baby was built to run the same exam with a menu of mechanisms and many thresholds; Novice's 5.3 s still hides about 480 million counted evaluations, almost all of it a search for rival explanations that is repeated for every kind. That is the largest thing to fix (rung 6), and nothing here is evidence yet that adapting makes anything cheaper.
-- **No joules.** The energy counter was unreadable this session. Wall time on one core is the only cost number, and it is not an energy number.
+- **Words are only a first step toward a language that grows.** Earlier explanations become words; no new primitive is ever made. The two words are compositions of the starting operations.
+- **No joules.** The energy counter was unreadable this session. Counted evaluations and wall time on one core are the only cost numbers, and neither is an energy number. Nothing here yet shows that adapting makes anything cheaper in joules; the composition result is about the cost of learning a kind, not of answering a question (which was never expensive).
 - **Only the adaptive exam, only a clean teacher.** The static exam (with its traps) and the wrong-teacher tier have not been run on Novice. A source that is consistently wrong would be believed today.
 - **Guesses are labeled but crudely calibrated.** Outside the region it has seen, the confidence it states is how often its guesses at that distance have been right so far, shared across all kinds.
+- **The failed searches are still most of what is left**: the six lookup kinds are searched, fail, and are searched again as they grow.
 
 ## What is hand-built (each to be removed by the rung named)
 
 | choice | where | removed by |
 |---|---|---|
 | the starting operations `+ - * min max div mod` | `program.rs` | rung 5 (a language that grows) |
-| the constants `0 1 2 3 10`, then the numbers in the data and the ones a refuted program got wrong | `learner.rs` | rung 5 |
+| the constants `0 1 2 3 10`, then the numbers a refuted program got wrong | `learner.rs` | rung 5 |
 | a fact needs all but 2^-10 of the belief; a table is kept unless a program is cheaper | `learner.rs` (`RISK_BITS`) | the error budget is a requirement, not a mechanism; kept |
-| search sizes (7 nodes, then 5 with data constants, 5 with words), rivals within 2 nodes, 200,000 expressions | `learner.rs` | rung 6 (search effort proportional to what it can win) |
+| rivals: every program within two nodes of the best, every program one edit away, every other word that explains the kind | `program.rs`, `learner.rs` | the cost rule "within `RISK_BITS` of the best" would replace the node count; rung 6 |
+| search sizes (7 nodes; 5 once words are on offer), 200,000 expressions | `learner.rs` | rung 6 (search effort proportional to what it can win) |
 | probe points around the region, to keep rivals apart | `learner.rs` | rung 6 |
 | a group is searched once it has four points; a table group is searched again when it has doubled | `learner.rs` | rung 6 |
 | guesses outside the region: confidence = the shared record of right guesses at that distance | `learner.rs` | rung 3 |
 | a kind is named by the word that makes the answer a function of the numbers and covers the most questions | `learner.rs` | breaks with noisy lessons; rung 3 |
+| a word is any explained kind with a body of at least three nodes whose behavior is new | `learner.rs` | rung 5 (a compression test instead) |
 
 ## Mistakes and dead ends (newest first)
+
+- **Rivals found only by editing the best program gave a wrong fact.** To save work I replaced the enumeration of larger programs by edits of the best one (wrap it in an operation, swap a constant). Cost fell from 486 M to 323 M evaluations and the exam was unchanged on seed 1, but on seed 2 the first stream question, a digit-sum kind, was answered `0` as a fact where the truth was `9`. The lessons skipped 7, 9 and 10, `x mod 9` fits every one of them, and it is about 7 bits cheaper to write than the real rule; the real rule is not one edit away from it. The enumeration had been keeping it as a rival with enough belief to stop the fact. The right completeness rule is a cost rule: any program within `RISK_BITS` of the best can keep a fact from being stated and must be considered; edits are an addition (they find ceilings and wrap-arounds that cost many bits more), not a substitute. Restored, made cheap another way (the last level is only checked), and pinned by a test built from that exact case.
+- **The widest search (every number in the data as a constant) was dead weight once contradictions are repaired by editing.** It cost 65 M evaluations, almost all failing on the lookup kinds, and removing it changed no answer on three seeds.
 
 - **Grouping by the rarest word was wrong.** My first version named a question's kind by its rarest word. It passed the exam, because the kind word appears three times per fact while "is" appears everywhere. A small test world broke it at once: there "is" was rarer than the kind word and one kind split into three groups. Replaced by the rule in the table above, which gives byte-identical exam results and passes the small world.
 - **It stated a negative result for a kind that never showed one** (`3 - 5` as `-1`, guessed at 99 %), and answered a question that contained a word it had never met. Both were caught by the tests I wrote for them before recording the results, and both now refuse.

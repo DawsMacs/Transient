@@ -325,6 +325,12 @@ pub fn search(task: &Task) -> Outcome {
                 break;
             }
         }
+        // The last level to be built only has to be checked against the data, and nearly every candidate fails at the first or second point: no
+        // need to evaluate it everywhere, store it or tell it apart from the others. That level is the largest, so this is most of the saving.
+        let last_level = match first_fit_size {
+            Some(f) => size >= f + task.rival_size,
+            None => size == task.max_size,
+        };
         for fun in &funs {
             let (arity, commutative) = match fun {
                 Fun::Prim(op) => (2, op.commutative()),
@@ -340,6 +346,53 @@ pub fn search(task: &Task) -> Outcome {
                 for (ia, &a) in la.iter().enumerate() {
                     for (ib, &b) in lb.iter().enumerate() {
                         if arity == 2 && commutative && left == right && ib < ia {
+                            continue;
+                        }
+                        let apply = |space: &Space, c: usize| {
+                            let x = i64::from(space.row(a)[c]);
+                            let y = if arity == 1 { 0 } else { i64::from(space.row(b)[c]) };
+                            match fun {
+                                Fun::Prim(op) => op.apply(x, y),
+                                Fun::Word(w) => {
+                                    let lib = &task.words[*w];
+                                    lib.body.eval(&[x, y][..lib.arity])
+                                }
+                            }
+                        };
+                        if last_level {
+                            let mut fits = true;
+                            for c in 0..n {
+                                effort.evaluations += 1;
+                                if apply(&space, c) != Some(i64::from(want[c])) {
+                                    fits = false;
+                                    break;
+                                }
+                            }
+                            if !fits {
+                                continue;
+                            }
+                            let mut probe_values = Vec::with_capacity(cols - n);
+                            for c in n..cols {
+                                effort.evaluations += 1;
+                                match apply(&space, c) {
+                                    Some(v) => probe_values.push(v),
+                                    None => {
+                                        fits = false;
+                                        break;
+                                    }
+                                }
+                            }
+                            if !fits {
+                                continue;
+                            }
+                            let sub = space.items[a as usize].cost + if arity == 1 { 0 } else { space.items[b as usize].cost };
+                            let (ea, eb) = (space.expr(a, task.words), space.expr(b, task.words));
+                            let expr = match fun {
+                                Fun::Prim(op) => Expr::Bin(*op, Box::new(ea), Box::new(eb)),
+                                Fun::Word(w) => Expr::Call(task.words[*w].clone(), if arity == 1 { vec![ea] } else { vec![ea, eb] }),
+                            };
+                            found.push(Found { expr, cost: node + sub, probe_values });
+                            first_fit_size.get_or_insert(size);
                             continue;
                         }
                         effort.evaluations += cols as u64;
@@ -394,6 +447,120 @@ pub fn search(task: &Task) -> Outcome {
         }
     }
     Outcome { found: kept, exhausted, effort }
+}
+
+/// Programs one edit away from `best` that fit the data as well: a leaf or an operation changed, a constant swapped, or any part wrapped in an
+/// operation with a constant (the way a ceiling or a wrap-around hides behind a rule). A rival differs from the best only where the data does
+/// not say, which is exactly where doubt belongs, and finding them costs a few thousand evaluations instead of enumerating every larger program.
+/// Each rival keeps the belief its cost allows.
+pub fn rivals(best: &Expr, task: &Task) -> (Vec<Found>, Effort) {
+    let n = task.inputs.len();
+    let mut effort = Effort::default();
+    // Constants for wrapping: the task's own, then the numbers just above and well above the largest value the best program takes on the data.
+    let top = task.inputs.iter().filter_map(|p| best.eval(p)).max().unwrap_or(0).max(1);
+    let mut wrap: Vec<i64> = task.consts.to_vec();
+    for d in [0, 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64] {
+        wrap.push(top + d);
+    }
+    wrap.push(top * 2);
+    wrap.push(top * 3);
+    wrap.retain(|c| (0..LIMIT).contains(c));
+    wrap.sort_unstable();
+    wrap.dedup();
+    let cost_best = cost_of(best, task.arity, task.words.len());
+    let mut kept: Vec<Found> = Vec::new();
+    for cand in variants(best, task, &wrap) {
+        // Cheapest test first: the data points, stopping at the first one it gets wrong.
+        let mut fits = true;
+        for (p, &t) in task.inputs.iter().zip(task.target).take(n) {
+            effort.evaluations += cand.size() as u64;
+            if cand.eval(p) != Some(t) {
+                fits = false;
+                break;
+            }
+        }
+        if !fits {
+            continue;
+        }
+        let cost = cost_of(&cand, task.arity, task.words.len());
+        if cost > cost_best + 32 * bits::BIT {
+            continue;
+        }
+        let mut probe_values = Vec::with_capacity(task.probes.len());
+        let mut defined = true;
+        for p in task.probes {
+            effort.evaluations += cand.size() as u64;
+            match cand.eval(p) {
+                Some(v) => probe_values.push(v),
+                None => {
+                    defined = false;
+                    break;
+                }
+            }
+        }
+        if defined {
+            kept.push(Found { expr: cand, cost, probe_values });
+        }
+    }
+    (kept, effort)
+}
+
+/// Every expression that differs from `e` by one edit.
+fn variants(e: &Expr, task: &Task, wrap: &[i64]) -> Vec<Expr> {
+    let mut out: Vec<Expr> = Vec::new();
+    for op in OPS {
+        for &c in wrap {
+            out.push(Expr::Bin(op, Box::new(e.clone()), Box::new(Expr::Const(c))));
+            if !op.commutative() {
+                out.push(Expr::Bin(op, Box::new(Expr::Const(c)), Box::new(e.clone())));
+            }
+        }
+    }
+    match e {
+        Expr::Var(v) => {
+            out.extend((0..task.arity).filter(|u| u != v).map(Expr::Var));
+            out.extend(task.consts.iter().map(|&c| Expr::Const(c)));
+        }
+        Expr::Const(k) => {
+            out.extend(task.consts.iter().filter(|&c| c != k).map(|&c| Expr::Const(c)));
+            out.extend((0..task.arity).map(Expr::Var));
+        }
+        Expr::Bin(op, a, b) => {
+            out.extend(OPS.iter().filter(|o| *o != op).map(|&o| Expr::Bin(o, a.clone(), b.clone())));
+            out.extend(variants(a, task, wrap).into_iter().map(|va| Expr::Bin(*op, Box::new(va), b.clone())));
+            out.extend(variants(b, task, wrap).into_iter().map(|vb| Expr::Bin(*op, a.clone(), Box::new(vb))));
+        }
+        Expr::Call(lib, xs) => {
+            for i in 0..xs.len() {
+                for vx in variants(&xs[i], task, wrap) {
+                    let mut args = xs.clone();
+                    args[i] = vx;
+                    out.push(Expr::Call(lib.clone(), args));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The search for the best program, then the programs one edit away from it.
+pub fn search_with_rivals(task: &Task) -> Outcome {
+    let mut out = search(task);
+    if let Some(best) = out.found.first().map(|f| f.expr.clone()) {
+        let (more, effort) = rivals(&best, task);
+        out.effort.evaluations += effort.evaluations;
+        out.found.extend(more);
+        out.found.sort_by(|x, y| x.cost.cmp(&y.cost).then_with(|| x.expr.size().cmp(&y.expr.size())).then_with(|| x.expr.to_string().cmp(&y.expr.to_string())));
+        let mut kept: Vec<Found> = Vec::new();
+        for f in std::mem::take(&mut out.found) {
+            if !kept.iter().any(|k| k.probe_values == f.probe_values) {
+                kept.push(f);
+            }
+        }
+        kept.truncate(64);
+        out.found = kept;
+    }
+    out
 }
 
 /// What the believable programs say at one point: the most believed answer, how much of the belief it carries, and the total belief (both in

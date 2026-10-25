@@ -50,6 +50,9 @@ struct Group {
     searched_at: usize,
     /// How many words were on offer the last time the group was searched with words.
     words_tried: usize,
+    /// Counted evaluations spent on this kind until it was first explained, and its place in the order the kinds were explained.
+    spent: u64,
+    explained_at: Option<usize>,
     /// Whether any answer it has been given was negative. A negative result for a kind that never showed one is not stated.
     negative: bool,
 }
@@ -68,6 +71,9 @@ pub struct Stats {
     pub exhausted: u64,
     pub narrowed: u64,
     pub words_earned: u64,
+    /// Evaluations spent by compositions that found an explanation, and how many found one.
+    pub composed_evaluations: u64,
+    pub composed: u64,
 }
 
 pub struct Novice {
@@ -80,12 +86,13 @@ pub struct Novice {
     record: [(u32, u32); 8],
     /// Words that earned their place.
     words: Vec<Rc<Lib>>,
+    explained: usize,
     pub stats: Stats,
 }
 
 impl Default for Novice {
     fn default() -> Self {
-        Novice { lessons: Vec::new(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), stats: Stats::default() }
+        Novice { lessons: Vec::new(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, stats: Stats::default() }
     }
 }
 
@@ -134,6 +141,16 @@ fn grid(arity: usize) -> Vec<Vec<i64>> {
     }
 }
 
+/// `h` with its one variable replaced by `with`.
+fn substitute(h: &Expr, with: &Expr) -> Expr {
+    match h {
+        Expr::Var(_) => with.clone(),
+        Expr::Const(c) => Expr::Const(*c),
+        Expr::Bin(op, a, b) => Expr::Bin(*op, Box::new(substitute(a, with)), Box::new(substitute(b, with))),
+        Expr::Call(lib, xs) => Expr::Call(lib.clone(), xs.iter().map(|x| substitute(x, with)).collect()),
+    }
+}
+
 fn mentions(e: &Expr, word: &str) -> bool {
     match e {
         Expr::Call(lib, xs) => lib.name == word || xs.iter().any(|x| mentions(x, word)),
@@ -155,6 +172,18 @@ impl Novice {
     fn add_point(&mut self, g: usize, nums: &[i64], answer: &str) {
         self.groups[g].negative |= answer.starts_with('-');
         *self.groups[g].points.entry(nums.to_vec()).or_default().entry(answer.to_string()).or_insert(0) += 1;
+    }
+
+    /// Run `work` for group `g`, charging the evaluations it spends to the group and noting when the group first has an explanation.
+    fn charge<R>(&mut self, g: usize, work: impl FnOnce(&mut Self) -> R) -> R {
+        let before = self.stats.evaluations;
+        let result = work(self);
+        self.groups[g].spent += self.stats.evaluations - before;
+        if self.groups[g].fit.is_some() && self.groups[g].explained_at.is_none() {
+            self.explained += 1;
+            self.groups[g].explained_at = Some(self.explained);
+        }
+        result
     }
 
     fn inputs_and_targets(&self, g: usize) -> Option<(Vec<Vec<i64>>, Vec<i64>)> {
@@ -183,7 +212,7 @@ impl Novice {
         }
         let table: Cost = target.iter().map(|&a| bits::uint(a.unsigned_abs())).sum();
         let probe = probes(&lo, &hi);
-        let out = program::search(&Task { inputs: &inputs, target: &target, probes: &probe, arity, consts, words, max_size, rival_size: 2, max_items: MAX_ITEMS });
+        let out = program::search_with_rivals(&Task { inputs: &inputs, target: &target, probes: &probe, arity, consts, words, max_size, rival_size: 2, max_items: MAX_ITEMS });
         if std::env::var_os("NOVICE_TRACE").is_some() {
             let shown = out.found.first().map(|f| f.expr.to_string()).unwrap_or_else(|| "nothing".into());
             eprintln!("search {:<14} {label:<9} points {:>3} consts {:>2} words {:>2} size {max_size} -> {:>11} evaluations, {shown}", self.groups[g].key, inputs.len(), consts.len(), words.len(), out.effort.evaluations);
@@ -198,25 +227,32 @@ impl Novice {
         false
     }
 
-    /// Look for a program that explains the group's points. `refuted` are programs the latest told answer contradicted: the numbers they got
-    /// wrong are offered to the search as constants.
+    /// Look for a program that explains the group's points. `refuted` are programs the latest told answer contradicted. The cheapest guess is that
+    /// the rule changed in one place, so first try editing them, with the numbers they got wrong offered as constants; then search.
     fn refit(&mut self, g: usize, refuted: &[Expr]) {
         self.groups[g].searched_at = self.groups[g].points.len();
         self.groups[g].fit = None;
         let Some((inputs, target)) = self.inputs_and_targets(g) else { return };
-        // First the plain constants, deeper; then, only if that fails, the numbers that occur in the data and the ones the refuted programs got wrong.
-        let mut consts: Vec<i64> = BASE_CONSTS.to_vec();
-        if self.search_group(g, &consts, &self.words.clone(), 7, "plain") {
+        let words = self.words.clone();
+        if !refuted.is_empty() && self.repair(g, refuted, &inputs, &target, &words) {
             return;
         }
-        for v in target.iter().chain(inputs.iter().flatten()) {
-            consts.push(*v);
+        let size = if words.is_empty() { 7 } else { 5 };
+        if self.search_group(g, &BASE_CONSTS, &words, size, "plain") {
+            return;
         }
+    }
+
+    /// Edit the refuted programs: change a leaf or an operation, swap a constant, or wrap any part in an operation with a constant. The constants
+    /// offered are the plain ones, the told answers, and what each refuted program got wrong (what it said, and what it said minus the truth).
+    fn repair(&mut self, g: usize, refuted: &[Expr], inputs: &[Vec<i64>], target: &[i64], words: &[Rc<Lib>]) -> bool {
+        let arity = self.groups[g].arity;
+        let mut consts: Vec<i64> = BASE_CONSTS.to_vec();
         for e in refuted {
-            for (x, &t) in inputs.iter().zip(&target) {
+            for (x, &t) in inputs.iter().zip(target) {
                 if let Some(v) = e.eval(x) {
                     if v != t {
-                        consts.extend([(v - t).abs(), v]);
+                        consts.extend([(v - t).abs(), v, t]);
                     }
                 }
             }
@@ -224,7 +260,133 @@ impl Novice {
         consts.retain(|c| (0..=200).contains(c));
         consts.sort_unstable();
         consts.dedup();
-        self.search_group(g, &consts, &self.words.clone(), 5, "data");
+        let (mut lo, mut hi) = (inputs[0].clone(), inputs[0].clone());
+        for p in inputs {
+            for i in 0..arity {
+                lo[i] = lo[i].min(p[i]);
+                hi[i] = hi[i].max(p[i]);
+            }
+        }
+        let probe = probes(&lo, &hi);
+        let task = Task { inputs, target, probes: &probe, arity, consts: &consts, words, max_size: 0, rival_size: 0, max_items: MAX_ITEMS };
+        let mut found: Vec<Found> = Vec::new();
+        for e in refuted.iter().take(4) {
+            let (mut more, effort) = program::rivals(e, &task);
+            self.stats.evaluations += effort.evaluations;
+            found.append(&mut more);
+        }
+        self.stats.searches += 1;
+        found.sort_by(|x, y| x.cost.cmp(&y.cost).then_with(|| x.expr.size().cmp(&y.expr.size())).then_with(|| x.expr.to_string().cmp(&y.expr.to_string())));
+        let mut kept: Vec<Found> = Vec::new();
+        for f in found {
+            if !kept.iter().any(|k| k.probe_values == f.probe_values) {
+                kept.push(f);
+            }
+        }
+        kept.truncate(64);
+        let table: Cost = target.iter().map(|&a| bits::uint(a.unsigned_abs())).sum();
+        if std::env::var_os("NOVICE_TRACE").is_some() {
+            eprintln!("repair {:<14} points {:>3} consts {:>2} -> {}", self.groups[g].key, inputs.len(), consts.len(), kept.first().map(|f| f.expr.to_string()).unwrap_or_else(|| "nothing".into()));
+        }
+        if kept.first().is_some_and(|f| f.cost < table) {
+            self.groups[g].fit = Some(Fit { found: kept, lo, hi });
+            return true;
+        }
+        false
+    }
+
+    /// Explain a kind as a small program of one variable applied to what a known word says: `h(word(x, y))`. If the answers are a function of the
+    /// word's output (no two points with the same output disagree), `h` is found by a search over one variable, which is a few thousand evaluations;
+    /// the word does the hard part. Returns the cheapest explanation over all the words on offer.
+    fn compose(&mut self, g: usize, offer: &[Rc<Lib>]) -> bool {
+        let Some((inputs, target)) = self.inputs_and_targets(g) else { return false };
+        let arity = self.groups[g].arity;
+        let mut composites: Vec<(Cost, Expr)> = Vec::new();
+        let table: Cost = target.iter().map(|&a| bits::uint(a.unsigned_abs())).sum();
+        for word in offer {
+            // The ways to feed the word from the question's own numbers.
+            let mut feeds: Vec<Vec<Expr>> = Vec::new();
+            if word.arity == 1 {
+                feeds.extend((0..arity).map(|i| vec![Expr::Var(i)]));
+            } else {
+                for i in 0..arity {
+                    for j in 0..arity {
+                        feeds.push(vec![Expr::Var(i), Expr::Var(j)]);
+                    }
+                }
+            }
+            for feed in feeds {
+                let call = Expr::Call(word.clone(), feed);
+                // The word's output at every point, and what the answer was there.
+                let mut seen: BTreeMap<i64, i64> = BTreeMap::new();
+                let consistent = inputs.iter().zip(&target).all(|(x, &t)| call.eval(x).is_some_and(|z| *seen.entry(z).or_insert(t) == t));
+                self.stats.evaluations += inputs.len() as u64 * call.size() as u64;
+                if !consistent || seen.len() < 2 {
+                    continue;
+                }
+                let zs: Vec<Vec<i64>> = seen.keys().map(|&z| vec![z]).collect();
+                let ts: Vec<i64> = seen.values().copied().collect();
+                let out = program::search(&Task { inputs: &zs, target: &ts, probes: &[], arity: 1, consts: &BASE_CONSTS, words: &[], max_size: 5, rival_size: 0, max_items: MAX_ITEMS });
+                self.stats.evaluations += out.effort.evaluations;
+                let Some(h) = out.found.first() else { continue };
+                let whole = substitute(&h.expr, &call);
+                let cost = program::cost_of(&whole, arity, offer.len());
+                if cost < table {
+                    composites.push((cost, whole));
+                }
+            }
+        }
+        self.stats.searches += 1;
+        composites.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.to_string().cmp(&b.1.to_string())));
+        let Some((best_cost, best)) = composites.first().cloned() else { return false };
+        if std::env::var_os("NOVICE_TRACE").is_some() {
+            eprintln!("compose {:<14} points {:>3} words {:>2} -> {best} (+{} others)", self.groups[g].key, inputs.len(), offer.len(), composites.len() - 1);
+        }
+        // The other words that explain it as well are rivals, as long as their belief is not negligible.
+        let others: Vec<Expr> = composites.into_iter().skip(1).filter(|c| c.0 <= best_cost + 32 * bits::BIT).map(|c| c.1).collect();
+        self.finish_fit(g, best, others, &inputs, &target, offer)
+    }
+
+    /// Keep `best` as the explanation of the group, with the programs one edit away that fit as its rivals.
+    fn finish_fit(&mut self, g: usize, best: Expr, others: Vec<Expr>, inputs: &[Vec<i64>], target: &[i64], words: &[Rc<Lib>]) -> bool {
+        let arity = self.groups[g].arity;
+        let (mut lo, mut hi) = (inputs[0].clone(), inputs[0].clone());
+        for p in inputs {
+            for i in 0..arity {
+                lo[i] = lo[i].min(p[i]);
+                hi[i] = hi[i].max(p[i]);
+            }
+        }
+        let probe = probes(&lo, &hi);
+        let task = Task { inputs, target, probes: &probe, arity, consts: &BASE_CONSTS, words, max_size: 0, rival_size: 0, max_items: MAX_ITEMS };
+        let mut found: Vec<Found> = Vec::new();
+        let mut probe_values = Vec::new();
+        for p in &probe {
+            match best.eval(p) {
+                Some(v) => probe_values.push(v),
+                None => return false,
+            }
+        }
+        found.push(Found { cost: program::cost_of(&best, arity, words.len()), expr: best.clone(), probe_values });
+        for e in others {
+            let values: Option<Vec<i64>> = probe.iter().map(|p| e.eval(p)).collect();
+            if let Some(probe_values) = values {
+                found.push(Found { cost: program::cost_of(&e, arity, words.len()), expr: e, probe_values });
+            }
+        }
+        let (more, effort) = program::rivals(&best, &task);
+        self.stats.evaluations += effort.evaluations;
+        found.extend(more);
+        found.sort_by(|x, y| x.cost.cmp(&y.cost).then_with(|| x.expr.size().cmp(&y.expr.size())).then_with(|| x.expr.to_string().cmp(&y.expr.to_string())));
+        let mut kept: Vec<Found> = Vec::new();
+        for f in found {
+            if !kept.iter().any(|k| k.probe_values == f.probe_values) {
+                kept.push(f);
+            }
+        }
+        kept.truncate(64);
+        self.groups[g].fit = Some(Fit { found: kept, lo, hi });
+        true
     }
 
     /// Offer every explained kind, as a word, to the kinds that still have none; keep the words that turn up in a new explanation.
@@ -252,7 +414,16 @@ impl Novice {
                 let mut consts: Vec<i64> = BASE_CONSTS.to_vec();
                 let (inputs, target) = self.inputs_and_targets(g).unwrap();
                 consts.extend(target.iter().chain(inputs.iter().flatten()).copied().filter(|c| (0..=3).contains(c)));
-                if self.search_group(g, &consts, &offer, 5, "words") {
+                let composed = {
+                    let before = self.stats.evaluations;
+                    let ok = self.charge(g, |s| s.compose(g, &offer));
+                    if ok {
+                        self.stats.composed += 1;
+                        self.stats.composed_evaluations += self.stats.evaluations - before;
+                    }
+                    ok
+                };
+                if composed || self.charge(g, |s| s.search_group(g, &consts, &offer, 5, "words")) {
                     let used = self.groups[g].fit.as_ref().map(|f| f.found[0].expr.clone());
                     for w in &offer {
                         if used.as_ref().is_some_and(|e| mentions(e, &w.name)) && !self.words.iter().any(|x| x.name == w.name) {
@@ -304,7 +475,7 @@ impl Novice {
             let g = match self.by_key.get(&key) {
                 Some(&g) => g,
                 None => {
-                    self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, negative: false });
+                    self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, spent: 0, explained_at: None, negative: false });
                     self.by_key.insert(key, self.groups.len() - 1);
                     self.groups.len() - 1
                 }
@@ -314,7 +485,7 @@ impl Novice {
             }
         }
         for g in 0..self.groups.len() {
-            self.refit(g, &[]);
+            self.charge(g, |s| s.refit(g, &[]));
         }
         self.sleep();
     }
@@ -390,7 +561,7 @@ impl System for Novice {
             None => {
                 // A kind word it has never met names a new group.
                 let Some(key) = p.words.iter().filter(|w| !self.df.contains_key(*w)).min().cloned() else { return };
-                self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, negative: false });
+                self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, spent: 0, explained_at: None, negative: false });
                 self.by_key.insert(key, self.groups.len() - 1);
                 self.groups.len() - 1
             }
@@ -430,7 +601,7 @@ impl System for Novice {
             }
         }
         if let Some(old) = refuted {
-            self.refit(g, &old);
+            self.charge(g, |s| s.refit(g, &old));
             if self.groups[g].fit.is_some() {
                 self.sleep();
             }
@@ -441,7 +612,7 @@ impl System for Novice {
         let s = self.stats;
         let fits = self.groups.iter().filter(|g| g.fit.is_some()).count();
         eprintln!(
-            "novice: {} groups, {} explained by a program; {} searches, {} evaluations, {} hit the size limit; {} told answers narrowed the doubt; {} words earned: {}",
+            "novice: {} groups, {} explained by a program; {} searches, {} evaluations, {} hit the size limit; {} told answers narrowed the doubt; {} words earned: {}; {} kinds explained by composition for {} evaluations in all",
             self.groups.len(),
             fits,
             s.searches,
@@ -449,11 +620,17 @@ impl System for Novice {
             s.exhausted,
             s.narrowed,
             s.words_earned,
-            self.words.iter().map(|w| w.name.as_str()).collect::<Vec<_>>().join(" ")
+            self.words.iter().map(|w| w.name.as_str()).collect::<Vec<_>>().join(" "),
+            s.composed,
+            s.composed_evaluations
         );
+        let mut order: Vec<&Group> = self.groups.iter().filter(|g| g.explained_at.is_some()).collect();
+        order.sort_by_key(|g| g.explained_at);
+        eprintln!("evaluations spent before each kind was first explained, in the order they were explained:");
+        eprintln!("  {}", order.iter().map(|g| g.spent.to_string()).collect::<Vec<_>>().join(" "));
         for g in &self.groups {
             if let Some(f) = &g.fit {
-                eprintln!("  {:<14} {} ({} rival behaviors)", g.key, f.found[0].expr, f.found.len() - 1);
+                eprintln!("  {:<14} {} ({} rival behaviors; {} evaluations to explain)", g.key, f.found[0].expr, f.found.len() - 1, g.spent);
             } else {
                 eprintln!("  {:<14} table of {}", g.key, g.points.len());
             }
@@ -546,5 +723,22 @@ mod tests {
         // ceiling. Inside the region it has now seen, the ceiling is a fact.
         assert_eq!(fact(&n.ask("what is 23 nakisido 20")), Some("30"));
         assert_eq!(fact(&n.ask("what is 3 nakisido 4")), Some("7"));
+    }
+
+    #[test]
+    fn a_cheaper_rule_that_fits_every_lesson_does_not_make_a_fact_where_a_rival_disagrees() {
+        // Found by the exam (seed 2): the lessons for a digit-sum kind skip 7, 9 and 10, and "x mod 9" fits all of them and is a little cheaper to
+        // write than the digit sum. At 9 the two disagree (0 against 9). The rival has to keep enough belief that 9 is not stated as a fact.
+        let mut n = Novice::default();
+        for x in [0, 1, 2, 3, 4, 5, 6, 8, 11, 12, 13, 14, 15] {
+            let digit_sum = x / 10 + x % 10;
+            for template in ["what is lokesido {x}", "lokesido {x}", "lokesido {x} equals"] {
+                n.teach(&template.replace("{x}", &x.to_string()), &digit_sum.to_string());
+            }
+        }
+        n.ready();
+        assert!(!matches!(n.ask("what is lokesido 9"), Answer::Fact(_)), "{:?}", n.ask("what is lokesido 9"));
+        // Where the rivals agree it is still a fact.
+        assert_eq!(fact(&n.ask("what is lokesido 4")), Some("4"));
     }
 }
