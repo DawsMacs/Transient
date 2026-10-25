@@ -283,6 +283,14 @@ Long-term direction for the assistant to weigh. Tell Daws when it is time to ren
 - *What "frozen" means for baby (proposed, Daws to confirm).* Bug fixes, platform upkeep, the exam and the goldens stay maintained. No new capability in baby, except an experiment whose only job is to de-risk Novice (for example a quick second-source prototype), labeled as such. The entry exam stays independent of both systems.
 - *Defaults the assistant will use for the open questions of Entry 12 unless Daws says otherwise:* (a) the source tag in the exam protocol is an optional extra column, so no foreign system breaks; (b) milestone one runs on the tidy exam, not real text; (c) changing its own language at run time is milestone two, but milestone one is designed so that it is not ruled out; (d) no GPU.
 
+**Amendment (Daws, same day, after the assistant's honest assessment of Adaptive Learning so far).**
+- *Genuine Adaptive Learning is the thing to work on.* That it is not yet genuine (the adapting is inside a design the assistant made; Entry 10's test is unmet) is "a setback we need to work on", not a reason to doubt the direction.
+- *Efficiency is taken seriously for Novice from the start*, as a requirement of every milestone (a joule budget and a measurement), while **Adaptive Learning is the future being pushed**. This replaces the assistant's reading above that efficiency simply yields: both are designed in from the first line; only when they truly conflict does Adaptive Learning win, and the cost is then written down.
+- *Why he thinks it is worth it (Hypothesis, his).* A frozen model can be dense and static; a system that is not frozen can do something different. Whether it also becomes more efficient "we might never know", but it is worth finding out.
+- *Intelligence.* He does not mean it out of thin air; he means it close to the assistant's reading (capability that comes from what the system learns and checks, measured). Honesty and safety are part of it.
+- *baby is used to learn.* Experiments in baby whose only job is to teach Novice something are welcome (confirms the "frozen except de-risking experiments" reading above).
+- *Terminology.* Matter and Novice are called **systems** (his own phrase is "a system of intelligence"); "model" is kept for something with trained parameters (the transformers in the comparisons); "pretrained transformer" names only those comparison systems. See the handover.
+
 **Open.** Daws has not answered the four questions of Entry 12; the defaults above stand in until he does. Where Novice lives in the repository (a new directory beside `baby/`) and its first design note come next.
 
 ---
