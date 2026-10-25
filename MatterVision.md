@@ -272,6 +272,21 @@ Long-term direction for the assistant to weigh. Tell Daws when it is time to ren
 
 ---
 
+## Entry 13 (2026-10-25): Novice starts; baby is frozen as the reference
+
+**Decision (Daws).** After the assistant laid out the case (Entry 12 and the same day's discussion), Daws agreed to start **Novice**. **baby is frozen, not retired**: it stays available as the reference and the measuring stick, and **Novice gets the spotlight**. (He used "retire" first and corrected it to "freeze" himself.)
+
+**Why, in his words, paraphrased (Daws).** Adaptive Learning is a core future he is pushing for. It is a gamble he is making **even if it compromises his core goal of efficiency**. His own hunch (Hypothesis, his, untested) is that Adaptive Learning could make the system *more* efficient, the way a human brain arranges information flexibly and learns, and more intelligent at that scale.
+
+**Reading (assistant, labeled).**
+- *Priority.* Where Adaptive Learning and efficiency pull apart in a design choice, Adaptive Learning wins. Efficiency is not dropped or hidden: capability per joule is still measured and reported on every milestone, because his hunch is testable only if it is. A joule figure that gets worse is information about the gamble, not a reason to stop.
+- *What "frozen" means for baby (proposed, Daws to confirm).* Bug fixes, platform upkeep, the exam and the goldens stay maintained. No new capability in baby, except an experiment whose only job is to de-risk Novice (for example a quick second-source prototype), labeled as such. The entry exam stays independent of both systems.
+- *Defaults the assistant will use for the open questions of Entry 12 unless Daws says otherwise:* (a) the source tag in the exam protocol is an optional extra column, so no foreign system breaks; (b) milestone one runs on the tidy exam, not real text; (c) changing its own language at run time is milestone two, but milestone one is designed so that it is not ruled out; (d) no GPU.
+
+**Open.** Daws has not answered the four questions of Entry 12; the defaults above stand in until he does. Where Novice lives in the repository (a new directory beside `baby/`) and its first design note come next.
+
+---
+
 ## Progress log (assistant-maintained; details live in `baby/README.md`)
 
 - **2026-10-15** The baby: a 16k-parameter, from-scratch, zero-dependency Rust net that answers a query with one word. Joule ledger.
@@ -400,3 +415,6 @@ Long-term direction for the assistant to weigh. Tell Daws when it is time to ren
 - **2026-10-25** Believed mistakes under a wrong teacher cut by half or more, and the reason was partly my own harness. The baby has been skeptical of its teacher since 2026-10-22 (an answer that contradicts a settled rule is held until repeated), but the adaptive exam's driver used a call that repeats every held answer on the baby's behalf, so every wrongly told fact was believed at once. Using the hold plainly cut the repeats (41 -> 10 at 20 % wrong) but also stopped the baby learning a rule that really changes (the rule-changing kinds fell from 90.6 -> 93.8 -> 100 % to 71.9 -> 68.8 -> 50.0 % right): I almost made that the default and reverted when I read the per-kind table. The fix that kept both: three or more different held answers that one exact program explains together with all the lessons are believed together (isolated slips do not cohere; a real change does). Result on 14 streams (clean, 5-40 % wrong): clean facts right unchanged within 0.4 points, rule-changing kinds climb again (a little slower), repeats 20/14/10 -> 5/7/6 (10 %), 41/25/28 -> 10/10/18 (20 %), 105/92 -> 20/38 (40 %). What is left is almost all in kinds with no law to check an answer against (17 of 18 on one stream): that needs a second independent source and a source tag in the exam protocol. This is the baby's own policy (Hypothesis -> Measured on these streams; not Daws's decision), changes the adaptive exam's bar for the baby, and regenerated the goldens. Open: one wrong fact elsewhere at 40 % (also in the old default), and an unexplained drift of the old default on seed 1 (20 and 41 repeats where the notes said 14 and 39).
 
 - **2026-10-25** Entry 12 written: a proposal (not a decision) for what Novice could be rebuilt around: sources as first-class (a source tag in the exam protocol), held answers as competing explanations (one mechanism instead of hold, veto, repair and coherence check), and update cost proportional to the change; with a first milestone and four questions for Daws.
+
+
+- **2026-10-25** Entry 13: Daws decided to start Novice and to freeze baby as the reference (Novice gets the spotlight). Adaptive Learning is the gamble he is making even at the cost of efficiency; his hunch is that it could make the system more efficient too. Efficiency stays measured in joules at every milestone.
