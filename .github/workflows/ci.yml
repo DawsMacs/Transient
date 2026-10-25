@@ -152,7 +152,9 @@ jobs:
           - name: netbsd-x86_64
             os: netbsd
             version: '10.1'
-            install: sudo pkgin -y install rust
+            # (the package download is the only step that has hung: twice in ten runs on 2026-10-25 it stalled until the 60-minute limit, with no output; a
+            # stalled attempt is now killed after 10 minutes and tried again, up to three times; `timeout` is used only if the system has it)
+            install: t=""; command -v timeout >/dev/null && t="timeout 600"; for i in 1 2 3; do sudo $t pkgin -y install rust && break; echo "attempt $i failed"; done
           - name: openbsd-x86_64
             os: openbsd
             version: '7.9'
