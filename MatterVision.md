@@ -416,5 +416,4 @@ Long-term direction for the assistant to weigh. Tell Daws when it is time to ren
 
 - **2026-10-25** Entry 12 written: a proposal (not a decision) for what Novice could be rebuilt around: sources as first-class (a source tag in the exam protocol), held answers as competing explanations (one mechanism instead of hold, veto, repair and coherence check), and update cost proportional to the change; with a first milestone and four questions for Daws.
 
-
 - **2026-10-25** Entry 13: Daws decided to start Novice and to freeze baby as the reference (Novice gets the spotlight). Adaptive Learning is the gamble he is making even at the cost of efficiency; his hunch is that it could make the system more efficient too. Efficiency stays measured in joules at every milestone.
