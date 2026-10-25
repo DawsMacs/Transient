@@ -89,6 +89,7 @@ Requires a stable Rust toolchain (edition 2021). No other dependencies, no netwo
 | [Windows](docs/Running.md#windows) | [WebAssembly (WASI)](docs/Running.md#webassembly-wasi) |
 | [FreeBSD](docs/Running.md#freebsd) | [NetBSD](docs/Running.md#netbsd) |
 | [OpenBSD](docs/Running.md#openbsd) | [32-bit x86, s390x, riscv64](docs/Running.md#other-processors) |
+| [DragonFly BSD](docs/Running.md#dragonfly-bsd) | |
 
 Download options, checking your build, updating, troubleshooting and what is tested where are in [`docs/Running.md`](docs/Running.md). With Rust and git already installed, on Linux, macOS or a BSD:
 
@@ -116,7 +117,7 @@ regression: honesty is the property this project protects first.
 
 ## Platforms
 
-Written in portable Rust with no dependencies and no `unsafe`. **CI-tested on GitHub's runners** (virtual machines running the real operating systems): Linux x86_64 (glibc and musl), Linux aarch64, macOS arm64 and x86_64, Windows x86_64, FreeBSD, NetBSD and OpenBSD (in virtual machines), WebAssembly (WASI) under Wasmtime, and 32-bit x86, s390x (big-endian) and riscv64 Linux (the last two under QEMU emulation). On all of them the tests pass, the scorecard reads 0.0 % wrong, and the exam and adaptive-stream answers (`golden/`) are byte-identical to the Linux x86_64 reference, although the platforms' math libraries differ in the last bit (`cargo run --release --offline --example mathprint`). That is a result of testing, not a promise of support: other operating systems, versions and hardware are untested (DragonFly BSD is planned for later; see [`docs/Running.md`](docs/Running.md)). **Measured joules need Linux on hardware with a readable RAPL counter** (not a VM or container); elsewhere the energy report says it is unavailable. Details and the open questions: [`baby/README.md`](baby/README.md), "Running on other platforms".
+Written in portable Rust with no dependencies and no `unsafe`. **CI-tested on GitHub's runners** (virtual machines running the real operating systems): Linux x86_64 (glibc and musl), Linux aarch64, macOS arm64 and x86_64, Windows x86_64, FreeBSD, NetBSD, OpenBSD and DragonFly BSD (in virtual machines; DragonFly needs link-time optimization switched off, see its section), WebAssembly (WASI) under Wasmtime, and 32-bit x86, s390x (big-endian) and riscv64 Linux (the last two under QEMU emulation). On all of them the tests pass, the scorecard reads 0.0 % wrong, and the exam and adaptive-stream answers (`golden/`) are byte-identical to the Linux x86_64 reference, although the platforms' math libraries differ in the last bit (`cargo run --release --offline --example mathprint`). That is a result of testing, not a promise of support: other operating systems, versions and hardware are untested (DragonFly BSD is planned for later; see [`docs/Running.md`](docs/Running.md)). **Measured joules need Linux on hardware with a readable RAPL counter** (not a VM or container); elsewhere the energy report says it is unavailable. Details and the open questions: [`baby/README.md`](baby/README.md), "Running on other platforms".
 
 ## Code map
 
