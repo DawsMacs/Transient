@@ -7,7 +7,7 @@
 //!   baby learn  "what is two multiplied by three" six --unit times    keep learning AFTER school: add a lesson, re-work how that unit is learned
 //!   baby discover [--seed N] [--out PATH]   hand it a heap of UNLABELED lessons: it finds the units itself, then is scored like the others
 //!   baby tutor [--school FILE] [--rounds N] [--limit N] [--out FILE]   the baby asks what it wants checked, you answer (Enter skips, q quits; `question => answer` teaches it something of your own)
-//!   baby exam write DIR [--units N --seed N] | score DIR PREDICTIONS.tsv | run DIR [--out FILE] | adapt-write DIR [--wrong P --repeat F] | adapt-run DIR | adapt-drive DIR COMMAND... | adapt-transformer DIR [--steps N --replay N] | transformer DIR [--d N --layers N --epochs N --threshold P]   the entry exam: plain files and a line protocol any system can be taught and judged by (Novice's bar)
+//!   baby exam write DIR [--units N --seed N] | score DIR PREDICTIONS.tsv | run DIR [--out FILE] | adapt-write DIR [--wrong P --repeat F] | adapt-run DIR [--trusting] | adapt-drive DIR COMMAND... | adapt-transformer DIR [--steps N --replay N] | transformer DIR [--d N --layers N --epochs N --threshold P]   the entry exam: plain files and a line protocol any system can be taught and judged by (Novice's bar)
 //!   baby bridge (--svamp FILE | --pairs FILE) [--units kind|discover] [--split random|blocks] [--numbers N] [--select] [--test F] [--seed N]   REAL TEXT: what does the baby make of problems somebody else wrote?
 //!   baby compare [--seed N] [--sizes 16,32,64] [--layers N] [--epochs N] [--adapt N | --scale 20,60 | --export DIR [--units N] | --refusals 20,200 | --teacher UNITS [--rounds N --limit N]]   the controlled comparison: the baby against a matched attention transformer, in joules
 //!   baby cost                               what LEARNING costs: time and memory to teach it, a new lesson, a new kind, and to tidy up
@@ -1454,7 +1454,7 @@ fn cmd_exam(a: &Args) {
     let verb = a.positional.get(1).map(|s| s.as_str()).unwrap_or("");
     let dir = a.positional.get(2).cloned().unwrap_or_default();
     let usage = || {
-        eprintln!("usage: baby exam write DIR [--units N] [--seed N]  |  score DIR predictions.tsv  |  run DIR [--out predictions.tsv]  |  transformer DIR  |  adapt-write DIR [--wrong P --repeat F]  |  adapt-run DIR  |  adapt-drive DIR COMMAND...  |  adapt-transformer DIR");
+        eprintln!("usage: baby exam write DIR [--units N] [--seed N]  |  score DIR predictions.tsv  |  run DIR [--out predictions.tsv]  |  transformer DIR  |  adapt-write DIR [--wrong P --repeat F]  |  adapt-run DIR [--trusting]  |  adapt-drive DIR COMMAND...  |  adapt-transformer DIR");
         std::process::exit(2);
     };
     if dir.is_empty() {
@@ -1497,11 +1497,11 @@ fn cmd_exam(a: &Args) {
             let mut energy: Option<exam::Energy> = None;
             let replies = match (verb, measure) {
                 ("adapt-run", true) => {
-                    let (r, e) = exam::baby_adapt_energy(&adapt, a.get("seed", 1u64), &meter);
+                    let (r, e) = exam::baby_adapt_energy(&adapt, a.get("seed", 1u64), a.flag("trusting"), &meter);
                     energy = Some(e);
                     Ok(r)
                 }
-                ("adapt-run", false) => Ok(exam::baby_stream(&adapt, a.get("seed", 1u64))),
+                ("adapt-run", false) => Ok(exam::baby_stream(&adapt, a.get("seed", 1u64), a.flag("trusting"))),
                 (_, true) => exam::drive_energy(&adapt, &a.positional[3..].to_vec(), &meter).map(|(r, e)| {
                     energy = Some(e);
                     r

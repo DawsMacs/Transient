@@ -7,7 +7,7 @@ How to get the code, build it, run it and check it, one section per platform. Ev
 [`baby/README.md`](../baby/README.md) ("Running on other platforms"). Where something was **not** tried, it says so.
 
 There are **no prebuilt binaries and no releases yet**: you build from source. The build has no dependencies and needs no network (`--offline`), takes about
-a minute and a half on a recent desktop (one to four minutes on the CI machines), and the 150 tests take about 15 seconds.
+a minute and a half on a recent desktop (one to four minutes on the CI machines), and the 152 tests take about 15 seconds.
 
 ## Pick your platform
 
@@ -101,7 +101,7 @@ On Alpine, `apk add rust cargo` is the easy way and gives the musl build.
 git clone https://github.com/Matterworm/Matter.git
 cd Matter
 cargo build --release --offline
-cargo test --release --offline                  # 150 tests, about 15 s
+cargo test --release --offline                  # 152 tests, about 15 s
 ./target/release/baby school                    # teaches 13 units, prints how each was learned and the scorecard
 ./target/release/baby ask "how far apart are two and nine"
 ```
@@ -137,7 +137,7 @@ Or, if you use Homebrew: `brew install rust`.
 git clone https://github.com/Matterworm/Matter.git
 cd Matter
 cargo build --release --offline
-cargo test --release --offline                  # 150 tests, about 15 s
+cargo test --release --offline                  # 152 tests, about 15 s
 ./target/release/baby school
 ./target/release/baby ask "how far apart are two and nine"
 ```
@@ -196,7 +196,7 @@ sudo pkg install -y rust git          # as root, or with doas
 git clone https://github.com/Matterworm/Matter.git
 cd Matter
 cargo build --release --offline
-cargo test --release --offline        # 150 tests
+cargo test --release --offline        # 152 tests
 ./target/release/baby school
 ./target/release/baby ask "how far apart are two and nine"
 ```
@@ -215,7 +215,7 @@ sudo pkgin -y install rust git        # as root, or with sudo if you set it up
 git clone https://github.com/Matterworm/Matter.git
 cd Matter
 cargo build --release --offline
-cargo test --release --offline        # 150 tests
+cargo test --release --offline        # 152 tests
 ./target/release/baby school
 ./target/release/baby ask "how far apart are two and nine"
 ```
@@ -234,7 +234,7 @@ doas pkg_add rust git                 # or sudo, if you use it
 git clone https://github.com/Matterworm/Matter.git
 cd Matter
 cargo build --release --offline
-cargo test --release --offline        # 150 tests
+cargo test --release --offline        # 152 tests
 ./target/release/baby school
 ./target/release/baby ask "how far apart are two and nine"
 ```
