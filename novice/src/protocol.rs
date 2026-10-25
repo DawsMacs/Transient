@@ -39,6 +39,8 @@ pub trait System {
     fn ask(&mut self, question: &str) -> Answer;
     /// The true answer to the question just asked, told afterwards. `source` is set when the exam tags who is speaking.
     fn told(&mut self, question: &str, truth: &str, source: Option<&str>);
+    /// The exam is over.
+    fn quit(&mut self) {}
 }
 
 /// Serve the protocol on `input` and `output` until `QUIT` or the end of the input.
@@ -69,7 +71,10 @@ pub fn serve<S: System>(system: &mut S, input: impl BufRead, mut output: impl Wr
                     system.told(&question, f[2], source);
                 }
             }
-            "QUIT" => break,
+            "QUIT" => {
+                system.quit();
+                break;
+            }
             _ => {}
         }
     }
