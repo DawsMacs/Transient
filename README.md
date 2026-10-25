@@ -13,7 +13,7 @@
 *adaptive learning*: a system that keeps learning while it is used, decides for itself *how* to learn each kind of thing, and is
 measured by what it costs (operations, memory, estimated joules) rather than by parameter count alone.
 
-The current artifact is `baby/`: about 18k lines of Rust, **no dependencies**, builds offline, 150 tests. It is a research prototype
+The current artifact is `baby/`: about 18k lines of Rust, **no dependencies**, builds offline, 152 tests. It is a research prototype
 evaluated mostly on a synthetic curriculum, with a first look at real word problems (SVAMP, ASDiv) and an entry exam that any
 other system can take. It is not a language model and makes no claim to be one yet.
 
@@ -70,7 +70,7 @@ All on the synthetic curriculum in `baby/src/kinds.rs` (13 units, 792 lessons), 
 | **label noise** (2 % and 5 % of taught answers wrong, 60-200 units, words and digits) | **0 % wrong** on unseen questions; at 2 % essentially as good as clean data (97-100 % of unseen questions right); wrongly taught lessons answered with the truth by voting memory, robust rule fitting and cross-checks |
 | **the entry exam** (`baby exam`, 60 units, 2,520 lessons, 4,832 questions) | taught 100 %, reworded 100 %, never seen 94.9 % as facts + 5.1 % right guesses, beyond range 100 % right guesses; **0 wrong facts, 0 of 140 traps answered**; teaching 0.68 J and answering 0.28 J (59 uJ per question), measured with the CPU's counter |
 | **the adaptive exam** (787 questions on rule-changing kinds, the truth told after each answer) | **0 wrong facts**; the rule-changing kinds climb 90.6 -> 93.8 -> 100 % right across the stream; the 787-question stream costs 28.5 J to answer and adapt (65 J with the teaching): 36 mJ per told answer, down from 1.80 J, then 0.34 J (cut in two steps with the replies byte-identical), still about 600 times the cost of answering without learning. A naive Python memorizer scores 0 right at 0.08 J |
-| **a teacher who is wrong about a share of the facts** (the exam's wrong-teacher tier: 10 % and 20 % of the facts told wrongly, the same wrong answer every time, 30 % re-asks, seeds 1-3) | wrong facts about facts it was **never** wrongly told: **0 on all six runs** (the first run found a hole of ours, now closed). The baby still believes a teacher who repeats a wrong answer: 14 / 14 / 10 repeats at 10 %, 39 / 25 / 28 at 20 % (a naive memorizer: 32 and 59). Pinned as weekly goldens |
+| **a teacher who is wrong about a share of the facts** (the exam's wrong-teacher tier: 10 % and 20 % of the facts told wrongly, the same wrong answer every time, 30 % re-asks, seeds 1-3) | wrong facts about facts it was **never** wrongly told: **0 on all six runs** (the first run found a hole of ours, now closed). Since 2026-10-25 the baby holds an answer that contradicts a settled rule until it is repeated, or until one law explains several held answers together (a rule that really changed): repeats of a believed mistake fell from 20 / 14 / 10 to 5 / 7 / 6 at 10 % and from 41 / 25 / 28 to 10 / 10 / 18 at 20 % (a naive memorizer: 32 and 59), nearly all of what is left in kinds with no law to check against. Pinned as weekly goldens |
 | **the exam put to a matched transformer** (same lessons, same judge, same meter; 60 units, seeds 1-3; one small untuned model) | the transformer fits what it was taught, then states 1,500-2,800 wrong facts and answers 43-100 % of the traps (the baby: 0 and 0); teaching costs it 11-24x the baby's joules and answering 2.2-2.7x; told each truth as a stream goes on it does **not** get better (19 % right frozen, 11-16 % fine-tuned) |
 | **after a correction** | the law is rebuilt from the numbers the correcting lessons name: 157 of 157 wrong guesses became right guesses after one correction (they were refused before); the law it replaced is kept as a competing explanation until two later lessons separate them |
 | **real word problems** (SVAMP, ASDiv; private data, not in this repo) | labeled guesses only, never stated as fact: two-number problems about 56 % right on SVAMP (35-73 % across six splits; fragile) and 58-60 % on ASDiv; problems with more numbers than the rules use 27-38 %. Which operation the wording means is the ceiling, not a shortage of lessons |
@@ -93,7 +93,7 @@ Requires a stable Rust toolchain (edition 2021). No other dependencies, no netwo
 Download options, checking your build, updating, troubleshooting and what is tested where are in [`docs/Running.md`](docs/Running.md). With Rust and git already installed, on Linux, macOS or a BSD:
 
 ```bash
-cargo test --release --offline         # 150 tests (about 15 s)
+cargo test --release --offline         # 152 tests (about 15 s)
 cargo build --release --offline
 ./target/release/baby school           # teach 13 units (~4 s), print how each was learned and the scorecard
 ./target/release/baby ask "how far apart are two and nine"   # answers, and says how it knew
@@ -192,7 +192,7 @@ Two transformers are trained on the same lessons and graded on the same question
 4. **Bridge to real data:** first versions done on two word-problem corpora. Next: answers that need three numbers, a factoid corpus, and a pretrained model as the comparison (needs a rented GPU).
 5. **Controlled comparison:** done in part: a matched from-scratch transformer and a tuned PyTorch one, measured joules, three seeds; the entry exam, static and adaptive, put to the plain transformer; the wrong-teacher tier of the adaptive exam. Next: a larger or tuned transformer, the wrong-teacher tier for it, and a pretrained model on real text (needs a rented GPU).
 6. **Growth:** a unit that starts tiny and adds capacity only when it saturates (function-preserving growth).
-7. **Cheaper adapting, and teachers who repeat themselves:** adapting is 36 mJ per told answer (about 600 times the cost of answering without learning); the rest of that cost, and the baby's belief in a teacher who repeats a wrong answer (a second independent source is untried), are the open problems in the handover.
+7. **Cheaper adapting, and teachers who repeat themselves:** adapting is 36 mJ per told answer (about 600 times the cost of answering without learning); the rest of that cost, and the remaining belief in a teacher who repeats a wrong answer in kinds that have no law to check it against (a second independent source is untried), are the open problems in the handover.
 
 ## Ambition
 

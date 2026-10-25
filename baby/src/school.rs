@@ -393,6 +393,8 @@ enum Rebuild {
 }
 /// A settled exact unit takes in this many told lessons between thinking its way of learning through again from scratch.
 const SETTLED_RETHINK_EVERY: usize = 25;
+/// How many different answers held for one unit (the one just told included) must be explained by one law before they are believed together.
+const COHERE_HELD: usize = 3;
 /// How many lessons a unit that only guesses takes in between looking again at its program.
 const GUESSER_REFIT_EVERY: usize = 25;
 /// After this many lessons it was told, the routing corrections are learned again.
@@ -1007,7 +1009,7 @@ impl School {
     }
 
     /// The skeptic's weighing of an answer against the unit's own rule. None: nothing to doubt, learn it as usual. Some: it was held.
-    fn weigh_against_rule(&mut self, u: usize, query: &str, answer: &str) -> Option<Learned> {
+    fn weigh_against_rule(&mut self, u: usize, query: &str, answer: &str, also: &mut Vec<(String, String)>) -> Option<Learned> {
         let unit = &self.units[u];
         let settled = matches!(unit.chosen, Mech::Rule | Mech::Select | Mech::Program)
             && !matches!(&unit.state, Fitted::Program(Some(p)) if p.partial.is_some())
@@ -1028,6 +1030,17 @@ impl School {
             }
             return None;
         }
+        let said_twice = matches!(pos, Some(p) if self.disputed[p].2 == answer);
+        if !said_twice {
+            // Answers held for this unit that a single law explains together with everything it was taught are no longer slips: isolated wrong answers do not
+            // cohere, a rule that really changed does. They are believed together (the earlier ones are handed back in `also` to be learned too).
+            let others: Vec<(String, String)> = self.disputed.iter().filter(|d| d.0 == name && lesson_key(&d.1) != key).map(|d| (d.1.clone(), d.2.clone())).collect();
+            if others.len() + 1 >= COHERE_HELD && self.held_answers_cohere(u, query, answer, &others) {
+                self.disputed.retain(|d| d.0 != name);
+                also.extend(others);
+                return None;
+            }
+        }
         match pos {
             Some(p) if self.disputed[p].2 == answer => {
                 // said twice: believed
@@ -1039,6 +1052,55 @@ impl School {
         }
         let unit = &self.units[u];
         Some(Learned { unit: unit.name.clone(), opened: false, corrected: false, was: Some(unit.chosen), now: unit.chosen, held_back: unit.best_evidence(), facts: unit.facts(), surprised: false, disputed: true })
+    }
+
+    /// Do the answers held for unit `u`, with the one just told, fit ONE exact program together with every lesson the unit has, and does that program agree
+    /// with the law the unit has now everywhere its lessons vouch for it? (The test a repair uses, run before believing anything: see `repair_regime`.)
+    fn held_answers_cohere(&mut self, u: usize, query: &str, answer: &str, others: &[(String, String)]) -> bool {
+        let unit = &self.units[u];
+        if !matches!(unit.chosen, Mech::Rule | Mech::Select | Mech::Program) {
+            return false;
+        }
+        let mut held: Vec<(String, String)> = others.to_vec();
+        held.push((query.to_string(), answer.to_string()));
+        held.sort();
+        if self.repair_failed.iter().any(|(n, t)| *n == unit.name && *t == held) {
+            return false;
+        }
+        let mut extra: Vec<i32> = Vec::new();
+        for (q, a) in &held {
+            let Some(y) = self.line.value(a) else { return false };
+            let told = [Some(y), predict(&unit.state, q, &self.weights).and_then(|p| self.line.value(&p)).map(|p| (p - y).abs())];
+            for v in told.into_iter().flatten() {
+                let r = v.round();
+                if (v - r).abs() < 0.01 && (3.0..=1000.0).contains(&r) && !extra.contains(&(r as i32)) {
+                    extra.push(r as i32);
+                }
+            }
+        }
+        extra.truncate(4);
+        let mut items = unit.lessons.clone();
+        let mut next = items.iter().map(|l| l.fact).max().map_or(0, |m| m + 1);
+        for (q, a) in &held {
+            items.push(Item { unit: u, fact: next, template: 0, query: q.clone(), answer: a.clone() });
+            next += 1;
+        }
+        let name = unit.name.clone();
+        let cohere = match ProgramRule::fit_repair_with(&items, &self.weights.lib, &extra) {
+            // (the search settles two answers to the same numbers by plurality, so a held answer to something already taught is simply outvoted:
+            // the program must say every held answer itself)
+            Some(rule) => {
+                let fitted = Fitted::Program(Some(rule));
+                let says_them = held.iter().all(|(q, a)| predict(&fitted, q, &self.weights).as_deref() == Some(a.as_str()));
+                says_them && matches!(&fitted, Fitted::Program(Some(r)) if self.rebuilt_agrees_with_old(u, r, &[]))
+            }
+            None => false,
+        };
+        if !cohere {
+            self.repair_failed.retain(|(n, _)| *n != name);
+            self.repair_failed.push((name, held));
+        }
+        cohere
     }
 
     /// Is any operand of this question outside the range unit `u` was taught (or has had confirmed) for the operation it names? Then why.
@@ -2016,8 +2078,12 @@ impl School {
         mechanisms::set_reliable(self.bar);
         if self.skeptical {
             if let Some(u) = self.units.iter().position(|x| x.name == unit) {
-                if let Some(held) = timed("wondered:weigh_against_rule", || self.weigh_against_rule(u, query, answer)) {
+                let mut also: Vec<(String, String)> = Vec::new();
+                if let Some(held) = timed("wondered:weigh_against_rule", || self.weigh_against_rule(u, query, answer, &mut also)) {
                     return Ok(held);
+                }
+                for (q, a) in also {
+                    let _ = self.learn(&q, &a, Some(unit));
                 }
             }
         }
@@ -4098,6 +4164,27 @@ mod tests {
         assert!(t.learn_wondered("what is 8 zork 9", "19", "zork").unwrap().disputed, "skeptical by default");
         t.set_skeptical(false);
         assert!(!t.learn_wondered("what is 8 zork 9", "19", "zork").unwrap().disputed, "and trusting when switched off");
+    }
+
+    #[test]
+    fn answers_held_for_a_unit_are_believed_together_when_one_law_explains_them_and_not_when_they_are_isolated_slips() {
+        // a rule that really changes: the sum saturates at 30, three different answers say so
+        let mut s = sums_school(|a, b| a + b);
+        s.set_careful(true);
+        s.set_skeptical(true);
+        assert!(s.learn_wondered("what is 20 zork 15", "30", "zork").unwrap().disputed);
+        assert!(s.learn_wondered("what is 25 zork 25", "30", "zork").unwrap().disputed);
+        assert_eq!(s.disputed_count(), 2);
+        assert!(!s.learn_wondered("what is 18 zork 19", "30", "zork").unwrap().disputed, "three different answers that one law explains are believed together");
+        assert_eq!(s.disputed_count(), 0, "and none of them is left waiting");
+        // isolated wrong answers do not cohere: each stays held
+        let mut t = sums_school(|a, b| a + b);
+        t.set_careful(true);
+        t.set_skeptical(true);
+        for (q, a) in [("what is 3 zork 4", "9"), ("what is 5 zork 6", "15"), ("what is 7 zork 8", "20"), ("what is 2 zork 9", "4")] {
+            assert!(t.learn_wondered(q, a, "zork").unwrap().disputed, "{q} = {a} is a slip");
+        }
+        assert_eq!(t.disputed_count(), 4);
     }
 
     #[test]

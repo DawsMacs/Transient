@@ -307,9 +307,9 @@ pub fn baby_static_energy(exam: &Exam, seed: u64, meter: &crate::compare::Meter)
 }
 
 /// The baby on the adaptive stream, once (it is long enough): teaching, then the whole stream with its learning.
-pub fn baby_adapt_energy(a: &Adapt, seed: u64, meter: &crate::compare::Meter) -> (Replies, Energy) {
+pub fn baby_adapt_energy(a: &Adapt, seed: u64, trusting: bool, meter: &crate::compare::Meter) -> (Replies, Energy) {
     let (mut school, ts, tj) = meter.run(|| baby_teach_adapt(a, seed));
-    let (replies, as_, aj) = meter.run(|| baby_ask_stream(&mut school, a));
+    let (replies, as_, aj) = meter.run(|| baby_ask_stream(&mut school, a, trusting));
     (replies, Energy { teach_j: tj, teach_s: ts, answer_j: aj, answer_s: as_, repeats: 1 })
 }
 
@@ -610,8 +610,11 @@ pub fn baby_teach_adapt(a: &Adapt, seed: u64) -> School {
     School::from_items(&items, names, None, seed, true)
 }
 
-/// The stream put to the baby: each question asked and then told the truth (the way a teacher who repeats themselves would).
-pub fn baby_ask_stream(school: &mut School, a: &Adapt) -> Replies {
+/// The stream put to the baby: each question asked and then told what the teacher says. By default the baby stays skeptical: an answer that contradicts a
+/// settled rule is held until the same question is answered the same way a second time, or until three different held answers are explained by one law
+/// together with everything it was taught (a rule that really changed; see `School::weigh_against_rule`). `trusting` makes it believe at once, as a
+/// teacher who repeats themselves can be modeled (it was the exam's way until 2026-10-25; see baby/README.md for what changed and what it cost).
+pub fn baby_ask_stream(school: &mut School, a: &Adapt, trusting: bool) -> Replies {
     let mut out = Vec::new();
     let (mut ask_s, mut learn_s) = (0.0f64, 0.0f64);
     let prof = std::env::var("BABY_PROF").is_ok();
@@ -629,7 +632,7 @@ pub fn baby_ask_stream(school: &mut School, a: &Adapt) -> Replies {
             (None, None) => (it.id.clone(), "refuse".into(), String::new(), 0.0),
         });
         let t_learn = std::time::Instant::now();
-        let _ = school.learn_wondered_sure(&it.question, &it.told, &it.unit);
+        let _ = if trusting { school.learn_wondered_sure(&it.question, &it.told, &it.unit) } else { school.learn_wondered(&it.question, &it.told, &it.unit) };
         learn_s += t_learn.elapsed().as_secs_f64();
     }
     if prof {
@@ -639,9 +642,9 @@ pub fn baby_ask_stream(school: &mut School, a: &Adapt) -> Replies {
 }
 
 /// The baby run on the stream: taught the lessons, then the stream.
-pub fn baby_stream(a: &Adapt, seed: u64) -> Replies {
+pub fn baby_stream(a: &Adapt, seed: u64, trusting: bool) -> Replies {
     let mut school = baby_teach_adapt(a, seed);
-    baby_ask_stream(&mut school, a)
+    baby_ask_stream(&mut school, a, trusting)
 }
 
 /// A system running as a child process, speaking the protocol.
@@ -1020,5 +1023,31 @@ mod tests {
         let again = judge(&exam, &read_predictions(&path).unwrap()).unwrap();
         assert_eq!((again.wrong_facts, again.traps_answered), (0, 0));
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_skeptical_baby_waits_for_a_wrong_answer_to_be_told_twice_and_a_trusting_one_believes_it_at_once() {
+        use crate::kinds::Item;
+        let build = || {
+            let mut items = Vec::new();
+            for a in 0..=12i64 {
+                for b in 0..=12i64 {
+                    items.push(Item { unit: 0, fact: items.len(), template: 0, query: format!("what is {a} zork {b}"), answer: (a + b).to_string() });
+                }
+            }
+            let mut s = School::from_items(&items, vec!["zork".into()], None, 1, true);
+            s.set_careful(true);
+            s.set_skeptical(true);
+            s
+        };
+        let item = |id: &str, q: &str, truth: &str, told: &str| StreamItem { id: id.into(), role: "base".into(), unit: "zork".into(), question: q.into(), truth: truth.into(), told: told.into(), fact: "F1".into() };
+        // the teacher is wrong about 8 + 9 and says 19 every time it comes up
+        let adapt = Adapt {
+            lessons: Vec::new(),
+            stream: vec![item("S0", "what is 8 zork 9", "17", "19"), item("S1", "what is 8 zork 9", "17", "19"), item("S2", "what is 8 zork 9", "17", "19")],
+        };
+        let answers = |trusting: bool| -> Vec<String> { baby_ask_stream(&mut build(), &adapt, trusting).into_iter().map(|r| r.2).collect() };
+        assert_eq!(answers(false), ["17", "17", ""], "held when first told; believed when told again, which refutes the rule, so it stops stating the sum rather than state a repeat");
+        assert_eq!(answers(true), ["17", "", ""], "believed at once: the rule is refuted after the first telling, so it stops stating the sum");
     }
 }
