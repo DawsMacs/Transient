@@ -1,8 +1,35 @@
 name: CI
+
+# This is baby's full platform matrix (thirteen rows, 10 to 30 minutes). baby is the frozen reference, so the matrix runs when baby's code, the
+# goldens, the tools or this file change, and once a week, so a platform that drifts (a new toolchain, a changed runner image) is still found.
+# It does not run for other directories: Novice has its own workflow with its own, smaller, set of rows. Documentation-only changes to baby do
+# not start it. Run it by hand from the Actions tab ("Run workflow") whenever it is wanted. (If branch protection with required status checks is
+# ever turned on, a path-filtered check stays "pending" on a pull request that skips it: make only the checks that always run required.)
 on:
   push:
     branches: [main]
+    paths:
+      - 'baby/**'
+      - '!baby/**/*.md'
+      - 'golden/**'
+      - 'tools/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.gitattributes'
+      - '.github/workflows/ci.yml'
   pull_request:
+    paths:
+      - 'baby/**'
+      - '!baby/**/*.md'
+      - 'golden/**'
+      - 'tools/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.gitattributes'
+      - '.github/workflows/ci.yml'
+  schedule:
+    - cron: '47 4 * * 1'
+  workflow_dispatch:
 
 # Nothing here needs to write to the repository or to see a secret.
 permissions:
