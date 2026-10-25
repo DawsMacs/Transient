@@ -252,6 +252,11 @@ fn dump(name: &str, from: u64, count: u64) {
 }
 
 fn main() {
+    // DragonFly BSD only: keep the thread library linked under link-time optimization (see `platform::keep_thread_library_linked` in baby/src/platform.rs;
+    // this example is its own program and cannot use that module)
+    if cfg!(target_os = "dragonfly") {
+        let _ = std::thread::spawn(|| {}).join();
+    }
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         None => fingerprint(),
