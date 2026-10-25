@@ -1,5 +1,8 @@
 # baby
 
+> **Status (2026-10-25): frozen as the reference.** baby stays maintained (bug fixes, platform upkeep, the entry exam and the goldens) and is the
+> measuring stick for what comes next, but it gets no new capability. The main line of work is `novice/`, rebuilt from scratch.
+
 Matter's first working unit, written from scratch in Rust with **zero dependencies**. It started on 2026-10-15 as a tiny network
 that read a short query and said one word, and has become something else: a baby that is **taught units of lessons, works out for
 itself how to learn each one, answers by the way that worked, says how it knew, and refuses when it should**. The first network is
