@@ -8,7 +8,7 @@ SPDX-PackageDownloadLocation = "https://github.com/Matterworm/Matter"
 
 [[annotations]]
 path = [
-  "README.md", "CONTRIBUTING.md", "LEARNING.md", "MatterHandover.md", "MatterVision.md", "CLAUDE.md",
+  "README.md", "CONTRIBUTING.md", "LEARNING.md",
   "docs/**", "baby/README.md", "baby/examples/*.expected", "golden/**", ".gitattributes",
   "Cargo.toml", "Cargo.lock", "baby/Cargo.toml", "REUSE.toml", ".gitignore",
   "assets/**", ".github/**",

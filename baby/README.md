@@ -1334,7 +1334,7 @@ What this teaches us, in order of confidence:
 4. **Its confidence is honest.** Questions it can't answer ("capital of atlantis", "what color is a zebra", an unseen phrasing)
    come out below 0.5, and `ask` says "not sure". A free "I don't know yet", which is what a child does.
 
-## Where this goes next (candidates, not commitments) [STALE as of 2026-10-15: the authoritative list is the last "Next" section at the bottom, and MatterHandover.md]
+## Where this goes next (candidates, not commitments) [STALE as of 2026-10-15: the authoritative list is the last "Next" section at the bottom]
 
 - **Position-free readers** compared on the same harness: does the reader matter at 16k parameters? (fixes #1)
 - **Learn one thing, now:** a `teach` step that adds a new fact in a few updates without wrecking the rest, and a fact *store*
@@ -1520,7 +1520,7 @@ memory, not the network: consolidating them ("sleep" for new words and answers) 
 
 ## Letters, not words (2026-10-19)
 
-MatterVision Entry 4: the deviation may be deeper than architecture, perhaps not even tokens. The word readers carry a fixed word
+Hypothesis: the deviation may be deeper than architecture, perhaps not even tokens. The word readers carry a fixed word
 list (a small cousin of the industry's token habit). `--reader letters` has none: a question is turned into hashed pieces of its own
 spelling (the whole word, 3- and 4-letter groups with word-boundary marks, pairs of neighboring words) and their embeddings are
 averaged. Any word at all has a reading, including one it never met, and a misspelling keeps most of its pieces.
@@ -1631,7 +1631,7 @@ Honesty about how much this is:
 4. **One rule is one rule.** Multiplication, comparison, or sequences are not covered; this is evidence that a rule *can* be learned
    from few examples with the right form, not that the baby finds forms.
 
-## The baby adapts how it learns (2026-10-19; MatterVision Entry 5)
+## The baby adapts how it learns (2026-10-19)
 
 Entry 5: the process of learning itself should adapt. Two cases built so far, at different depths:
 

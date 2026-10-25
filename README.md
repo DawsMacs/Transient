@@ -209,7 +209,6 @@ to find out by measurement. The strategy and the hardware terrain are in [`docs/
 | [`LEARNING.md`](LEARNING.md) | learning-efficiency research notes and sources |
 | [`docs/Running.md`](docs/Running.md) | get, build, run and check Matter on each platform; what is tested where |
 | [`docs/Direction.md`](docs/Direction.md) | strategy, hardware terrain, language choice, candidate architectures |
-| [`MatterHandover.md`](MatterHandover.md) | current state and next steps, for resuming work |
 
 The website, [matterworm.github.io](https://matterworm.github.io), is a separate repository ([`Matterworm/matterworm.github.io`](https://github.com/Matterworm/matterworm.github.io)): overview, documentation, progress and a blog.
 

@@ -1,6 +1,6 @@
 # Matter: direction and strategy
 
-This is the long-form framing that used to be the front page. The technical overview is [`../README.md`](../README.md); the working state is in [`../MatterHandover.md`](../MatterHandover.md).
+This is the long-form framing that used to be the front page. The technical overview is [`../README.md`](../README.md).
 
 **Status (as of 2026-10-24):** active. `baby/` is a working, tested (153 tests) system: units of lessons, mechanisms chosen by evidence, honest refusals, learning after school, unit discovery, light cost, an entry exam any system can take (with its adaptive and wrong-teacher tiers and a comparison against a plain transformer), and CI on thirteen platform rows (see `baby/README.md` and the handover); the larger architecture and the scale-up are still ahead. Founded 2026-10-15 by Daws. We pursue this whether or not it works; what we learn is
 the point, and a failed hypothesis still redirects the work.
