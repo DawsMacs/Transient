@@ -244,6 +244,34 @@ Long-term direction for the assistant to weigh. Tell Daws when it is time to ren
 
 **Context (assistant).** The rule that the meaning of the project's name is Daws's to tell stays in force for "Matter". One thing for Daws to check, not a finding: "Matter" is also the name of a widely used smart-home connectivity standard, so a clearance search for the new name is as worthwhile as it was for the old one (not legal advice).
 
+## Entry 12 (2026-10-25): What Novice could be rebuilt around (a proposal, not a decision)
+
+**Status.** Written by the assistant at the end of the repeats work, because Entry 10 says to propose what to rebuild around once a ceiling can be named from measurements. Nothing here is decided. Daws decides whether, when and how; every item is tagged.
+
+**The ceiling, from measurements (Measured).**
+- *Hand-built language.* Every mechanism, operation, threshold and repair rule in baby is the assistant's. The repair step rebuilds `min(a+b, 30)` only because the expression language has `min` and a contradiction names a 30; the new check for a rule that really changed (the repeats work of 2026-10-25, `held_answers_cohere`) recognizes only regimes that a program of seven pieces can say. The list of constants that are not discovered is in the handover, section 8.
+- *Cost of adapting.* 36 mJ per told answer against 59 uJ per answer without learning (about 600x), after two cuts that each came from reading where time went, not from a better design. The cost follows the size of the unit, not the size of the change.
+- *One source.* Under a consistently wrong teacher, 17 of the 18 repeats left on one stream are in kinds with no law to check against. No amount of cleverness inside a single source fixes that; it needs a second source, and the exam protocol has no way to say who is speaking.
+- *Real text.* Wording is the ceiling (SVAMP guesses 35-73 % right across splits), not a shortage of lessons.
+- *Skepticism had to be tuned by hand against adaptation.* The plain hold fixed the wrong teacher and broke learning a real rule change; the fix was a third mechanism written for that case. That pattern (a guard, then a guard for the guard) is the clearest sign of a design that has stopped yielding.
+
+**Proposal: three foundations (Hypothesis, each testable on the entry exam).**
+1. *Sources as first-class.* The exam's TOLD line gains a source tag; the system keeps a track record per source and per kind, and believes by agreement of independent sources or by a law it can check, not by a rule that says "twice". Test: with a second, right source added to the wrong-teacher tier, repeats go to about 0 in kinds that have no law; with one source, nothing is claimed.
+2. *Held answers as competing explanations.* A contradiction is not "held or learned" but a rival hypothesis that stays alive, is scored by what it explains, and is promoted or dropped by evidence. This replaces the hold, the veto, the repair step and the coherence check with one mechanism. Test: the 14 streams of the repeats work, with no tuned count.
+3. *Cost proportional to the change.* A told answer updates only what it touches (an incremental structure, not a re-decision of the unit). Test: joules per told answer stay flat as units grow; the target to beat is 36 mJ with 0 wrong facts, against the transformer's 1.6-34 mJ with 1,500-2,800.
+
+**What to keep from baby (Decision-ready, Daws to confirm).** The entry exam and its judge (they stay independent of both systems), the golden files and the platform matrix, the habit lists in the handover (vary the gate, three seeds, byte-compare on a wrong-teacher stream, show a test fails without its fix), en-US from the first line, zero dependencies if it can be kept, Rust-first.
+
+**What not to carry over.** The mechanism menu (remember, rule, select, program, network) as a fixed list; the thresholds in the handover's list of constants; the dependence on the teacher's grouping of lessons into units (the exam's first run showed it).
+
+**A first milestone small enough to finish (Open).** A Novice that passes the static exam's honesty gate (0 wrong facts, 0 traps answered) and the adaptive exam with a source tag, on the tidy synthetic worlds only, with joules reported. Not real text, not a language model. The point is to learn whether foundations 1 and 2 remove guards instead of adding them.
+
+**Open questions for Daws.** (a) Is a source tag in the exam protocol acceptable (it changes the protocol every foreign system speaks; it could be optional)? (b) Should Novice start from the tidy exam or from a smaller real-text task first? (c) Does "genuine" (Entry 10) need Novice to change its own language at run time from the first milestone, or is that a second milestone? (d) The GPU is still not needed for any of this.
+
+**Caveats (assistant).** All of it is a hypothesis. The three foundations were not tested; they are what the failures in the handover point at. Every earlier belief of mine about a ceiling (the bag-of-words limit, the program search as the cost) was wrong at least once, so treat the ceiling list as the best current reading, and check it with the entry exam before building.
+
+---
+
 ## Progress log (assistant-maintained; details live in `baby/README.md`)
 
 - **2026-10-15** The baby: a 16k-parameter, from-scratch, zero-dependency Rust net that answers a query with one word. Joule ledger.
@@ -371,3 +399,4 @@ Long-term direction for the assistant to weigh. Tell Daws when it is time to ren
 
 - **2026-10-25** Believed mistakes under a wrong teacher cut by half or more, and the reason was partly my own harness. The baby has been skeptical of its teacher since 2026-10-22 (an answer that contradicts a settled rule is held until repeated), but the adaptive exam's driver used a call that repeats every held answer on the baby's behalf, so every wrongly told fact was believed at once. Using the hold plainly cut the repeats (41 -> 10 at 20 % wrong) but also stopped the baby learning a rule that really changes (the rule-changing kinds fell from 90.6 -> 93.8 -> 100 % to 71.9 -> 68.8 -> 50.0 % right): I almost made that the default and reverted when I read the per-kind table. The fix that kept both: three or more different held answers that one exact program explains together with all the lessons are believed together (isolated slips do not cohere; a real change does). Result on 14 streams (clean, 5-40 % wrong): clean facts right unchanged within 0.4 points, rule-changing kinds climb again (a little slower), repeats 20/14/10 -> 5/7/6 (10 %), 41/25/28 -> 10/10/18 (20 %), 105/92 -> 20/38 (40 %). What is left is almost all in kinds with no law to check an answer against (17 of 18 on one stream): that needs a second independent source and a source tag in the exam protocol. This is the baby's own policy (Hypothesis -> Measured on these streams; not Daws's decision), changes the adaptive exam's bar for the baby, and regenerated the goldens. Open: one wrong fact elsewhere at 40 % (also in the old default), and an unexplained drift of the old default on seed 1 (20 and 41 repeats where the notes said 14 and 39).
 
+- **2026-10-25** Entry 12 written: a proposal (not a decision) for what Novice could be rebuilt around: sources as first-class (a source tag in the exam protocol), held answers as competing explanations (one mechanism instead of hold, veto, repair and coherence check), and update cost proportional to the change; with a first milestone and four questions for Daws.
