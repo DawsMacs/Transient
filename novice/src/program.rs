@@ -15,7 +15,8 @@
 //! point; a program that is undefined at any column is dropped.
 
 use crate::bits::{self, Cost};
-use std::collections::HashMap;
+use std::cell::RefCell;
+use std::collections::{BTreeMap, HashMap};
 use std::hash::{BuildHasherDefault, Hasher};
 use std::rc::Rc;
 
@@ -84,6 +85,69 @@ pub enum Expr {
     Bin(Op, Box<Expr>, Box<Expr>),
     /// A learned word applied to its arguments.
     Call(Rc<Lib>, Vec<Expr>),
+    /// A function defined by its own values: what has been learned about it is the base, and anywhere else it is a step from a nearer point.
+    Fix(Rc<FixDef>),
+}
+
+/// How far down a chain of steps a recurrence may go before it gives up.
+pub const FIX_DEPTH: u32 = 12;
+
+/// A function that is known at some points (a table that grows as the kind is taught and told things) and elsewhere satisfies
+/// `f(p) = e(p, f(g(p)))`: `g` says which nearer point to look at (one expression per argument) and `e` what to do with its value (an expression over the
+/// arguments and, as the variable after them, `f(g(p))`). Popcount is `f(x) = f(x div 2) + x mod 2`; the greatest common divisor is `f(x, y) = f(y, x mod y)`.
+pub struct FixDef {
+    pub arity: usize,
+    pub g: Vec<Expr>,
+    pub e: Expr,
+    /// The values the function is known to have. Shared with the kind it belongs to, so it is live: whatever is learned about the kind later is
+    /// used the next time the function is evaluated.
+    pub table: Rc<RefCell<BTreeMap<Vec<i64>, i64>>>,
+    /// Bits for the points of the table that the recurrence does not account for.
+    pub base_cost: Cost,
+}
+
+impl FixDef {
+    pub fn apply(&self, args: &[i64], depth: u32) -> Option<i64> {
+        if let Some(v) = self.table.borrow().get(args) {
+            return Some(*v);
+        }
+        if depth == 0 {
+            return None;
+        }
+        let next: Vec<i64> = self.g.iter().map(|g| g.eval(args)).collect::<Option<_>>()?;
+        if next.iter().any(|&n| n < 0) || next == args {
+            return None;
+        }
+        let r = self.apply(&next, depth - 1)?;
+        let mut vars = args.to_vec();
+        vars.push(r);
+        self.e.eval(&vars)
+    }
+}
+
+impl PartialEq for FixDef {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.table, &other.table) && self.arity == other.arity && self.g == other.g && self.e == other.e
+    }
+}
+
+impl Eq for FixDef {}
+
+impl std::fmt::Debug for FixDef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "FixDef({})", self)
+    }
+}
+
+impl std::fmt::Display for FixDef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let all = ["x", "y", "z", "w"];
+        let args: Vec<&str> = all.iter().copied().take(self.arity).collect();
+        let mut with_r = args.clone();
+        with_r.push("r");
+        let steps: Vec<String> = self.g.iter().map(|g| g.render(&args)).collect();
+        write!(f, "f({}) = {}, r = f({})", args.join(", "), self.e.render(&with_r), steps.join(", "))
+    }
 }
 
 impl Expr {
@@ -100,6 +164,17 @@ impl Expr {
                 }
                 lib.body.eval(&vals[..xs.len()])
             }
+            Expr::Fix(fix) => fix.apply(args.get(..fix.arity)?, FIX_DEPTH),
+        }
+    }
+
+    /// Whether the program walks a chain of reductions anywhere, including inside the learned words it uses.
+    pub fn has_fix(&self) -> bool {
+        match self {
+            Expr::Fix(_) => true,
+            Expr::Var(_) | Expr::Const(_) => false,
+            Expr::Bin(_, a, b) => a.has_fix() || b.has_fix(),
+            Expr::Call(lib, xs) => lib.body.has_fix() || xs.iter().any(Expr::has_fix),
         }
     }
 
@@ -107,26 +182,29 @@ impl Expr {
         match self {
             Expr::Bin(_, a, b) => 1 + a.size() + b.size(),
             Expr::Call(_, xs) => 1 + xs.iter().map(Expr::size).sum::<usize>(),
+            Expr::Fix(fix) => 1 + fix.g.iter().map(Expr::size).sum::<usize>() + fix.e.size(),
             _ => 1,
+        }
+    }
+}
+
+impl Expr {
+    /// The expression written out, with the given names for its variables.
+    pub fn render(&self, names: &[&str]) -> String {
+        match self {
+            Expr::Var(i) => names.get(*i).copied().unwrap_or("v").to_string(),
+            Expr::Const(c) => c.to_string(),
+            Expr::Bin(op, a, b) if matches!(op, Op::Add | Op::Sub | Op::Mul) => format!("({} {} {})", a.render(names), op.symbol(), b.render(names)),
+            Expr::Bin(op, a, b) => format!("{}({}, {})", op.symbol(), a.render(names), b.render(names)),
+            Expr::Call(lib, xs) => format!("{}({})", lib.name, xs.iter().map(|x| x.render(names)).collect::<Vec<_>>().join(", ")),
+            Expr::Fix(fix) => format!("[{fix}]"),
         }
     }
 }
 
 impl std::fmt::Display for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Expr::Var(i) => write!(f, "{}", ["x", "y", "z", "w"].get(*i).copied().unwrap_or("v")),
-            Expr::Const(c) => write!(f, "{c}"),
-            Expr::Bin(op, a, b) if matches!(op, Op::Add | Op::Sub | Op::Mul) => write!(f, "({a} {} {b})", op.symbol()),
-            Expr::Bin(op, a, b) => write!(f, "{}({a}, {b})", op.symbol()),
-            Expr::Call(lib, xs) => {
-                write!(f, "{}(", lib.name)?;
-                for (i, x) in xs.iter().enumerate() {
-                    write!(f, "{}{x}", if i > 0 { ", " } else { "" })?;
-                }
-                write!(f, ")")
-            }
-        }
+        write!(f, "{}", self.render(&["x", "y", "z", "w"]))
     }
 }
 
@@ -143,6 +221,8 @@ pub fn cost_of(e: &Expr, arity: usize, words: usize) -> Cost {
         Expr::Const(c) => node + bits::uint(c.unsigned_abs()),
         Expr::Bin(_, a, b) => node + cost_of(a, arity, words) + cost_of(b, arity, words),
         Expr::Call(_, xs) => node + xs.iter().map(|x| cost_of(x, arity, words)).sum::<Cost>(),
+        // The step and the reduction (the step has one more variable, the value of the nearer point), and the base points the recurrence leaves.
+        Expr::Fix(fix) => node + fix.g.iter().map(|g| cost_of(g, arity, words)).sum::<Cost>() + cost_of(&fix.e, arity + 1, words) + fix.base_cost,
     }
 }
 
@@ -551,6 +631,8 @@ fn variants(e: &Expr, task: &Task, wrap: &[i64]) -> Vec<Expr> {
             out.extend(variants(a, task, wrap).into_iter().map(|va| Expr::Bin(*op, Box::new(va), b.clone())));
             out.extend(variants(b, task, wrap).into_iter().map(|vb| Expr::Bin(*op, a.clone(), Box::new(vb))));
         }
+        // A function defined by its own values is edited by wrapping, not inside.
+        Expr::Fix(_) => {}
         Expr::Call(lib, xs) => {
             for i in 0..xs.len() {
                 for vx in variants(&xs[i], task, wrap) {
@@ -584,6 +666,73 @@ pub fn search_with_rivals(task: &Task) -> Outcome {
     out
 }
 
+/// Every behavior that `max_size` nodes can make over the starting operations, with its program, its cost and its values at the points (programs
+/// that agree everywhere on the points are one). Used to propose the reductions of a recurrence.
+pub fn pool(points: &[Vec<i64>], arity: usize, consts: &[i64], max_size: usize, max_items: usize) -> (Vec<(Expr, Cost, Vec<i64>)>, Effort) {
+    let cols = points.len();
+    let mut effort = Effort::default();
+    let mut space = Space { cols, vals: Vec::new(), items: Vec::new(), seen: HashMap::default() };
+    let node = node_cost(arity, 0);
+    let blank = Item { kind: 0, op: Op::Add, word: 0, a: 0, b: 0, cost: node };
+    let mut by_size: Vec<Vec<u32>> = vec![Vec::new(); max_size + 1];
+    let mut row = vec![0i32; cols];
+    for v in 0..arity {
+        for (c, p) in points.iter().enumerate() {
+            row[c] = p[v] as i32;
+        }
+        if let Some(id) = space.add(&row, Item { kind: 0, a: v as u32, ..blank }) {
+            by_size[1].push(id);
+        }
+    }
+    for &k in consts {
+        row.iter_mut().for_each(|r| *r = k as i32);
+        if let Some(id) = space.add(&row, Item { kind: 1, a: k as i32 as u32, cost: node + bits::uint(k.unsigned_abs()), ..blank }) {
+            by_size[1].push(id);
+        }
+    }
+    'sizes: for size in (3..=max_size).step_by(2) {
+        for op in OPS {
+            for left in (1..size - 1).step_by(2) {
+                let right = size - 1 - left;
+                if op.commutative() && left > right {
+                    continue;
+                }
+                let (la, lb) = (by_size[left].clone(), by_size[right].clone());
+                for (ia, &a) in la.iter().enumerate() {
+                    for (ib, &b) in lb.iter().enumerate() {
+                        if op.commutative() && left == right && ib < ia {
+                            continue;
+                        }
+                        effort.evaluations += cols as u64;
+                        let mut ok = true;
+                        for c in 0..cols {
+                            match op.apply(i64::from(space.row(a)[c]), i64::from(space.row(b)[c])) {
+                                Some(v) => row[c] = v as i32,
+                                None => {
+                                    ok = false;
+                                    break;
+                                }
+                            }
+                        }
+                        if !ok {
+                            continue;
+                        }
+                        let cost = node + space.items[a as usize].cost + space.items[b as usize].cost;
+                        if let Some(id) = space.add(&row, Item { kind: 2, op, a, b, cost, ..blank }) {
+                            by_size[size].push(id);
+                            if space.items.len() >= max_items {
+                                break 'sizes;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let out = (0..space.items.len() as u32).map(|i| (space.expr(i, &[]), space.items[i as usize].cost, space.row(i).iter().map(|&v| i64::from(v)).collect())).collect();
+    (out, effort)
+}
+
 /// What the believable programs say at one point: the most believed answer, how much of the belief it carries, and the total belief (both in
 /// the fixed-point units of [`bits::exp2_neg`]). Programs that are undefined at the point count toward the total but support no answer.
 pub fn weigh(found: &[Found], at: &[i64]) -> Option<(i64, u64, u64)> {
@@ -592,8 +741,13 @@ pub fn weigh(found: &[Found], at: &[i64]) -> Option<(i64, u64, u64)> {
     let mut total = 0u64;
     for f in found {
         let w = bits::exp2_neg(f.cost - best);
+        let value = f.expr.eval(at);
+        // A recurrence whose chain does not reach a known value has nothing to say here: it abstains, it does not doubt.
+        if value.is_none() && f.expr.has_fix() {
+            continue;
+        }
         total += w;
-        if let Some(v) = f.expr.eval(at) {
+        if let Some(v) = value {
             match votes.iter_mut().find(|(a, _)| *a == v) {
                 Some(slot) => slot.1 += w,
                 None => votes.push((v, w)),
