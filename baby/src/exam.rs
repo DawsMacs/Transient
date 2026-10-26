@@ -475,7 +475,7 @@ PROTOCOL (what `baby exam adapt-drive DIR COMMAND...` speaks to a system over it
   -> TEACH id question answer unit fact      (once per lesson)\n\
   -> READY                                    (all lessons sent)        <- READY      (reply when you have finished learning from them: this is where teaching ends and answering begins, for the energy measured on each)\n\
   -> ASK id question                          <- ANSWER id status answer confidence      (status fact | guess | refuse, as in the static exam)\n\
-  -> TOLD id truth unit                       (after every answer: the teacher tells the true answer; learn from it if you can; no reply)\n\
+  -> TOLD id truth unit [source]              (after every answer: the teacher tells the true answer; learn from it if you can; no reply. With `adapt-write --second P` the line comes twice, from the sources 'teacher' and 'second', whose mistakes fall on different facts)\n\
   -> QUIT\n\n\
 Judged by: WRONG facts must be 0 (over the whole stream); then facts right and guesses right per role, and the change from the first third of the stream to the last\n\
 (adaptation). A system that learns from being told gets better as the stream goes on; one that only looks things up does not.\n\n\
@@ -495,6 +495,8 @@ pub struct StreamItem {
     pub told: String,
     /// the fact asked about, whatever the phrasing
     pub fact: String,
+    /// what a second, independent source says afterwards, when the exam has one (`adapt-write --second P`)
+    pub told2: Option<String>,
 }
 
 pub struct Adapt {
@@ -517,6 +519,11 @@ fn role_name(r: &crate::invent::Role) -> &'static str {
 /// `wrong` > 0 makes a teacher who is consistently wrong about that share of the facts (the same wrong answer every time, any phrasing); `repeat` re-asks
 /// that share of the stream later on, so a believed mistake can show itself.
 pub fn write_adapt(dir: &str, seed: u64, per_kind: usize, wrong: f64, repeat: f64) -> std::io::Result<(usize, usize)> {
+    write_adapt_with(dir, seed, per_kind, wrong, repeat, None)
+}
+
+/// `second`: the chance that a second, independent source is wrong about a fact (its mistakes fall on other facts than the first source's).
+pub fn write_adapt_with(dir: &str, seed: u64, per_kind: usize, wrong: f64, repeat: f64, second: Option<f64>) -> std::io::Result<(usize, usize)> {
     let b = crate::invent::battery(seed);
     std::fs::create_dir_all(dir)?;
     let mut lessons = String::new();
@@ -549,10 +556,10 @@ pub fn write_adapt(dir: &str, seed: u64, per_kind: usize, wrong: f64, repeat: f6
         }
     }
     // the wrong answer a consistently wrong teacher gives for a fact: another answer of the same kind, fixed by the fact (so every phrasing and repeat agrees)
-    let told_for = |u: usize, it: &crate::kinds::Item| -> String {
-        let h = (it.fact as u64).wrapping_mul(0x9E3779B97F4A7C15) ^ seed.wrapping_mul(0xD1B54A32D192ED03);
+    let told_with = |u: usize, it: &crate::kinds::Item, rate: f64, salt: u64| -> String {
+        let h = (it.fact as u64).wrapping_mul(0x9E3779B97F4A7C15) ^ seed.wrapping_mul(0xD1B54A32D192ED03) ^ salt;
         let mut r = crate::rng::Rng::new(h);
-        if wrong <= 0.0 || (r.uniform() as f64) >= wrong {
+        if rate <= 0.0 || (r.uniform() as f64) >= rate {
             return it.answer.clone();
         }
         match it.answer.parse::<i64>() {
@@ -563,10 +570,14 @@ pub fn write_adapt(dir: &str, seed: u64, per_kind: usize, wrong: f64, repeat: f6
             }
         }
     };
+    let told_for = |u: usize, it: &crate::kinds::Item| -> String { told_with(u, it, wrong, 0) };
     let mut stream = String::new();
     for (n, (u, it)) in items.iter().enumerate() {
         let told = told_for(*u, it);
-        if wrong > 0.0 {
+        if let Some(rate) = second {
+            let told2 = told_with(*u, it, rate, 0x5EC0_4D50_0000_0001);
+            stream.push_str(&format!("S{:05}\t{}\t{}\t{}\t{}\t{}\tF{}\t{}\n", n, role_name(&b.kinds[*u].role), b.names[*u], it.query, it.answer, told, it.fact, told2));
+        } else if wrong > 0.0 {
             stream.push_str(&format!("S{:05}\t{}\t{}\t{}\t{}\t{}\tF{}\n", n, role_name(&b.kinds[*u].role), b.names[*u], it.query, it.answer, told, it.fact));
         } else {
             stream.push_str(&format!("S{:05}\t{}\t{}\t{}\t{}\n", n, role_name(&b.kinds[*u].role), b.names[*u], it.query, it.answer));
@@ -579,7 +590,7 @@ pub fn write_adapt(dir: &str, seed: u64, per_kind: usize, wrong: f64, repeat: f6
 
 pub fn load_adapt(dir: &str) -> Result<Adapt, String> {
     let lessons = read_tsv(&format!("{dir}/lessons.tsv"), 5)?.into_iter().map(|r| (r[0].clone(), r[1].clone(), r[2].clone(), r[3].clone(), r[4].parse().unwrap_or(0))).collect();
-    let stream = read_tsv(&format!("{dir}/stream.tsv"), 7)?
+    let stream = read_tsv(&format!("{dir}/stream.tsv"), 8)?
         .into_iter()
         .map(|r| StreamItem {
             id: r[0].clone(),
@@ -589,6 +600,7 @@ pub fn load_adapt(dir: &str) -> Result<Adapt, String> {
             truth: r[4].clone(),
             told: if r[5].is_empty() { r[4].clone() } else { r[5].clone() },
             fact: if r[6].is_empty() { r[0].clone() } else { r[6].clone() },
+            told2: if r[7].is_empty() { None } else { Some(r[7].clone()) },
         })
         .collect();
     Ok(Adapt { lessons, stream })
@@ -706,7 +718,14 @@ impl Driven {
                 return Err(format!("{}: status must be fact, guess or refuse, not '{status}'", it.id));
             }
             out.push((it.id.clone(), status, q.get(3).unwrap_or(&"").to_string(), q.get(4).and_then(|c| c.parse().ok()).unwrap_or(0.5)));
-            self.send(format!("TOLD\t{}\t{}\t{}", it.id, it.told, it.unit))?;
+            match &it.told2 {
+                // Two sources: each line says who is speaking. Without a second source the line is exactly as it always was.
+                Some(second) => {
+                    self.send(format!("TOLD\t{}\t{}\t{}\tteacher", it.id, it.told, it.unit))?;
+                    self.send(format!("TOLD\t{}\t{}\t{}\tsecond", it.id, second, it.unit))?;
+                }
+                None => self.send(format!("TOLD\t{}\t{}\t{}", it.id, it.told, it.unit))?,
+            }
         }
         Ok(out)
     }
@@ -877,7 +896,7 @@ mod tests {
         Adapt {
             lessons: vec![],
             stream: (0..6)
-                .map(|i| StreamItem { id: format!("S{i}"), role: if i % 2 == 0 { "deceptive".into() } else { "hidden".into() }, unit: "u".into(), question: format!("q{i}"), truth: format!("t{i}"), told: format!("t{i}"), fact: format!("F{i}") })
+                .map(|i| StreamItem { id: format!("S{i}"), role: if i % 2 == 0 { "deceptive".into() } else { "hidden".into() }, unit: "u".into(), question: format!("q{i}"), truth: format!("t{i}"), told: format!("t{i}"), fact: format!("F{i}"), told2: None })
                 .collect(),
         }
     }
@@ -919,6 +938,26 @@ mod tests {
     }
 
     #[test]
+    fn a_second_source_leaves_the_first_one_exactly_as_it_was() {
+        let base = crate::platform::temp_dir().join(format!("adapt_second_{}", crate::platform::unique_id()));
+        let (one, two) = (base.join("one").to_string_lossy().to_string(), base.join("two").to_string_lossy().to_string());
+        write_adapt(&one, 1, 6, 0.3, 0.3).unwrap();
+        write_adapt_with(&two, 1, 6, 0.3, 0.3, Some(0.25)).unwrap();
+        let (a, b) = (load_adapt(&one).unwrap(), load_adapt(&two).unwrap());
+        assert_eq!(a.lessons, b.lessons);
+        assert_eq!(a.stream.len(), b.stream.len());
+        for (x, y) in a.stream.iter().zip(&b.stream) {
+            assert_eq!((&x.id, &x.question, &x.truth, &x.told, &x.fact), (&y.id, &y.question, &y.truth, &y.told, &y.fact));
+            assert!(x.told2.is_none() && y.told2.is_some());
+        }
+        // The second source is wrong about some facts, not all, and its mistakes are not the first source's.
+        let wrong = b.stream.iter().filter(|i| i.told2.as_deref() != Some(i.truth.as_str())).count();
+        assert!(wrong > 0 && wrong < b.stream.len() / 2, "{wrong} of {}", b.stream.len());
+        assert!(b.stream.iter().any(|i| i.told != i.truth && i.told2.as_deref() == Some(i.truth.as_str())));
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    #[test]
     fn the_transformer_on_the_adaptive_stream_answers_every_question_in_every_mode() {
         let dir = crate::platform::temp_dir().join(format!("adapt_tf_{}", crate::platform::unique_id()));
         let dir = dir.to_string_lossy().to_string();
@@ -941,7 +980,7 @@ mod tests {
 
     #[test]
     fn wrong_facts_are_split_into_believed_mistakes_and_damage_elsewhere() {
-        let item = |i: usize, fact: &str, truth: &str, told: &str| StreamItem { id: format!("S{i}"), role: "base".into(), unit: "u".into(), question: format!("q{i}"), truth: truth.into(), told: told.into(), fact: fact.into() };
+        let item = |i: usize, fact: &str, truth: &str, told: &str| StreamItem { id: format!("S{i}"), role: "base".into(), unit: "u".into(), question: format!("q{i}"), truth: truth.into(), told: told.into(), fact: fact.into(), told2: None };
         let a = Adapt {
             lessons: vec![],
             stream: vec![
@@ -1040,7 +1079,7 @@ mod tests {
             s.set_skeptical(true);
             s
         };
-        let item = |id: &str, q: &str, truth: &str, told: &str| StreamItem { id: id.into(), role: "base".into(), unit: "zork".into(), question: q.into(), truth: truth.into(), told: told.into(), fact: "F1".into() };
+        let item = |id: &str, q: &str, truth: &str, told: &str| StreamItem { id: id.into(), role: "base".into(), unit: "zork".into(), question: q.into(), truth: truth.into(), told: told.into(), fact: "F1".into(), told2: None };
         // the teacher is wrong about 8 + 9 and says 19 every time it comes up
         let adapt = Adapt {
             lessons: Vec::new(),
