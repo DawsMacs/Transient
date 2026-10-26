@@ -202,6 +202,30 @@ Baby refuses everything in this set, controls included (its own notes record it)
 
 **This set is now a development set too.**
 
+### After the third blind test: the cost of failing, and constants from the shape of the data
+
+The third blind test left two things to fix that were not about the hard kinds: it had cost three times the work of the earlier exams because almost nothing was explained, and the controls (kinds the starting operations can express) were mostly refused. Both changes below were made with the third set in view, so it is a development set from here on.
+
+**1. Effort scaled by what has paid off.** The profile was very concentrated: for a kind nothing explains, the closed-form stages cost 0.5 to 0.9 M evaluations and the recurrence stage 2.5 to 3.4 M (4.7 to 5.9 M for two arguments), about 80 % of the total, and the twentieth failing search cost as much as the first. Within the recurrence search, the small steps over one earlier value (where the recurrences that were found are found) cost about 0.6 M; the larger steps and the pairs of earlier values cost 1.0 to 1.5 M each. The dear stages are now given an allowance scaled by how often a recurrence has been found so far (twice the estimated chance of success, kept between a tenth and one and a half of the full allowance); the first stage always gets its full allowance. My first version scaled everything and lost recurrences on later kinds (the base-3 digit sum on one seed); scaling only the dear stages kept them. This is experience making failure cheaper, on a small scale: a system that keeps finding recurrences keeps searching for them, one that keeps failing stops spending.
+
+**2. Constants from the shape of the data.** A kind of one argument that changes its slope at only a few places (a clamp, a threshold, a wrap, a fold) announces its constants: the slopes, the places where the slope changes, the gaps between those places (the period), each straight piece's constant term, and the largest answer. Those numbers become extra constants for a search of up to seven nodes. A kind that changes its slope at about every step (arbitrary codes) has no shape and gets nothing, which is what keeps the stage from running on kinds that cannot have one.
+
+**Results** (the third set is now a development set; seeds 1 to 3):
+
+| | before | after |
+|---|---|---|
+| work on the third set | 83.8 / 87.5 / 89.1 M evaluations | 68.5 / 58.0 / 62.2 M |
+| work on the original exam | 32 to 38 M | 27 to 29 M, answers unchanged |
+| controls of the third set, seed 1 / 2 / 3 | 19.6 / 16.1 / 0 % facts | 19.6 / 33.9 / 39.3 % facts |
+| wrong facts, all four exam families | 0 | 0 |
+| sets A and B | | unchanged (the base-3 digit sum is still found on all three seeds) |
+
+By kind on the third set's controls: the fold `max(a mod 11, 3) - 3` is found as `max(0, mod(x, 11) - 3)` (seed 2, 14 of 14 right); the threshold `min(a, 13) + 3 * max(a - 13, 0)` is found as `max(x, 3x - 26)` (seed 3, 14 of 14); the clamp is found on all three seeds (12, 9 and 14 of 14 right). The scaled floor `(m * a + c) div d` is never found (three constants and a division), and the threshold and the fold are not found on the seeds where the shape is less regular. Wrong guesses on the controls (one or two per seed, all labeled guesses) come from the clamp's extrapolation and from spurious recurrences on the kinds that stay unexplained.
+
+**Energy on the third set** (measured before the shape stage; the stage adds about a million evaluations per eligible kind): Novice 12.7 to 13.1 J, baby 35 J (it refuses everything), so on a set where neither can explain much Novice is about 2.7 times cheaper, against about 55 times on the original exam. The cost of failing is the biggest cost left.
+
+**Not done.** The scaled floor, the hard kinds of all three sets, and a fourth blind set to test whether any of this (the recurrences, the shape constants) generalizes.
+
 ### Cost
 
 Counted evaluations (one operation applied at one point), seed 1; the work is almost all in teaching, because a told answer that a believed program already gives costs a few dozen evaluations. Every row has 0 wrong facts except where noted.
@@ -272,6 +296,7 @@ Seeds 2 and 3 have the same shape (batch 7: 2.47 M and 2.62 M evaluations agains
 | search sizes (7 nodes; 5 once words are on offer), 200,000 expressions | `learner.rs` | rung 6 (search effort proportional to what it can win) |
 | probe points around the region, to keep rivals apart | `learner.rs` | rung 6 |
 | a group is searched once it has four points; a table group is searched again when it has doubled | `learner.rs` | rung 6 |
+| effort on the dear recurrence stages = twice the estimated chance a recurrence is found, between a tenth and one and a half of 10,000 evaluations per bit of the table; the shape of a one-argument kind gives at most ten constants | `learner.rs` | rung 6 (effort proportional to what can be won) |
 | guesses outside the region: confidence = the kind's own record of right guesses, shrunk toward the shared record at that distance | `learner.rs` | a calibration learned per kind from more than counts; open |
 | the price of an exception is `log2(points + 1)` bits plus the bits of the odd answer; a repair may use programs up to 12 bits above the favorite | `learner.rs` | a teacher-reliability estimate learned per source (rung 4) |
 | a kind is named by the word that makes the answer a function of the numbers and covers the most questions | `learner.rs` | breaks with noisy lessons; open |
@@ -282,6 +307,9 @@ Seeds 2 and 3 have the same shape (batch 7: 2.47 M and 2.62 M evaluations agains
 | 100 possible answers when a source is wrong (`ANSWER_SPACE`); the lessons and the exam's main teacher count as one speaker | `learner.rs` | an estimate from the answers seen; open |
 
 ## Mistakes and dead ends (newest first)
+
+- **Scaling all the effort by the success rate lost recurrences.** My first version of the adaptive effort scaled every stage by how often recurrences had been found. The base-3 digit sum then disappeared on one seed (and something else on a seed of the first development set), because by the time a late kind was reached the estimate had fallen so far that even the cheap first stage was starved. The first stage always gets its full allowance now; the traces showed it costs about 0.6 M and that the larger steps and the pairs cost 1.0 to 1.5 M each.
+- **The constant 26.** The shape constants first missed the intercept of the second line segment (26 for `max(x, 3x - 26)`), so a unit test of a threshold failed even though the exam found the same shape by luck; each straight piece's constant term is now one of the extracted numbers.
 
 - **Extending for the second set, in the order the mistakes came.** (1) A step over two earlier values first found nothing for Fibonacci because the eight cheapest reductions are degenerate (the constants 0 and 1, `min(x, 1)`, `x mod 2`): reductions that collapse the points are base cases, not steps, and are now excluded from pairs. (2) Fibonacci's rule does not hold at `x = 1`, so an exact fit failed on the boundary row; a step may now miss a point or two, but allowing that for every candidate tripled the work, so it is allowed only for the cheapest few. (3) The cost model compared a rule with a table that is cheap because the answers are small, and so rejected a correct rule that the table could not extend; the credit for the questions beyond the table fixed that, at the risk of accepting spurious fits, which a degenerate pair (`min(x, s)` that never used `r`) showed at once as a wrong guess: a two-value step must use both values. (4) My first effort cap was shared by all stages, so the first stage spent it and the pairs were never tried. (5) A trace line subtracted unsigned numbers and printed 7.2e16 bits.
 

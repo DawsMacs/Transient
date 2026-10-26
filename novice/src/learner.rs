@@ -124,12 +124,16 @@ pub struct Novice {
     reliability: BTreeMap<String, (u32, u32)>,
     /// How often answers worked out by a chain of reductions have been right, over all kinds.
     chain_record: (u32, u32),
+    /// How often the search for a recurrence has found one.
+    recurrence_paid: Paid,
+    /// The same for the search with the numbers a kind's shape announces.
+    shape_paid: Paid,
     pub stats: Stats,
 }
 
 impl Default for Novice {
     fn default() -> Self {
-        Novice { lessons: Vec::new(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], reliability: BTreeMap::new(), chain_record: (0, 0), stats: Stats::default() }
+        Novice { lessons: Vec::new(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], reliability: BTreeMap::new(), chain_record: (0, 0), recurrence_paid: Paid::default(), shape_paid: Paid::default(), stats: Stats::default() }
     }
 }
 
@@ -169,6 +173,22 @@ fn probes(lo: &[i64], hi: &[i64]) -> Vec<Vec<i64>> {
     out
 }
 
+/// How often a kind of search has found something, over the kinds it has been tried on. It sets how much effort the next kind is given: a search
+/// that has paid off keeps its full allowance, one that keeps failing is given less and less (never none), so that experience makes failure cheaper.
+#[derive(Clone, Copy, Debug, Default)]
+struct Paid {
+    tried: u32,
+    won: u32,
+}
+
+impl Paid {
+    /// The share of the full allowance, in thousandths: twice the estimated chance of success, kept between a tenth and one and a half.
+    fn share(&self) -> u64 {
+        let chance = 1000 * (u64::from(self.won) + 1) / (u64::from(self.tried) + 2);
+        (2 * chance).clamp(100, 1500)
+    }
+}
+
 /// Bits to write down a kind's answers, one after the other, with a code that learns how often each answer comes: the first time an answer
 /// appears is dear, a repeat is cheap, so answers that are concentrated in a few values cost little. This is what the answers cost if the kind
 /// has no rule; a rule must beat it. (`ANSWER_SPACE` is the number of different answers the code allows for before it has seen any.)
@@ -182,6 +202,53 @@ fn table_cost(answers: &[i64]) -> Cost {
         *seen.entry(*a).or_insert(0) += 1;
     }
     cost
+}
+
+/// The numbers that the shape of a one-argument kind announces, if it has a regular shape: the slopes it climbs with, where the slope changes (a
+/// clamp, a threshold, a wrap) and the gaps between those places (a period), and its largest answer. Data that changes its slope at about every
+/// step (arbitrary codes) has no shape and gives nothing.
+fn shape_constants(inputs: &[Vec<i64>], target: &[i64]) -> Option<Vec<i64>> {
+    let mut pts: Vec<(i64, i64)> = inputs.iter().map(|p| p[0]).zip(target.iter().copied()).collect();
+    pts.sort_unstable();
+    let slopes: Vec<(i64, i64)> = pts.windows(2).filter(|w| w[1].0 == w[0].0 + 1).map(|w| (w[0].0, w[1].1 - w[0].1)).collect();
+    if slopes.len() < 6 {
+        return None;
+    }
+    let changes: Vec<i64> = slopes.windows(2).filter(|w| w[1].0 == w[0].0 + 1 && w[1].1 != w[0].1).map(|w| w[1].0).collect();
+    if changes.len() * 3 > slopes.len() {
+        return None;
+    }
+    let mut found: std::collections::BTreeSet<i64> = Default::default();
+    for &(_, d) in &slopes {
+        found.insert(d.abs());
+    }
+    for (i, &x) in changes.iter().enumerate() {
+        found.insert(x);
+        found.insert(x + 1);
+        if i > 0 {
+            found.insert(x - changes[i - 1]);
+        }
+    }
+    // Each straight piece has a constant term (where its line would cross the axis), which a rule written with those pieces needs.
+    let at: std::collections::BTreeMap<i64, i64> = pts.iter().copied().collect();
+    let mut start = 0;
+    while start < slopes.len() {
+        let mut end = start;
+        while end + 1 < slopes.len() && slopes[end + 1].0 == slopes[end].0 + 1 && slopes[end + 1].1 == slopes[start].1 {
+            end += 1;
+        }
+        if end > start {
+            let (x, d) = slopes[start];
+            if let Some(&t) = at.get(&x) {
+                found.insert((t - d * x).abs());
+            }
+        }
+        start = end + 1;
+    }
+    let top = target.iter().copied().max().unwrap_or(0);
+    found.extend([top, top + 1]);
+    let out: Vec<i64> = found.into_iter().filter(|c| (2..=64).contains(c) && !BASE_CONSTS.contains(c)).take(10).collect();
+    (!out.is_empty()).then_some(out)
 }
 
 /// Whether the expression mentions every variable from `from` up to (not including) `to`: for a step, each of the values at the nearer points.
@@ -330,7 +397,7 @@ impl Novice {
         }
         // The first blind search uses the starting operations only: every word on the alphabet makes it dearer for every kind that comes after,
         // whether or not the kind has anything to do with the word. Words are used by composition and by editing a known program.
-        if self.search_group(g, &BASE_CONSTS, &[], 7, "plain") || self.search_data_constants(g) || self.search_modulo(g) {
+        if self.search_group(g, &BASE_CONSTS, &[], 7, "plain") || self.search_data_constants(g) || self.search_modulo(g) || self.search_shape(g) {
             return;
         }
     }
@@ -557,9 +624,13 @@ impl Novice {
 
         // Fit the step for a choice of one or two reductions.
         let started = std::cell::Cell::new(self.stats.evaluations);
-        let budget = (bits::as_bits(whole_table) as u64).max(1) * EFFORT_PER_BIT;
+        // The first stage (small steps, one earlier value) is where recurrences are almost always found and it is cheap: it gets its full allowance.
+        // The dearer stages (larger steps, two earlier values) get an allowance scaled by how often a recurrence has been found so far.
+        let full = (bits::as_bits(whole_table) as u64).max(1) * EFFORT_PER_BIT;
+        let scaled = full * self.recurrence_paid.share() / 1000;
+        let budget_now = std::cell::Cell::new(full);
         let fit = |this: &mut Self, chosen: &[&Reduction], max_size: usize, slack_cap: usize| -> Option<(Cost, Expr)> {
-            if this.stats.evaluations - started.get() > budget {
+            if this.stats.evaluations - started.get() > budget_now.get() {
                 return None;
             }
             let (mut rows, mut ts, mut row_of) = (Vec::new(), Vec::new(), Vec::new());
@@ -598,12 +669,17 @@ impl Novice {
         let mut accepted: Vec<(Cost, Expr)> = Vec::new();
         for (max_size, how_many) in [(5usize, 24usize), (7, 6)] {
             started.set(self.stats.evaluations);
+            budget_now.set(if max_size == 5 { full } else { scaled });
+            let stage_start = self.stats.evaluations;
             let mut candidates: Vec<(Cost, Expr)> = Vec::new();
             for (i, red) in reductions.iter().take(how_many).enumerate() {
                 // Base cases at the start are allowed only for the cheapest few: that search costs several times an exact one.
                 if let Some(c) = fit(self, &[red], max_size, if i < 6 { 1 } else { 0 }) {
                     candidates.push(c);
                 }
+            }
+            if std::env::var_os("NOVICE_TRACE").is_some() {
+                eprintln!("stage {:<12} singles size {max_size}: {} evaluations, {} candidates", self.groups[g].key, self.stats.evaluations - stage_start, candidates.len());
             }
             accepted = self.accept_recurrences(g, candidates, whole_table, &known, arity);
             if !accepted.is_empty() {
@@ -620,6 +696,8 @@ impl Novice {
             }
             let mut candidates: Vec<(Cost, Expr)> = Vec::new();
             started.set(self.stats.evaluations);
+            budget_now.set(scaled);
+            let pairs_start = self.stats.evaluations;
             let mut tried = 0;
             for i in 0..few.len() {
                 for j in i + 1..few.len() {
@@ -629,11 +707,16 @@ impl Novice {
                     tried += 1;
                 }
             }
+            if std::env::var_os("NOVICE_TRACE").is_some() {
+                eprintln!("stage {:<12} pairs: {} evaluations, {} candidates", self.groups[g].key, self.stats.evaluations - pairs_start, candidates.len());
+            }
             accepted = self.accept_recurrences(g, candidates, whole_table, &known, arity);
         }
         // They are rivals: each is true of the table, and which one reaches a point depends on the point.
         let mut accepted = accepted.into_iter();
+        self.recurrence_paid.tried += 1;
         let Some((cost, whole)) = accepted.next() else { return false };
+        self.recurrence_paid.won += 1;
         let rivals: Vec<Expr> = accepted.map(|a| a.1).collect();
         if std::env::var_os("NOVICE_TRACE").is_some() {
             eprintln!("recurrence {:<14} points {:>3} -> {whole}   saves {:.1} bits ({:.1} against a table of {:.1})", self.groups[g].key, inputs.len(), bits::as_bits(whole_table) - bits::as_bits(cost), bits::as_bits(cost), bits::as_bits(whole_table));
@@ -782,6 +865,23 @@ impl Novice {
             eprintln!("    held out over four rounds: reached {reached}, right {right}");
         }
         reached >= 3 && right == reached
+    }
+
+    /// A kind with a regular shape (a few places where its slope changes): search with the numbers that shape announces as constants.
+    fn search_shape(&mut self, g: usize) -> bool {
+        if self.groups[g].arity != 1 {
+            return false;
+        }
+        let Some((inputs, target)) = self.inputs_and_targets(g) else { return false };
+        let Some(salient) = shape_constants(&inputs, &target) else { return false };
+        let mut consts: Vec<i64> = BASE_CONSTS.to_vec();
+        consts.extend(salient);
+        consts.sort_unstable();
+        consts.dedup();
+        self.shape_paid.tried += 1;
+        let won = self.search_group(g, &consts, &[], 7, "shape");
+        self.shape_paid.won += u32::from(won);
+        won
     }
 
     /// A kind whose answers all lie below some number may be a rule reduced modulo that number: `(k * x + c) mod m`. The modulus is nearly given
@@ -1736,5 +1836,48 @@ mod recurrence_tests {
         n.ready();
         let shown = n.groups[0].fit.as_ref().map(|f| f.found[0].expr.to_string()).unwrap_or_default();
         assert!(!shown.contains(", s = f("), "{shown}");
+    }
+
+    #[test]
+    fn a_threshold_rule_with_constants_out_of_reach_is_found_from_the_shape_of_the_data() {
+        // min(a, 13) + 3 * max(a - 13, 0): a knee at 13 and a slope of 3 after it; two constants that a short fixed list does not have.
+        let rule = |x: i64| x.min(13) + 3 * (x - 13).max(0);
+        let mut n = Novice::default();
+        teach_unary(&mut n, "bralmosido", rule, (0..=23).filter(|x| *x != 6 && *x != 17));
+        n.ready();
+        assert_eq!(n.kinds(), (1, 1), "the shape of the data should announce the knee and the slope");
+        // Inside the range, never taught: a fact. Beyond it: the same rule, as a guess or a fact, but the right value.
+        assert_eq!(fact(&n.ask("what is bralmosido 17")), Some(rule(17).to_string().as_str()));
+        match n.ask("what is bralmosido 29") {
+            Answer::Guess(a, _) | Answer::Fact(a) => assert_eq!(a, rule(29).to_string()),
+            Answer::Refuse => panic!("refused a point beyond the range of a closed-form rule"),
+        }
+    }
+
+    #[test]
+    fn a_fold_is_found_from_its_period_and_its_plateau() {
+        let rule = |x: i64| (x % 11).max(3) - 3;
+        let mut n = Novice::default();
+        teach_unary(&mut n, "folmursido", rule, (0..=23).filter(|x| *x != 5 && *x != 15));
+        n.ready();
+        assert_eq!(n.kinds(), (1, 1));
+        assert_eq!(fact(&n.ask("what is folmursido 15")), Some(rule(15).to_string().as_str()));
+    }
+
+    #[test]
+    fn arbitrary_codes_have_no_shape_to_search_with() {
+        let mut seed = 99u64;
+        let codes: Vec<i64> = (0..20)
+            .map(|_| {
+                seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                ((seed >> 33) % 100) as i64
+            })
+            .collect();
+        let inputs: Vec<Vec<i64>> = (0..20).map(|x| vec![x]).collect();
+        assert!(shape_constants(&inputs, &codes).is_none());
+        // A line with a knee does.
+        let target: Vec<i64> = (0..20).map(|x: i64| x.min(9) + 2 * (x - 9).max(0)).collect();
+        let found = shape_constants(&inputs, &target).expect("a knee is a shape");
+        assert!(found.contains(&9) || found.contains(&10), "{found:?}");
     }
 }
