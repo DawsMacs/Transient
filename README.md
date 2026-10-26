@@ -10,8 +10,8 @@
 </p>
 
 **Matter is an experimental learning system written in Rust, built to run on ordinary consumer hardware.** It explores
-*adaptive learning*: a system that keeps learning while it is used, decides for itself *how* to learn each kind of thing, and is
-measured by what it costs (operations, memory, estimated joules) rather than by parameter count alone.
+*recursive meta-adaptive learning*, an ambition and not a claim: a system that keeps learning while it is used, decides for itself
+*how* to learn each kind of thing, and in the long run revises that process itself. It is measured by what it costs (operations, memory, estimated joules) rather than by parameter count alone.
 
 The current artifact is `baby/`: about 18k lines of Rust, **no dependencies**, builds offline, 153 tests. It is a research prototype
 evaluated mostly on a synthetic curriculum, with a first look at real word problems (SVAMP, ASDiv) and an entry exam that any

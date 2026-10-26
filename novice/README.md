@@ -10,7 +10,7 @@ Labels used below: **Hypothesis** (believed, not shown), **Measured** (a number 
 
 Two things, and a bet that they help each other.
 
-1. **Adaptive Learning that is genuine.** baby adapts, but inside a design that was written for it: a menu of five mechanisms, an expression language of seven pieces, and thresholds chosen by hand. The test for "genuine" is a capability that no line of code names in advance, shown on a task the system was not built for. Novice is built so that its own language can change when the old one fails.
+1. **Recursive meta-adaptive learning that is genuine.** baby adapts, but inside a design that was written for it: a menu of five mechanisms, an expression language of seven pieces, and thresholds chosen by hand. The test for "genuine" is a capability that no line of code names in advance, shown on a task the system was not built for. Novice is built so that its own language can change when the old one fails.
 2. **Efficiency from the start.** Every milestone has a joule budget and a measurement. baby answers a question for about 59 µJ but pays about 36 mJ to absorb one told answer (about 600 times more), and nothing it learns makes later answers cheaper. **Hypothesis (the bet):** adaptation can make a system cheaper to run, not dearer, because learning is compression and a shorter explanation costs fewer operations to evaluate. If that holds, the cost of answering falls as the system gains experience, and the cost of learning pays itself back.
 
 Where the two truly conflict, adaptation wins and the cost is written down. "Frontier" is an ambition, not a claim: nothing here is near it.

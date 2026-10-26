@@ -2,9 +2,9 @@
 // Copyright (C) 2026 DawsMacs
 //! A baby that chooses what to learn.
 //!
-//! Adaptive Learning is not only learning from experience but steering it. Here the baby overhears a pile of questions (it never
-//! hears the answers) and has a teacher who will tell it the answer to a question *if it asks*. Every answer costs the teacher an
-//! effort, so the question is how few it needs. Three ways of deciding what to ask:
+//! Recursive meta-adaptive learning is not only learning from experience but steering it. Here the baby overhears a pile of questions
+//! (it never hears the answers) and has a teacher who will tell it the answer to a question *if it asks*. Every answer costs the
+//! teacher an effort, so the question is how few it needs. Three ways of deciding what to ask:
 //!
 //!   random   ask about questions in a random order, whether or not it could already answer them
 //!   stream   questions come in a random order; it asks only when it turns out to be wrong (a teacher correcting mistakes)

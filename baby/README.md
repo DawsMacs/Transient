@@ -3,6 +3,8 @@
 > **Status (2026-10-25): frozen as the reference.** baby stays maintained (bug fixes, platform upkeep, the entry exam and the goldens) and is the
 > measuring stick for what comes next, but it gets no new capability. The main line of work is `novice/`, rebuilt from scratch.
 
+*Naming note (2026-10-26): entries below that say "Adaptive Learning", and the quotes, use the project's earlier name for the same direction, now called recursive meta-adaptive learning: an ambition, not a claim.*
+
 Matter's first working unit, written from scratch in Rust with **zero dependencies**. It started on 2026-10-15 as a tiny network
 that read a short query and said one word, and has become something else: a baby that is **taught units of lessons, works out for
 itself how to learn each one, answers by the way that worked, says how it knew, and refuses when it should**. The first network is
@@ -63,7 +65,7 @@ cargo test --release --offline       # 150 tests, including numerical checks of 
 | clean stream: facts right | 64.2 / 65.2 / 64.4 % | 62.1 / 62.6 / 62.0 % |
 | clean stream, the rule-changing (deceptive) kinds, right in each third | 90.6 -> 93.8 -> 100 (seed 1) | **71.9 -> 68.8 -> 50.0** (seed 1) |
 
-Elsewhere stayed 0 everywhere. But the price was exactly what Adaptive Learning is for: a rule that **really** changes (a sum that saturates at 30) is told once per question in a stream, so a held answer was never repeated and the baby never learned the new rule (labeled guesses wrong 0.5 % -> 4 %). I had first made this the default, saw that column, and reverted before committing anything. *A policy that wins on the case I built the test for (a wrong teacher) must be checked on the case the system exists for (a teacher who is right and the world changed).*
+Elsewhere stayed 0 everywhere. But the price was exactly what recursive meta-adaptive learning is for: a rule that **really** changes (a sum that saturates at 30) is told once per question in a stream, so a held answer was never repeated and the baby never learned the new rule (labeled guesses wrong 0.5 % -> 4 %). I had first made this the default, saw that column, and reverted before committing anything. *A policy that wins on the case I built the test for (a wrong teacher) must be checked on the case the system exists for (a teacher who is right and the world changed).*
 
 **Step 2: tell a rule that changed from isolated slips.** Isolated wrong answers do not cohere; a real change does. When a unit holds three or more *different* held answers (the one just told included), the baby asks whether **one exact program fits all of them together with every lesson the unit has**, says every held answer itself, and agrees with the law it has now everywhere its lessons vouch for it (`School::held_answers_cohere`, `COHERE_HELD = 3`). If so, all of them are believed together (the earlier ones are learned too); the repair guards that already existed (`rebuilt_agrees_with_old`, the veto) apply as always after that. Otherwise each stays held.
 
@@ -200,7 +202,7 @@ Refusing below 0.9 does not change the picture: the frozen model still states 33
 
 **What this says, and does not say.**
 - **The transformer does not adapt here.** Fine-tuning on a told answer never improved it over being frozen, and mostly hurt it (the forgetting the earlier comparison found at 20 new facts shows up again as a loss on the stream's other questions). Rule-changing kinds are exactly what a classifier over answer words cannot learn from one example at a time: it can only emit answers it has been trained on, so a number it was never taught is unreachable until told.
-- **The baby's adapting is the expensive side.** Its stream costs 174-183 J against the transformer's 0.07-27 J; per told answer that is 0.22 J against 1.6-34 mJ, **6.5x to 140x more**. Counting teaching too, the baby's whole adaptive run is 213-225 J and the frozen transformer's 56-98 J (the transformer pays almost all of that once, up front). In right answers per joule (the baby counting its right labeled guesses, which the transformer has none of) the two are in the same range, baby 3.1-3.2 against transformer 1.6-2.7, but the transformer's right answers come with 80 % wrong facts and the baby's with none. **This is the measured bar for Novice's "genuine AL": the same honesty and learning at a fraction of 0.22 J per told answer.**
+- **The baby's adapting is the expensive side.** Its stream costs 174-183 J against the transformer's 0.07-27 J; per told answer that is 0.22 J against 1.6-34 mJ, **6.5x to 140x more**. Counting teaching too, the baby's whole adaptive run is 213-225 J and the frozen transformer's 56-98 J (the transformer pays almost all of that once, up front). In right answers per joule (the baby counting its right labeled guesses, which the transformer has none of) the two are in the same range, baby 3.1-3.2 against transformer 1.6-2.7, but the transformer's right answers come with 80 % wrong facts and the baby's with none. **This is the measured bar for Novice's "genuine recursive meta-adaptive learning": the same honesty and learning at a fraction of 0.22 J per told answer.**
 - Caveats: joules are upper bounds on a busy machine (other processes up to ~50 % of the busy time); the transformer here is one small untuned classifier (the update settings tried were few: 1 or 3 passes, 0 / 16 / 64 replayed lessons, lr fixed), a bigger or better-tuned one, or a model that can generate numbers rather than choose among taught answers, was not run; the stream is the invention battery's kinds (a third of them unexplainable or regime-changing by design), so absolute accuracies are low for everyone but the baby; only the clean stream was run (the wrong-teacher tier on the transformer is untried).
 
 **A tooling slip worth recording.** My first tests for the new commands took 13 and 36 s each: the real meter samples the machine's idle draw for several seconds before and after every run, and RAPL is readable here, so any test that passes `Meter::new()` pays that. Tests now use `Meter::off()` (suite back to ~20 s). The first version of the report also printed "J J" and rounded 0.0016 J to "0.00 J".
@@ -801,7 +803,7 @@ Several runs hit my own timeouts because each seed teaches whole schools (about 
 
 Until now the baby learned only what it was handed. When the lessons left two explanations equally good (digit sum taught on 0-15: `tens + units` and `(first + tens) mod 10` agree on every taught number and part ways at 19) it declined the whole unit.
 It now keeps the small set of smallest explanations that fit, **answers wherever they all agree, declines where they differ, and can say which number would settle it**. `baby wonder` prints those questions; `baby learn "<q>" <a> --unit NAME --wondered` answers one
-and makes it think again at once. This is the first place the baby chooses *what to look at*, which is the part of Adaptive Learning that had no implementation.
+and makes it think again at once. This is the first place the baby chooses *what to look at*, which is the part of recursive meta-adaptive learning that had no implementation.
 
 **What was built.** `ProgramRule::alts` (the other smallest fits; saved with the school), `predict` that declines where they disagree, `ProgramRule::ambiguity` (the numbers on which the explanations give the most different answers, then the smallest), `School::wonder`,
 `learn_wondered`, and `reconsider_open` (below). The old rule, "a program is trusted only if its smallest fit is unique", is now "trusted where its smallest fits agree"; a unit taught only subtraction with a >= b is the model case:
@@ -1094,7 +1096,7 @@ of general language would compress to, and facts (the part that grows with the w
 
 ## Lessons that fit nothing: the pen (2026-10-20)
 
-Pushing on Adaptive Learning: `baby learn "query" answer` no longer needs the unit named. If the baby recognizes a kind of lesson it joins that unit; if not, the lesson waits in a **pen**.
+Pushing on recursive meta-adaptive learning: `baby learn "query" answer` no longer needs the unit named. If the baby recognizes a kind of lesson it joins that unit; if not, the lesson waits in a **pen**.
 When enough gather (at least six lessons of at least five different facts) the same discovery used on a heap of unlabeled lessons looks at the pen, and a group that follows one rule
 opens a unit by itself, named after the words that were new to it. A real session, nothing named:
 
@@ -1464,7 +1466,7 @@ What it says:
    four seeds it equals exactly the share of held-out additions whose swapped twin ("two plus three" after "three plus two") was in
    training, with subtraction at 0%. The bigram reader, which can tell the order, got 0%: it memorized pair patterns. At this size
    and with ~100 examples, **none of the readers learns the addition rule**. That gap (memorizing versus abstracting) is the central
-   open problem for Adaptive Learning.
+   open problem for recursive meta-adaptive learning.
 4. **The price is honesty about the unknown.** The old reader said "not sure" (confidence under 0.5) to "capital of atlantis". The
    bag answers *paris*, confidently, and also "what color is a zebra" -> green, "opposite of purple" -> slow. It generalizes by
    association (a lone "banana" -> yellow is a nice one), and the same association makes it guess boldly when it should abstain.
@@ -1561,7 +1563,7 @@ they see. The letters reader generalizes to spellings it never met, and improves
 
 ## A baby that chooses what to learn (2026-10-19)
 
-Adaptive Learning is not only learning from experience but steering it. `baby curious`: the baby overhears 429 questions (143 facts,
+Recursive meta-adaptive learning is not only learning from experience but steering it. `baby curious`: the baby overhears 429 questions (143 facts,
 each asked three ways) but not their answers, and a teacher will tell it an answer *if it asks*. How few answers does it need?
 
 - `random`: asks about everything in random order.
@@ -1733,9 +1735,9 @@ The road there before `program`, because the dead ends are the useful part:
 - **Misrouting (5%):** "zero plus six" went to `after`, because "six" happened to occur only in that unit's lessons. Matching by
   **shape** (every number is just a number) fixed it: 100% routing.
 
-## Where the baby stands as Adaptive Learning (2026-10-19)
+## Where the baby stands as recursive meta-adaptive learning (2026-10-19)
 
-| AL ingredient | in the baby today |
+| ingredient | in the baby today |
 |---|---|
 | learns from interaction, not a fixed dataset | yes, in small: `teach`, `life`, `curious` |
 | internals change in real time | yes: the store instantly; the weights during `sleep` |
