@@ -56,7 +56,7 @@ Each rung has the test that would show it works, and a joule line to fill in.
 | 2 | finds programs from a minimal start | right on questions it never saw, for kinds a short program can say; routing found without the labels | done on the tidy exam (seeds 1 to 3); joules open |
 | 3 | rival explanations scored in bits | on the 14 streams of baby's wrong-teacher work: as few believed mistakes as baby's, with **no tuned count** | done on the tidy exam: repeats on par with baby's, 0 elsewhere, at a cost in coverage (see above); the count of three falls out of the costs |
 | 4 | sources | with a second, right source added, repeats fall in kinds that have no law to check against | done on the tidy exam: 0 wrong facts of any kind on all streams with one reliable and one unreliable source; with one source, repeats fall to 0 by stating the unreliable source's answers as guesses |
-| 5 | the language grows | a kind that needs an operation Novice does not start with, from worlds written apart from the learner, solved by a primitive it made | development set: 5 to 7 of 18 hard kinds per seed acquired; blind set: 1 of 16 on two seeds, 0 on the third, 0 wrong facts either way (see "The blind test of rung 5"); after extending the mechanism with the second set in view: digit sum on 3 of 3 seeds; a third blind set is open |
+| 5 | the language grows | a kind that needs an operation Novice does not start with, from worlds written apart from the learner, solved by a primitive it made | development set: 5 to 7 of 18 hard kinds per seed acquired; blind set: 1 of 16 on two seeds, 0 on the third, 0 wrong facts either way (see "The blind test of rung 5"); after extending the mechanism with the second set in view: digit sum on 3 of 3 seeds; the third blind set: 0 of 15 hard kinds on every seed, controls mostly refused, 0 wrong facts (see "The third blind test") |
 | 6 | answers get cheaper | joules per answer on a fixed set of questions fall as it learns, wrong facts stay 0, and the break-even point (learning joules spent against answer joules saved) is reported | first steps: learning cost 25-fold lower than the first learner, composition 116 times cheaper than enumeration, joules measured once; the curriculum measurement shows capability from experience but not yet a falling cost |
 
 Rungs 0 to 4 are the first milestone (the tidy exam, with a source tag). Rung 5 is the test of "genuine"; the worlds for it are written by a process that the learner's author does not read until the review, so the learner cannot be tuned to them. Rung 6 is the bet itself.
@@ -179,6 +179,28 @@ The blind test showed two gaps that were not about the hard kinds at all, and on
 **Still not acquired:** Fibonacci mod `m` on the exam's tables (it is found on a table of 22 points, as a test shows, but on the exam's 16 points the re-fit during the hold-out comes out as a near-twin, `r + max(s, 1)`, so the evidence is ambiguous and it is correctly not accepted); the binomial coefficient (its reductions `(x - 1, y - 1)` are unusable as soon as `y = 0` is in the table); Collatz (a conditional); Josephus (a nine-node step); totient, distinct prime factors, the next prime, partitions, Catalan, and what depends on them; bitwise xor, and, or; the table lookup; the bit mirror.
 
 **This is a development result.** Both sets of hard kinds have now been read by the author of the mechanism, so neither says how it does on kinds nobody has shaped it for. A third set, written without reading Novice's code and run once before anyone reads it, is the test that counts again.
+
+### The third blind test (a third set, run once)
+
+After the mechanism was extended with the second set in view, a third set of kinds was written by a separate session that had not read Novice's code (`tools/hidden_worlds_c.py`, pull request #36): 11 kinds that need a new operation, 5 composed on those, 4 controls the starting operations can express, 3 arbitrary codes. Novice at the commit frozen beforehand (`9c83ce8`; the `novice/` directory on `main` is identical to it) was run **once per seed on seeds 1 to 3, and the numbers were written down before the kinds were read.**
+
+| seed | wrong facts | wrong guesses | hard questions answered right (248 each seed) | controls (56): facts / right guesses / wrong guesses / refused | kinds explained by a program (of 23) | evaluations |
+|---|---|---|---|---|---|---|
+| 1 | 0 | 2 (0.6 %) | **0** | 19.6 % / 1.8 % / 3.6 % / 75.0 % | 3 | 83.8 M |
+| 2 | 0 | 1 (0.3 %) | **0** | 16.1 % / 0 % / 1.8 % / 82.1 % | 1 | 87.5 M |
+| 3 | 0 | 1 (0.3 %) | **0** | 0 % / 0 % / 1.8 % / 98.2 % | 0 | 89.1 M |
+
+Baby refuses everything in this set, controls included (its own notes record it).
+
+**What this says.** The honesty of facts held (0 wrong facts on all three seeds). Nothing else did well:
+- **No hard kind was acquired on any seed**: 0 of 15, against 5 to 7 of 18 on the set the mechanism was built on and 1 to 2 of 16 on the second. The acquisitions of the earlier sets were the kinds closest to the ones the mechanism was shaped by (counting bits, Euclid's rule, digit sums in a base). The kinds here need a conditional (hail, the game), a loop with a state over digits (longest run, the base with the first palindrome, the commonest digit), multiplicative structure (sum of divisors, the order of 2), or a longer step (derangements, Stirling numbers, tribonacci mod `m`), and none of those is within reach.
+- **The controls, which the starting operations can express, were mostly refused.** The controls here are a clamp, a threshold, a fold and a scaled floor, with constants from 3 to 14 inside expressions of five to seven nodes. Novice found the clamp on two seeds (`min(x - min(x, 9), 12)` for "clamp to 9..21, minus 9") and nothing on the rest. This is a gap in the closed-form search, not in rung 5: it reaches constants only through a short fixed list, the numbers in the data in a five-node search, and the modular case.
+- **The wrong guesses came from spurious recurrences on controls** (a two-value recurrence for the threshold, a one-value one for the scaled floor), which the wider hypothesis class of the extension accepted by coincidence. They are labeled guesses, not facts, but they are a cost of the extension that the sets I had read did not show.
+- **The work was about 85 M evaluations**, three times that of the earlier exams: with 23 kinds and almost none explained, every kind pays for the whole chain of failed searches.
+
+**What I take from three sets.** The recurrence mechanism acquires a narrow family of rules reliably and honestly, and it does not generalize to kinds that need a conditional, a loop with a state, or a long step. The development results (5 to 7 of 18, then the digit sum on three seeds) overstated what it does on kinds nobody had shaped it for; the blind results (1 of 16, then 0 of 15) are the numbers to quote. The next work that would matter most is not another recurrence trick but the constants in the closed-form search (it blocks controls that baby cannot do either) and the cost of failing.
+
+**This set is now a development set too.**
 
 ### Cost
 
