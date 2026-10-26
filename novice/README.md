@@ -67,14 +67,14 @@ Measured on the adaptive exam (`baby exam adapt-write DIR --seed S`: 45 kinds, 3
 
 | seed | system | wrong facts | facts right | wrong guesses | refused | right, 1st third → last third | wall time |
 |---|---|---|---|---|---|---|---|
-| 1 | Novice | **0** | 67.7 % | 0.6 % | 11.2 % | 87.1 → 88.5 % | 0.33 s |
+| 1 | Novice | **0** | 67.0 % | 1.1 % | 11.2 % | 86.3 → 88.2 % | 0.35 s |
 | 1 | baby | 0 | 64.2 % | 1.5 % | 11.4 % | 85.2 → 87.8 % | 15.6 s |
-| 2 | Novice | **0** | 68.1 % | 0.8 % | 11.2 % | 85.9 → 91.2 % | 0.40 s |
+| 2 | Novice | **0** | 67.6 % | 1.3 % | 11.2 % | 84.4 → 91.2 % | 0.35 s |
 | 2 | baby | 0 | 64.8 % | 1.5 % | 11.2 % | 84.4 → 90.8 % | 17.5 s |
-| 3 | Novice | **0** | 68.6 % | 0.6 % | 11.2 % | 87.8 → 90.1 % | 0.40 s |
+| 3 | Novice | **0** | 67.6 % | 1.1 % | 11.2 % | 86.7 → 90.1 % | 0.35 s |
 | 3 | baby | 0 | 64.4 % | 1.5 % | 11.2 % | 86.7 → 89.7 % | 16.9 s |
 
-The kinds that change their rule outside what was taught (a sum that saturates at 30, one that wraps at 40) climb from 84.0-90.6 % right in the first third to 100 % by the last in Novice (seeds 1 to 3), and from 68.0-78.1 % to 92.3-97.4 % in baby. The 11.2 % refused are the same in both: the six kinds that have no rule it can say (a prime test, an exclusive-or, four arbitrary codes), which cannot be answered before they are told.
+The kinds that change their rule outside what was taught (a sum that saturates at 30, one that wraps at 40) climb from 72.0-84.4 % right in the first third to 96.2-100 % in the last in Novice (seeds 1 to 3), and from 68.0-78.1 % to 92.3-97.4 % in baby. The 11.2 % refused are the same in both: the six kinds that have no rule it can say (a prime test, an exclusive-or, four arbitrary codes), which cannot be answered before they are told.
 
 **What it found, with no labels and no menu of mechanisms** (seed 1): `x + y`, `x - y`, `x + 1`, `div(x, 2)`, `max(x, y) - min(x, y)`, `x * 3`, `div(x, 10) + mod(x, 10)`, `mod(x + y, 40)` (the 40 is the number a refuted `x + y` got wrong: it said 45 where the truth was 5), `min(x + y, 3 * 10)`, and, built on words it had earned, `sum_of_squares(x, y) + 1`, `div(sum_of_squares(x, y), 2)` and `average(x, y) * average(x, y)`. Two kinds became words (sum of squares, average); the other 37 explained kinds did not.
 
