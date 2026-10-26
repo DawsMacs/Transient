@@ -2,7 +2,7 @@
 
 The main line of work in Matter, **rebuilt from scratch**. [`baby`](../baby/README.md) is frozen as the reference and the measuring stick; Novice shares no code with it. What carries over is the [entry exam](../baby/README.md) (a plain-file and line-protocol judge that any system, in any language, can take), the goldens-and-platform habits, and the rules below.
 
-> **Status (2026-10-25): started; rungs 0 to 3 done on the tidy adaptive exam.** It finds the kinds of question itself, explains most of them with programs priced in bits, builds later explanations from earlier ones, states no wrong fact, and is not fooled by a teacher who is consistently wrong about some facts (except in the kinds that have no rule to check against). See "Results so far" for the numbers and, just as important, for what they do not show. On the same exam it uses about 55 times less energy than baby (3.7 to 4.2 J against 221 to 226 J; see "Joules"), after its cost of learning was cut 25-fold from the first version.
+> **Status (2026-10-25): started; rungs 0 to 4 done on the tidy adaptive exam.** It finds the kinds of question itself, explains most of them with programs priced in bits, builds later explanations from earlier ones, states no wrong fact, knows how reliable each source has been, and with one source states a teacher's possibly wrong answers as guesses, not facts (with a second independent source, as facts when the two agree). See "Results so far" for the numbers and, just as important, for what they do not show. On the same exam it uses about 55 times less energy than baby (3.7 to 4.2 J against 221 to 226 J; see "Joules"), after its cost of learning was cut 25-fold from the first version.
 
 Labels used below: **Hypothesis** (believed, not shown), **Measured** (a number from a run), **Open** (not started).
 
@@ -55,7 +55,7 @@ Each rung has the test that would show it works, and a joule line to fill in.
 | 1 | remembers what it was told (a table of facts) | 0 wrong facts; right on the facts it saw, refuses the rest | done (inside the learner; the four lookup kinds in the exam are tables) |
 | 2 | finds programs from a minimal start | right on questions it never saw, for kinds a short program can say; routing found without the labels | done on the tidy exam (seeds 1 to 3); joules open |
 | 3 | rival explanations scored in bits | on the 14 streams of baby's wrong-teacher work: as few believed mistakes as baby's, with **no tuned count** | done on the tidy exam: repeats on par with baby's, 0 elsewhere, at a cost in coverage (see above); the count of three falls out of the costs |
-| 4 | sources | with a second, right source added, repeats fall in kinds that have no law to check against | Open |
+| 4 | sources | with a second, right source added, repeats fall in kinds that have no law to check against | done on the tidy exam: 0 wrong facts of any kind on all streams with one reliable and one unreliable source; with one source, repeats fall to 0 by stating the unreliable source's answers as guesses |
 | 5 | the language grows | a kind that needs an operation Novice does not start with, from worlds written apart from the learner, solved by a primitive it made | first step only: earlier kinds become words (see below); the test itself is open |
 | 6 | answers get cheaper | joules per answer on a fixed set of questions fall as it learns, wrong facts stay 0, and the break-even point (learning joules spent against answer joules saved) is reported | first step: learning cost 25-fold lower than the first learner, and composition 116 times cheaper than enumeration; joules measured once (see "Joules"), no curve yet |
 
@@ -89,6 +89,27 @@ The CPU package's own counter (RAPL), joules above the machine's idle draw, on t
 
 So about **55 times less energy for the same exam**, with 689 right answers against 685. Caveats: these are upper bounds (the counter includes whatever else the machine was doing: it warned of other processes during every run, and Novice's runs last a third of a second, so a background process weighs heavily in them); it is one machine, one seed, and the clean exam; baby's own notes recorded 65 J on 2026-10-23, before its skeptical exam driver, and today's build measures 221 to 226 J in each of three runs; and the comparison is of two systems that learn differently, not of one idea against another. What it does show is that Novice's design is not just faster in wall time: it is cheaper in energy, by a margin that survives the noise. Nine tenths of Novice's energy is teaching (the first search for programs); absorbing a told answer costs it a fraction of a millijoule, a few thousandths of baby's. That is still not the thing the efficiency bet claims (that *adapting* makes a system cheaper): nothing here yet shows its energy per answer falling as it learns.
 
+### Sources (rung 4)
+
+`baby exam adapt-write DIR --second P` (the exam extension in its own pull request) adds a second source that is wrong about a fraction P of the facts, independently of the teacher's mistakes; `adapt-drive` then sends each truth twice, tagged `teacher` and `second`. Streams without it are unchanged.
+
+**How it works.** What the lessons said and what each told source says are separate *channels*. A channel is as reliable as it has been wherever a program was confident (the only check a system can make on its own), starting from the lessons' record when it is the same teacher. In a kind with no rule, each channel that spoke contributes its reliability if it is right and `(1 - reliability) / (answers possible - 1)` if it is wrong, and the answer is believed as much as the channels jointly allow. A fact needs all but 2^-10 of the belief, as everywhere. So a single channel measured at 80 % can only be a guess; two independent channels that agree make a fact; two that disagree favor the more reliable one with a stated doubt. For a program, a second source's answer is independent evidence; the lessons followed by the same teacher's told answer are one speaker and are weighed once.
+
+**Measured** (seeds 1 to 3, 787 questions, 0 wrong facts means none of any kind):
+
+| streams | wrong facts | facts right | wrong guesses | refused |
+|---|---|---|---|---|
+| honest teacher (clean exam) | 0 | 67.0 / 67.7 / 67.9 % | 1.1 / 1.3 / 1.1 % | 11.3 / 12.2 / 11.7 % |
+| teacher wrong about 10 %, 20 %, 40 %, **one source** | repeats 0 / 0 / 0 in all nine streams (before this rung: 1/0/3, 2/0/7, 9/9/7); one "elsewhere" at 40 % seed 2 | 61.8 to 63.7 / 58.1 to 61.0 / 46.1 to 52.1 % | 1.3 to 1.8 / 0.8 to 2.4 / 1.5 to 2.3 % | 11.7 to 12.6 / 14.6 to 20.3 / 28.2 to 36.5 % |
+| teacher wrong about 20 %, second source wrong about 5 % | **0** on all three | 66.8 / 65.2 / 64.5 % | 0.9 / 0.9 / 0.6 % | 17.3 / 14.4 / 14.4 % |
+| teacher wrong about 40 %, second source wrong about 5 % | **0** on all three | 66.5 / 64.2 / 63.4 % | 0.1 / 0.6 / 0.3 % | 29.7 / 23.0 / 20.8 % |
+| honest teacher, second source wrong about 5 % | 0 | 67.2 / 67.3 / 67.6 % | 0.6 / 0.9 / 0.8 % | 11.2 / 11.3 / 11.2 % |
+| teacher and second source both wrong about 20 % | 0 | 61.5 / 61.8 / 61.1 % | 1.3 / 0.9 / 0.8 % | 20.5 / 15.5 / 14.6 % |
+
+The reliabilities it measures are close to the truth: with a teacher wrong about 20 % and a second source wrong about 5 %, it reports the second source at 478 of 497 checks (96 %; true 95 %) and the teacher at 283 of 358 (79 %; true 80 %); at 40 % the teacher at 215 of 349 (62 %; true 60 %). With an honest teacher it reports 367 of 367 for the teacher and about 95 % for the second source.
+
+**What this means, and what it does not.** With one source the remaining repeats disappeared because Novice no longer states what a source it has measured as unreliable says as a *fact*: it says it as a guess with that source's measured rate, so the mistakes are wrong guesses (1.5 to 2.4 %), which are allowed, and not wrong facts. That is the honest version of "a single source cannot catch these mistakes": it cannot catch them, but it can know it cannot. A second source turns many of those guesses back into facts when it agrees. The costs: under a wrong teacher with one source the facts it can state in the kinds with no rule fall, which is the correct price of not believing an unreliable source. The limits: the sources must err independently (two sources that make the same mistake are believed); the checks on reliability exist only where a program is confident, so a system with no kinds that have rules would have nothing to measure with; the answer space (100 possible answers) is a guess written into the code; and this is one tidy exam.
+
 ### Cost
 
 Counted evaluations (one operation applied at one point), seed 1; the work is almost all in teaching, because a told answer that a believed program already gives costs a few dozen evaluations. Every row has 0 wrong facts except where noted.
@@ -113,7 +134,7 @@ The last row is the one that matters for the bet below. Three stage-2 kinds are 
 | 20 % | 6 / 7 / 17 | 10 / 10 / 18 | 2 / 0 / 7 | 2 (seed 1 only) |
 | 40 % | not run | 20 / 38 (two seeds) | 9 / 9 / 7 | not run |
 
-Wrong facts about facts never wrongly told ("elsewhere", must be 0): **0 in every re-ask stream and in every no-re-ask stream but one** (seed 2 at 40 %, as in baby). Read plainly, the repeats are **on par with baby's**, not below them: the like-for-like cells are close, and the one stream where both ran (seed 1, 20 %, no re-asks) gives 2 and 2. **Every remaining wrong fact I checked is in one of the six kinds that have no rule to check against** (a prime test, an exclusive-or, four arbitrary codes): a single source cannot catch a mistake there by any means, as baby's notes also found, and a second independent source is what rung 4 is for.
+Wrong facts about facts never wrongly told ("elsewhere", must be 0): **0 in every re-ask stream and in every no-re-ask stream but one** (seed 2 at 40 %, as in baby). Read plainly, the repeats are **on par with baby's**, not below them: the like-for-like cells are close, and the one stream where both ran (seed 1, 20 %, no re-asks) gives 2 and 2. **Every remaining wrong fact I checked is in one of the six kinds that have no rule to check against** (a prime test, an exclusive-or, four arbitrary codes): a single source cannot catch a mistake there by any means, as baby's notes also found, and a second independent source is what rung 4 is for (below).
 
 **What it costs: coverage.** On that shared stream (seed 1, 20 %, no re-asks), baby states 59.3 % as right facts and gives 25.0 % right guesses (2.9 % wrong guesses, 12.5 % refused), right across the thirds 82.9 → 84.0 %. Novice states 58.8 % as right facts, 19.1 % right guesses (1.5 % wrong), **20.3 % refused**, 69.2 → 82.4 % across the stream. So Novice is as sure of its facts and wrong less often when it guesses, but it declines where baby guesses and is right. The first version of this rung refused 33 % there: the record of how its guesses outside the taught region had turned out was shared by all kinds, so kinds whose rule really changes (and a teacher who is wrong a fifth of the time) dragged the confidence of the stable kinds below one half. Each kind now keeps its own record, shrunk toward the shared one, which brought it to 20 %. The rest is the price of not guessing from a poor record, and is open.
 
@@ -123,6 +144,7 @@ Wrong facts about facts never wrongly told ("elsewhere", must be 0): **0 in ever
 - **The exam is tidy and was written by the same author as the learner.** The kinds are small arithmetic rules over the integers 0 to 15. The operations Novice starts with (`+ - * min max div mod`) are my choice and fit that domain; that the exam is passed says nothing about worlds the starting operations cannot express. Two of the six unexplainable kinds (a prime test and an exclusive-or) have a rule that the starting operations cannot say; rung 5 is where that is tested properly.
 - **Words are only a first step toward a language that grows.** Earlier explanations become words; no new primitive is ever made. The two words are compositions of the starting operations.
 - **Joules are upper bounds from one machine and one seed.** Nothing here yet shows that adapting makes anything cheaper in joules; the composition result is about the cost of learning a kind, not of answering a question (which was never expensive).
+- **Sources must err independently.** Two sources that make the same mistake are believed, and a reliability can only be measured where some kind has a rule. The second source in the exam is generated to be independent.
 - **Only the adaptive exam.** The static exam (with its traps) has not been run on Novice. A teacher who is wrong about a whole kind of thing, not about some facts, is not caught (nothing inside one source can catch it).
 - **Guesses are labeled but crudely calibrated.** Outside the region it has seen, the confidence it states is the kind's own record of right guesses, shrunk toward the shared record at that distance. The judge has not yet been asked whether the stated confidences match the realized rates.
 - **The failed searches are still most of what is left**: the six lookup kinds are searched, fail, and are searched again as they grow.
@@ -142,6 +164,7 @@ Wrong facts about facts never wrongly told ("elsewhere", must be 0): **0 in ever
 | the price of an exception is `log2(points + 1)` bits plus the bits of the odd answer; a repair may use programs up to 12 bits above the favorite | `learner.rs` | a teacher-reliability estimate learned per source (rung 4) |
 | a kind is named by the word that makes the answer a function of the numbers and covers the most questions | `learner.rs` | breaks with noisy lessons; open |
 | a word is any explained kind with a body of at least three nodes whose behavior is new | `learner.rs` | rung 5 (a compression test instead) |
+| 100 possible answers when a source is wrong (`ANSWER_SPACE`); the lessons and the exam's main teacher count as one speaker | `learner.rs` | an estimate from the answers seen; open |
 
 ## Mistakes and dead ends (newest first)
 
