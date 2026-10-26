@@ -55,14 +55,17 @@ struct Group {
     explained_at: Option<usize>,
     /// Points where the told answer disagreed with the program believed at the time: not believed, not forgotten.
     disputed: std::collections::BTreeSet<Vec<i64>>,
+    /// This kind's own record of guesses made outside its region: (right, made).
+    record: (u32, u32),
     /// Whether any answer it has been given was negative. A negative result for a kind that never showed one is not stated.
     negative: bool,
 }
 
 struct Said {
     answer: Option<String>,
-    /// Distance bucket of a guess made outside the taught region.
+    /// Distance bucket of a guess made outside the taught region, and the group that made it.
     bucket: Option<usize>,
+    group: Option<usize>,
 }
 
 /// Work done, for the report at the end.
@@ -89,12 +92,13 @@ pub struct Novice {
     /// Words that earned their place.
     words: Vec<Rc<Lib>>,
     explained: usize,
+    why: [u32; 8],
     pub stats: Stats,
 }
 
 impl Default for Novice {
     fn default() -> Self {
-        Novice { lessons: Vec::new(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, stats: Stats::default() }
+        Novice { lessons: Vec::new(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], stats: Stats::default() }
     }
 }
 
@@ -563,7 +567,7 @@ impl Novice {
             let g = match self.by_key.get(&key) {
                 Some(&g) => g,
                 None => {
-                    self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, spent: 0, explained_at: None, disputed: Default::default(), negative: false });
+                    self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, spent: 0, explained_at: None, disputed: Default::default(), record: (0, 0), negative: false });
                     self.by_key.insert(key, self.groups.len() - 1);
                     self.groups.len() - 1
                 }
@@ -590,22 +594,30 @@ impl System for Novice {
 
     fn ask(&mut self, question: &str) -> Answer {
         let p = parse(question);
-        let mut said = Said { answer: None, bucket: None };
+        let mut said = Said { answer: None, bucket: None, group: None };
+        let reason = std::cell::Cell::new(0usize);
         let reply = (|| {
             // A word it has never met may change what is asked: nothing is stated about such a question.
             if p.words.iter().any(|w| !self.df.contains_key(w)) {
+                reason.set(1);
                 return None;
             }
             let g = &self.groups[self.group_of(&p)?];
             if g.arity != p.nums.len() {
+                reason.set(2);
                 return None;
             }
             if g.fit.is_none() {
+                reason.set(3);
                 return majority(g.points.get(&p.nums)?).map(|a| Answer::Fact(a.to_string()));
             }
             let fit = g.fit.as_ref()?;
-            let (value, top, total) = program::weigh(&fit.found, &p.nums)?;
+            let Some((value, top, total)) = program::weigh(&fit.found, &p.nums) else {
+                reason.set(4);
+                return None;
+            };
             if value < 0 && !g.negative {
+                reason.set(5);
                 return None;
             }
             let inside = p.nums.iter().enumerate().all(|(i, &n)| fit.lo[i] <= n && n <= fit.hi[i]);
@@ -616,16 +628,26 @@ impl System for Novice {
                     return Some(Answer::Fact(value.to_string()));
                 }
                 let permille = (u128::from(top) * 1000 / u128::from(total.max(1))) as u32;
+                reason.set(6);
                 return (permille >= 500).then(|| Answer::Guess(value.to_string(), permille.min(999)));
             }
             let dist = p.nums.iter().enumerate().map(|(i, &n)| (n - fit.hi[i]).max(fit.lo[i] - n)).max().unwrap_or(1);
             let b = bucket(dist);
+            // The kind's own record counts for as much as its history allows; with little of it, the shared record at this distance stands in
+            // (two guesses' worth of weight).
             let (right, made) = self.record[b];
-            let permille = (1000 * (right + 1) / (made + 2)).min(999);
+            let shared = (1000 * (right + 1)) / (made + 2);
+            let (own_right, own_made) = g.record;
+            let permille = ((1000 * own_right + 2 * shared) / (own_made + 2)).min(999);
             said.bucket = Some(b);
+            said.group = self.group_of(&p);
+            reason.set(7);
             (permille >= 500).then(|| Answer::Guess(value.to_string(), permille))
         })();
         let reply = reply.unwrap_or(Answer::Refuse);
+        if matches!(reply, Answer::Refuse) {
+            self.why[reason.get()] += 1;
+        }
         if let Answer::Fact(a) | Answer::Guess(a, _) = &reply {
             said.answer = Some(a.clone());
         } else {
@@ -642,6 +664,10 @@ impl System for Novice {
             if let (Some(b), Some(a)) = (said.bucket, said.answer) {
                 self.record[b].1 += 1;
                 self.record[b].0 += u32::from(a == truth);
+                if let Some(g) = said.group {
+                    self.groups[g].record.1 += 1;
+                    self.groups[g].record.0 += u32::from(a == truth);
+                }
             }
         }
         let g = match self.group_of(&p) {
@@ -649,7 +675,7 @@ impl System for Novice {
             None => {
                 // A kind word it has never met names a new group.
                 let Some(key) = p.words.iter().filter(|w| !self.df.contains_key(*w)).min().cloned() else { return };
-                self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, spent: 0, explained_at: None, disputed: Default::default(), negative: false });
+                self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, spent: 0, explained_at: None, disputed: Default::default(), record: (0, 0), negative: false });
                 self.by_key.insert(key, self.groups.len() - 1);
                 self.groups.len() - 1
             }
@@ -670,12 +696,14 @@ impl System for Novice {
         let points = self.groups[g].points.len() as u64;
         let mut disputed = false;
         let mut agreed = false;
+        let mut changed_favorite = false;
         let mut explained = self.groups[g].fit.is_some();
         if let (Some(fit), Some(v)) = (&mut self.groups[g].fit, value) {
             // A program that says something else is not thrown away: it pays for an exception (which point, and what odd answer), and a rival
             // that says this gains on it. One slip costs the incumbent about what a ceiling costs a rival, so one contradiction changes nothing
             // and two contradictions that a rival explains together win. No count is chosen anywhere.
             let price = bits::log2(points + 1) + bits::uint(v.unsigned_abs());
+            let favorite_before = fit.found[0].expr.clone();
             let mut penalized = false;
             for f in fit.found.iter_mut() {
                 if f.expr.eval(&p.nums) != Some(v) {
@@ -696,8 +724,13 @@ impl System for Novice {
             }
             let best = fit.found[0].cost;
             fit.found.retain(|f| f.cost <= best + 32 * bits::BIT);
+            changed_favorite = fit.found[0].expr != favorite_before;
         } else if self.groups[g].fit.is_some() {
             disputed = true;
+        }
+        if changed_favorite {
+            // A new favorite may get right points the old one got wrong: the region where it has been checked grows with it.
+            self.verified_region(g);
         }
         if agreed {
             self.groups[g].disputed.remove(&p.nums);
@@ -728,6 +761,7 @@ impl System for Novice {
     }
 
     fn quit(&mut self) {
+        eprintln!("refusals by reason [other, unknown word, arity, table miss, no program value, negative, inside but unsure, outside and record low]: {:?}", self.why);
         let s = self.stats;
         let fits = self.groups.iter().filter(|g| g.fit.is_some()).count();
         eprintln!(
@@ -839,7 +873,8 @@ mod tests {
         // One contradiction is cheaper to explain as a slip than as a ceiling, so nothing changes yet.
         n.told("what is 25 nakisido 20", "30", None);
         assert!(!matches!(n.ask("what is 25 nakisido 20"), Answer::Fact(_)), "a disputed point is never a fact");
-        // Two that a ceiling explains together are not a slip: the ceiling is believed (still short of a fact: the old rule is 9 bits behind).
+        // Two that a ceiling explains together are not a slip: the ceiling is believed (still short of a fact: the old rule is 9 bits behind), and
+        // the region where it has been checked takes in both points.
         n.told("what is 22 nakisido 21", "30", None);
         match n.ask("what is 23 nakisido 20") {
             Answer::Fact(a) | Answer::Guess(a, _) => assert_eq!(a, "30"),
