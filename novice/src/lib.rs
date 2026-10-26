@@ -5,4 +5,7 @@
 //! Zero dependencies, integers in every decision, and a joule budget for every milestone. See `README.md`.
 
 pub mod bits;
+pub mod learner;
+pub mod program;
 pub mod protocol;
+pub mod question;
