@@ -57,7 +57,7 @@ Each rung has the test that would show it works, and a joule line to fill in.
 | 3 | rival explanations scored in bits | on the 14 streams of baby's wrong-teacher work: as few believed mistakes as baby's, with **no tuned count** | done on the tidy exam: repeats on par with baby's, 0 elsewhere, at a cost in coverage (see above); the count of three falls out of the costs |
 | 4 | sources | with a second, right source added, repeats fall in kinds that have no law to check against | done on the tidy exam: 0 wrong facts of any kind on all streams with one reliable and one unreliable source; with one source, repeats fall to 0 by stating the unreliable source's answers as guesses |
 | 5 | the language grows | a kind that needs an operation Novice does not start with, from worlds written apart from the learner, solved by a primitive it made | first step only: earlier kinds become words (see below); the test itself is open |
-| 6 | answers get cheaper | joules per answer on a fixed set of questions fall as it learns, wrong facts stay 0, and the break-even point (learning joules spent against answer joules saved) is reported | first step: learning cost 25-fold lower than the first learner, and composition 116 times cheaper than enumeration; joules measured once (see "Joules"), no curve yet |
+| 6 | answers get cheaper | joules per answer on a fixed set of questions fall as it learns, wrong facts stay 0, and the break-even point (learning joules spent against answer joules saved) is reported | first steps: learning cost 25-fold lower than the first learner, composition 116 times cheaper than enumeration, joules measured once; the curriculum measurement shows capability from experience but not yet a falling cost |
 
 Rungs 0 to 4 are the first milestone (the tidy exam, with a source tag). Rung 5 is the test of "genuine"; the worlds for it are written by a process that the learner's author does not read until the review, so the learner cannot be tuned to them. Rung 6 is the bet itself.
 
@@ -149,6 +149,26 @@ Wrong facts about facts never wrongly told ("elsewhere", must be 0): **0 in ever
 - **Guesses are labeled but crudely calibrated.** Outside the region it has seen, the confidence it states is the kind's own record of right guesses, shrunk toward the shared record at that distance. The judge has not yet been asked whether the stated confidences match the realized rates.
 - **The failed searches are still most of what is left**: the six lookup kinds are searched, fail, and are searched again as they grow.
 
+### Curriculum: what knowing more does to the cost of learning (rung 6, first measurement)
+
+`cargo run --release --offline --example curriculum -- EXAM_DIR [REPEATS] [KINDS_PER_BATCH]` teaches the 45 kinds of an adaptive exam in nine batches of five, in the order of their roles (base, hidden, stage 2, deceptive, no rule), to one system that keeps what it learned. As a control it teaches each batch to a system that knows nothing. The exam's unit labels only cut the lessons into batches; Novice never sees them. Seed 1, median of 7 runs, counted evaluations and wall time (energy for these windows is about 0.17 µJ per evaluation, e.g. 548 mJ for batch 5, and too noisy to tabulate):
+
+| batch | roles | evaluations, in order | evaluations, knowing nothing | ms, in order | ms, nothing | kinds explained, in order | kinds explained, nothing |
+|---|---|---|---|---|---|---|---|
+| 1 | base | 158,428 | 158,428 | 2.9 | 2.9 | 5 of 5 | 5 of 5 |
+| 2 | base + hidden | 807,699 | 807,699 | 8.6 | 8.5 | 5 of 5 | 5 of 5 |
+| 3 | hidden | 249,251 | 249,251 | 4.4 | 4.4 | 5 of 5 | 5 of 5 |
+| 4 | hidden | 2,095,000 | 2,095,000 | 19.5 | 19.3 | 5 of 5 | 5 of 5 |
+| 5 | hidden | 3,154,784 | 3,154,784 | 28.1 | 27.3 | 5 of 5 | 5 of 5 |
+| 6 | stage 2 | 1,111,974 | 1,111,974 | 13.2 | 13.0 | 5 of 5 | 5 of 5 |
+| 7 | stage 2 + deceptive | 2,540,805 | 2,089,929 | 25.1 | 15.3 | **5 of 5** | **1 of 5** |
+| 8 | deceptive + no rule | 263,013 | 243,073 | 4.5 | 3.3 | 4 of 5 | 4 of 5 |
+| 9 | no rule | 673,325 | 612,788 | 6.9 | 5.1 | 0 of 5 | 0 of 5 |
+
+Seeds 2 and 3 have the same shape (batch 7: 2.47 M and 2.62 M evaluations against 2.02 M and 2.16 M, five kinds explained against one). **What it shows, and what it does not.**
+- Knowing earlier kinds buys *capability* that the same effort cannot buy otherwise: four kinds that are built from earlier ones (sum of squares plus one, half of it, the square of an average, a difference of squares) are explained, in about 17 to 22 % more work than the system that cannot explain them. Without the library they are out of reach of any search this small.
+- Learning is **not** cheaper in total: where the kinds do not depend on each other (batches 1 to 6) the cost is exactly the same, and the kinds that cannot be explained cost 4 to 10 % more with a library than without. The earlier result (composition about 116 times cheaper than enumerating with the same words) is a statement about *how* a dependent kind gets explained, not about learning getting cheaper over a curriculum. So the efficiency bet is **not shown** by this measurement; what is shown is that experience can be kept without making failure expensive, which was not true of my first version (below).
+
 ## What is hand-built (each to be removed by the rung named)
 
 | choice | where | removed by |
@@ -167,6 +187,8 @@ Wrong facts about facts never wrongly told ("elsewhere", must be 0): **0 in ever
 | 100 possible answers when a source is wrong (`ANSWER_SPACE`); the lessons and the exam's main teacher count as one speaker | `learner.rs` | an estimate from the answers seen; open |
 
 ## Mistakes and dead ends (newest first)
+
+- **Failing got dearer as the library grew, and I guessed the cause wrong twice.** In the curriculum measurement the kinds that cannot be explained cost 4.5 times as much with a library as without (batch 9: 2.19 M evaluations against 0.61 M). My first explanation (a word with all-distinct outputs makes "the answer is a function of the word's output" trivially true; unsolved kinds were retried on every new word) was partly right and moved nothing, so I added a collision requirement and a doubling back-off and measured again: barely changed. My second (every new kind's first blind search ran over a larger alphabet because earned words were in it) was also not the cause: the result was identical. Only a trace of what each kind was charged showed it: after the cheap search failed, a blind enumeration over all 33 offered words cost 433 K per unary kind and about 13 M per two-input kind. Now composition (one lookup per word) uses every word on offer, and blind enumeration only the words that have earned their place; the cost of failing is 4 to 10 % above the control. The collision requirement and the back-off stay (they are sound), and the first search no longer carries words.
 
 - **I first compared Novice with the wrong baby numbers and claimed it beat baby on repeats.** The recorded baby figures (5/7/6, 10/10/18) are for streams with 30 % re-asks; I set them against Novice runs without re-asks. When I ran baby on a stream without re-asks, it matched Novice (2 and 2), and the like-for-like cells are close. The claim was in the commit message of the first rung-3 commit and in the description of the pull request that carried it; the pull request description is corrected, the commit message stays as pushed (history is not rewritten), and the table above states what was compared with what. The same run showed that Novice's refusals under a wrong teacher were far above baby's (33 % against 12.5 %), which led to the per-kind record.
 

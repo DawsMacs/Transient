@@ -57,8 +57,9 @@ struct Group {
     fit: Option<Fit>,
     /// How many points the group held when it was last searched.
     searched_at: usize,
-    /// How many words were on offer the last time the group was searched with words.
+    /// How many words were on offer the last time the group was tried for a composition, and how many earned words the last blind search had.
     words_tried: usize,
+    enumerated_with: usize,
     /// Counted evaluations spent on this kind until it was first explained, and its place in the order the kinds were explained.
     spent: u64,
     explained_at: Option<usize>,
@@ -183,6 +184,11 @@ fn bucket(dist: i64) -> usize {
 }
 
 impl Novice {
+    /// How many kinds of question it has found, and how many of them it explains with a program.
+    pub fn kinds(&self) -> (usize, usize) {
+        (self.groups.len(), self.groups.iter().filter(|g| g.fit.is_some()).count())
+    }
+
     /// The group a question belongs to: the rarest of its words that names a group.
     fn group_of(&self, p: &Parsed) -> Option<usize> {
         p.words.iter().filter_map(|w| self.by_key.get(w).map(|&g| (std::cmp::Reverse(self.groups[g].points.len()), w.clone(), g))).min().map(|(_, _, g)| g)
@@ -198,6 +204,9 @@ impl Novice {
         let before = self.stats.evaluations;
         let result = work(self);
         self.groups[g].spent += self.stats.evaluations - before;
+        if std::env::var_os("NOVICE_TRACE").is_some() && self.stats.evaluations - before > 100_000 {
+            eprintln!("charge {:<14} {:>10} evaluations (fit: {})", self.groups[g].key, self.stats.evaluations - before, self.groups[g].fit.is_some());
+        }
         if self.groups[g].fit.is_some() && self.groups[g].explained_at.is_none() {
             self.explained += 1;
             self.groups[g].explained_at = Some(self.explained);
@@ -256,8 +265,9 @@ impl Novice {
         if !refuted.is_empty() && self.repair(g, refuted, &inputs, &target, &words) {
             return;
         }
-        let size = if words.is_empty() { 7 } else { 5 };
-        if self.search_group(g, &BASE_CONSTS, &words, size, "plain") {
+        // The first blind search uses the starting operations only: every word on the alphabet makes it dearer for every kind that comes after,
+        // whether or not the kind has anything to do with the word. Words are used by composition and by editing a known program.
+        if self.search_group(g, &BASE_CONSTS, &[], 7, "plain") {
             return;
         }
     }
@@ -495,7 +505,9 @@ impl Novice {
                 let mut seen: BTreeMap<i64, i64> = BTreeMap::new();
                 let consistent = inputs.iter().zip(&target).all(|(x, &t)| call.eval(x).is_some_and(|z| *seen.entry(z).or_insert(t) == t));
                 self.stats.evaluations += inputs.len() as u64 * call.size() as u64;
-                if !consistent || seen.len() < 2 {
+                // "The answer is a function of the word's output" says something only if some outputs were met twice (otherwise any data
+                // satisfy it): at least one collision, with the same answer, is the evidence.
+                if !consistent || seen.len() < 2 || seen.len() >= inputs.len() {
                     continue;
                 }
                 let zs: Vec<Vec<i64>> = seen.keys().map(|&z| vec![z]).collect();
@@ -581,23 +593,32 @@ impl Novice {
             }
             let mut changed = false;
             for g in 0..self.groups.len() {
-                if self.groups[g].fit.is_some() || self.groups[g].words_tried >= offer.len() || self.inputs_and_targets(g).is_none() {
+                if self.groups[g].fit.is_some() || self.inputs_and_targets(g).is_none() {
                     continue;
                 }
-                self.groups[g].words_tried = offer.len();
-                let mut consts: Vec<i64> = BASE_CONSTS.to_vec();
                 let (inputs, target) = self.inputs_and_targets(g).unwrap();
+                let mut consts: Vec<i64> = BASE_CONSTS.to_vec();
                 consts.extend(target.iter().chain(inputs.iter().flatten()).copied().filter(|c| (0..=3).contains(c)));
-                let composed = {
+                let mut solved = false;
+                // Composition is a lookup per word, so it may use every word on offer. A kind that did not yield is tried again only when the
+                // words on offer have doubled since: a bigger library must not make a kind that cannot be explained dearer every time.
+                if self.groups[g].words_tried == 0 || offer.len() >= 2 * self.groups[g].words_tried {
+                    self.groups[g].words_tried = offer.len();
                     let before = self.stats.evaluations;
-                    let ok = self.charge(g, |s| s.compose(g, &offer));
-                    if ok {
+                    solved = self.charge(g, |s| s.compose(g, &offer));
+                    if solved {
                         self.stats.composed += 1;
                         self.stats.composed_evaluations += self.stats.evaluations - before;
                     }
-                    ok
-                };
-                if composed || self.charge(g, |s| s.search_group(g, &consts, &offer, 5, "words")) {
+                }
+                // Blind enumeration is a search, so it uses only the words that have earned their place in an explanation, and only when
+                // there are more of them than the last time.
+                if !solved && !self.words.is_empty() && self.groups[g].enumerated_with < self.words.len() {
+                    self.groups[g].enumerated_with = self.words.len();
+                    let earned = self.words.clone();
+                    solved = self.charge(g, |s| s.search_group(g, &consts, &earned, 5, "words"));
+                }
+                if solved {
                     let used = self.groups[g].fit.as_ref().map(|f| f.found[0].expr.clone());
                     for w in &offer {
                         if used.as_ref().is_some_and(|e| mentions(e, &w.name)) && !self.words.iter().any(|x| x.name == w.name) {
@@ -636,20 +657,22 @@ impl Novice {
             })
             .map(|(w, idx)| (*w, idx))
             .collect();
-        candidates.sort_by(|a, b| b.1.len().cmp(&a.1.len()).then(a.0.cmp(b.0)));
+        // Widest cover first; among equals, a word that already names a kind (more lessons can arrive later for the same kind).
+        candidates.sort_by(|a, b| b.1.len().cmp(&a.1.len()).then(self.by_key.contains_key(b.0).cmp(&self.by_key.contains_key(a.0))).then(a.0.cmp(b.0)));
         let mut key_of: Vec<Option<String>> = vec![None; lessons.len()];
         for (w, idx) in candidates {
             for &i in idx {
                 key_of[i].get_or_insert_with(|| w.to_string());
             }
         }
+        let mut touched: std::collections::BTreeSet<usize> = Default::default();
         for (i, (p, answer)) in lessons.iter().enumerate() {
             // A question no word can claim falls back to its rarest word.
             let Some(key) = key_of[i].clone().or_else(|| p.words.iter().map(|w| (self.df[w], w.clone())).min().map(|(_, w)| w)) else { continue };
             let g = match self.by_key.get(&key) {
                 Some(&g) => g,
                 None => {
-                    self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, spent: 0, explained_at: None, claims: BTreeMap::new(), disputed: Default::default(), record: (0, 0), negative: false });
+                    self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, enumerated_with: 0, spent: 0, explained_at: None, claims: BTreeMap::new(), disputed: Default::default(), record: (0, 0), negative: false });
                     self.by_key.insert(key, self.groups.len() - 1);
                     self.groups.len() - 1
                 }
@@ -657,9 +680,11 @@ impl Novice {
             if self.groups[g].arity == p.nums.len() {
                 self.add_point(g, &p.nums, answer);
                 self.groups[g].claims.entry(p.nums.clone()).or_default().insert(TEACHING.to_string(), answer.clone());
+                touched.insert(g);
             }
         }
-        for g in 0..self.groups.len() {
+        // Teaching can come in several rounds: only the kinds that were taught something are looked at again.
+        for g in touched {
             self.charge(g, |s| s.refit(g, &[]));
         }
         self.sleep();
@@ -765,7 +790,7 @@ impl System for Novice {
             None => {
                 // A kind word it has never met names a new group.
                 let Some(key) = p.words.iter().filter(|w| !self.df.contains_key(*w)).min().cloned() else { return };
-                self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, spent: 0, explained_at: None, claims: BTreeMap::new(), disputed: Default::default(), record: (0, 0), negative: false });
+                self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, enumerated_with: 0, spent: 0, explained_at: None, claims: BTreeMap::new(), disputed: Default::default(), record: (0, 0), negative: false });
                 self.by_key.insert(key, self.groups.len() - 1);
                 self.groups.len() - 1
             }
