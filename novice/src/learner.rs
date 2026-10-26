@@ -53,6 +53,8 @@ struct Group {
     /// Counted evaluations spent on this kind until it was first explained, and its place in the order the kinds were explained.
     spent: u64,
     explained_at: Option<usize>,
+    /// Points where the told answer disagreed with the program believed at the time: not believed, not forgotten.
+    disputed: std::collections::BTreeSet<Vec<i64>>,
     /// Whether any answer it has been given was negative. A negative result for a kind that never showed one is not stated.
     negative: bool,
 }
@@ -241,6 +243,92 @@ impl Novice {
         if self.search_group(g, &BASE_CONSTS, &words, size, "plain") {
             return;
         }
+    }
+
+    /// The region where the favorite has been checked: the bounding box of the points it gets right.
+    fn verified_region(&mut self, g: usize) {
+        let Some(obs) = self.observations(g) else { return };
+        let Some(fit) = &mut self.groups[g].fit else { return };
+        let best = &fit.found[0].expr;
+        let right: Vec<&Vec<i64>> = obs.iter().filter(|(x, t)| best.eval(x) == Some(*t)).map(|(x, _)| x).collect();
+        if let Some(first) = right.first() {
+            let (mut lo, mut hi) = ((*first).clone(), (*first).clone());
+            for x in &right {
+                for i in 0..lo.len() {
+                    lo[i] = lo[i].min(x[i]);
+                    hi[i] = hi[i].max(x[i]);
+                }
+            }
+            fit.lo = lo;
+            fit.hi = hi;
+        }
+    }
+
+    /// Every distinct (point, numeric answer) the group has been given.
+    fn observations(&self, g: usize) -> Option<Vec<(Vec<i64>, i64)>> {
+        let grp = &self.groups[g];
+        let mut out = Vec::new();
+        for (nums, answers) in &grp.points {
+            if nums.len() != grp.arity {
+                return None;
+            }
+            for a in answers.keys() {
+                out.push((nums.clone(), a.parse::<i64>().ok()?));
+            }
+        }
+        (!out.is_empty()).then_some(out)
+    }
+
+    /// A told answer disagreed with the favorite. Look at the programs one edit away from the believed ones, with the numbers their mistakes name
+    /// as constants, and let each pay for the points it still gets wrong. Anything that comes out cheaper than the favorite takes its place.
+    fn repair_priced(&mut self, g: usize) {
+        let Some(obs) = self.observations(g) else { return };
+        let Some(fit) = &self.groups[g].fit else { return };
+        let arity = self.groups[g].arity;
+        let words = self.words.clone();
+        let believed: Vec<Expr> = fit.found.iter().take(4).map(|f| f.expr.clone()).collect();
+        let (lo, hi) = (fit.lo.clone(), fit.hi.clone());
+        let best_cost = fit.found[0].cost;
+        let inputs: Vec<Vec<i64>> = obs.iter().map(|o| o.0.clone()).collect();
+        let target: Vec<i64> = obs.iter().map(|o| o.1).collect();
+        let points = self.groups[g].points.len() as u64;
+        let price: Vec<Cost> = target.iter().map(|&t| bits::log2(points + 1) + bits::uint(t.unsigned_abs())).collect();
+        let mut consts: Vec<i64> = BASE_CONSTS.to_vec();
+        for e in &believed {
+            for (x, &t) in inputs.iter().zip(&target) {
+                if let Some(v) = e.eval(x) {
+                    if v != t {
+                        consts.extend([(v - t).abs(), v, t]);
+                    }
+                }
+            }
+        }
+        consts.retain(|c| (0..=200).contains(c));
+        consts.sort_unstable();
+        consts.dedup();
+        let probe = probes(&lo, &hi);
+        let task = Task { inputs: &inputs, target: &target, probes: &probe, arity, consts: &consts, words: &words, max_size: 0, rival_size: 0, max_items: MAX_ITEMS };
+        let mut more: Vec<Found> = Vec::new();
+        for e in &believed {
+            let (found, effort) = program::rivals_priced(e, &task, Some((&price, best_cost + 12 * bits::BIT)));
+            self.stats.evaluations += effort.evaluations;
+            more.extend(found);
+        }
+        self.stats.searches += 1;
+        if more.is_empty() {
+            return;
+        }
+        let Some(fit) = &mut self.groups[g].fit else { return };
+        for f in more {
+            match fit.found.iter_mut().find(|k| k.probe_values == f.probe_values) {
+                Some(k) => k.cost = k.cost.min(f.cost),
+                None => fit.found.push(f),
+            }
+        }
+        fit.found.sort_by(|x, y| x.cost.cmp(&y.cost).then_with(|| x.expr.size().cmp(&y.expr.size())).then_with(|| x.expr.to_string().cmp(&y.expr.to_string())));
+        let best = fit.found[0].cost;
+        fit.found.retain(|f| f.cost <= best + 32 * bits::BIT);
+        fit.found.truncate(64);
     }
 
     /// Edit the refuted programs: change a leaf or an operation, swap a constant, or wrap any part in an operation with a constant. The constants
@@ -475,7 +563,7 @@ impl Novice {
             let g = match self.by_key.get(&key) {
                 Some(&g) => g,
                 None => {
-                    self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, spent: 0, explained_at: None, negative: false });
+                    self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, spent: 0, explained_at: None, disputed: Default::default(), negative: false });
                     self.by_key.insert(key, self.groups.len() - 1);
                     self.groups.len() - 1
                 }
@@ -512,8 +600,8 @@ impl System for Novice {
             if g.arity != p.nums.len() {
                 return None;
             }
-            if let Some(answers) = g.points.get(&p.nums) {
-                return majority(answers).map(|a| Answer::Fact(a.to_string()));
+            if g.fit.is_none() {
+                return majority(g.points.get(&p.nums)?).map(|a| Answer::Fact(a.to_string()));
             }
             let fit = g.fit.as_ref()?;
             let (value, top, total) = program::weigh(&fit.found, &p.nums)?;
@@ -522,9 +610,9 @@ impl System for Novice {
             }
             let inside = p.nums.iter().enumerate().all(|(i, &n)| fit.lo[i] <= n && n <= fit.hi[i]);
             if inside {
-                // All but 2^-RISK_BITS of the belief on this answer?
+                // All but 2^-RISK_BITS of the belief on this answer? (Not at a point where a told answer was refused: that stays a guess.)
                 let sure = u128::from(top) << RISK_BITS >= u128::from(total) * ((1u128 << RISK_BITS) - 1);
-                if sure {
+                if sure && !g.disputed.contains(&p.nums) {
                     return Some(Answer::Fact(value.to_string()));
                 }
                 let permille = (u128::from(top) * 1000 / u128::from(total.max(1))) as u32;
@@ -561,7 +649,7 @@ impl System for Novice {
             None => {
                 // A kind word it has never met names a new group.
                 let Some(key) = p.words.iter().filter(|w| !self.df.contains_key(*w)).min().cloned() else { return };
-                self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, spent: 0, explained_at: None, negative: false });
+                self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, spent: 0, explained_at: None, disputed: Default::default(), negative: false });
                 self.by_key.insert(key, self.groups.len() - 1);
                 self.groups.len() - 1
             }
@@ -572,40 +660,71 @@ impl System for Novice {
         if self.groups[g].arity != p.nums.len() {
             return;
         }
+        // The same answer to the same question again (a re-ask, another phrasing) is not new evidence: it is counted, not weighed twice.
+        let again = self.groups[g].points.get(&p.nums).is_some_and(|a| a.contains_key(truth));
         self.add_point(g, &p.nums, truth);
+        if again {
+            return;
+        }
         let value = truth.parse::<i64>().ok();
-        let mut refuted: Option<Vec<Expr>> = None;
-        match (&mut self.groups[g].fit, value) {
-            (Some(fit), Some(v)) => {
-                // Programs that already say this stay; the rest are refuted by it.
-                let before = fit.found.len();
-                let old: Vec<Expr> = fit.found.iter().take(4).map(|f| f.expr.clone()).collect();
-                fit.found.retain(|f| f.expr.eval(&p.nums) == Some(v));
-                if fit.found.is_empty() {
-                    refuted = Some(old);
-                } else {
-                    self.stats.narrowed += u64::from(fit.found.len() < before);
-                    for (i, &n) in p.nums.iter().enumerate() {
-                        fit.lo[i] = fit.lo[i].min(n);
-                        fit.hi[i] = fit.hi[i].max(n);
-                    }
+        let points = self.groups[g].points.len() as u64;
+        let mut disputed = false;
+        let mut agreed = false;
+        let mut explained = self.groups[g].fit.is_some();
+        if let (Some(fit), Some(v)) = (&mut self.groups[g].fit, value) {
+            // A program that says something else is not thrown away: it pays for an exception (which point, and what odd answer), and a rival
+            // that says this gains on it. One slip costs the incumbent about what a ceiling costs a rival, so one contradiction changes nothing
+            // and two contradictions that a rival explains together win. No count is chosen anywhere.
+            let price = bits::log2(points + 1) + bits::uint(v.unsigned_abs());
+            let mut penalized = false;
+            for f in fit.found.iter_mut() {
+                if f.expr.eval(&p.nums) != Some(v) {
+                    f.cost += price;
+                    penalized = true;
                 }
             }
-            (Some(fit), None) => refuted = Some(fit.found.iter().take(4).map(|f| f.expr.clone()).collect()),
-            (None, _) => {
-                // Only a table so far: look again when the group has doubled since the last search.
-                let grp = &self.groups[g];
-                if grp.points.len() >= 2 * grp.searched_at.max(MIN_POINTS / 2) {
-                    refuted = Some(Vec::new());
+            fit.found.sort_by(|x, y| x.cost.cmp(&y.cost).then_with(|| x.expr.size().cmp(&y.expr.size())).then_with(|| x.expr.to_string().cmp(&y.expr.to_string())));
+            if fit.found[0].expr.eval(&p.nums) == Some(v) {
+                agreed = true;
+                self.stats.narrowed += u64::from(penalized);
+                for (i, &n) in p.nums.iter().enumerate() {
+                    fit.lo[i] = fit.lo[i].min(n);
+                    fit.hi[i] = fit.hi[i].max(n);
+                }
+            } else {
+                disputed = true;
+            }
+            let best = fit.found[0].cost;
+            fit.found.retain(|f| f.cost <= best + 32 * bits::BIT);
+        } else if self.groups[g].fit.is_some() {
+            disputed = true;
+        }
+        if agreed {
+            self.groups[g].disputed.remove(&p.nums);
+        }
+        if disputed {
+            self.groups[g].disputed.insert(p.nums.clone());
+            self.charge(g, |s| s.repair_priced(g));
+            self.verified_region(g);
+            // With so many exceptions to pay for that a table is cheaper, the program is not an explanation.
+            if let Some((_, target)) = self.observations(g).map(|o| (0, o.into_iter().map(|x| x.1).collect::<Vec<_>>())) {
+                let table: Cost = target.iter().map(|&a| bits::uint(a.unsigned_abs())).sum();
+                if self.groups[g].fit.as_ref().is_some_and(|f| f.found[0].cost > table) {
+                    self.groups[g].fit = None;
+                }
+            }
+            explained = self.groups[g].fit.is_some();
+        } else if !explained {
+            // Only a table so far: look again when the group has doubled since the last search.
+            let grp = &self.groups[g];
+            if grp.points.len() >= 2 * grp.searched_at.max(MIN_POINTS / 2) {
+                self.charge(g, |s| s.refit(g, &[]));
+                if self.groups[g].fit.is_some() {
+                    self.sleep();
                 }
             }
         }
-        if let Some(old) = refuted {
-            self.charge(g, |s| s.refit(g, &old));
-            if self.groups[g].fit.is_some() {
-                self.sleep();
-            }
-        }
+        let _ = explained;
     }
 
     fn quit(&mut self) {
@@ -717,12 +836,33 @@ mod tests {
         n.ready();
         // Beyond what it was taught it can only guess, and it says so.
         assert!(!matches!(n.ask("what is 25 nakisido 20"), Answer::Fact(_)));
+        // One contradiction is cheaper to explain as a slip than as a ceiling, so nothing changes yet.
         n.told("what is 25 nakisido 20", "30", None);
+        assert!(!matches!(n.ask("what is 25 nakisido 20"), Answer::Fact(_)), "a disputed point is never a fact");
+        // Two that a ceiling explains together are not a slip: the ceiling is believed (still short of a fact: the old rule is 9 bits behind).
         n.told("what is 22 nakisido 21", "30", None);
-        // The first contradiction left a rival standing by luck (`y + min(x, 10)` also fits); the second removed it and the search found the
-        // ceiling. Inside the region it has now seen, the ceiling is a fact.
+        match n.ask("what is 23 nakisido 20") {
+            Answer::Fact(a) | Answer::Guess(a, _) => assert_eq!(a, "30"),
+            Answer::Refuse => panic!("refused"),
+        }
+        // A third, and it is a fact inside the region now checked.
+        n.told("what is 24 nakisido 22", "30", None);
         assert_eq!(fact(&n.ask("what is 23 nakisido 20")), Some("30"));
         assert_eq!(fact(&n.ask("what is 3 nakisido 4")), Some("7"));
+    }
+
+    #[test]
+    fn one_wrong_answer_from_the_teacher_is_not_believed() {
+        let mut n = taught();
+        assert_eq!(fact(&n.ask("what is 6 fegisido 3")), Some("9"));
+        // The teacher says 99 for a sum that is 9. Nothing explains 99, so it is a slip: the program keeps its belief, and the point is only a guess.
+        n.told("what is 6 fegisido 3", "99", None);
+        match n.ask("what is 6 fegisido 3") {
+            Answer::Guess(a, _) => assert_eq!(a, "9"),
+            other => panic!("expected a guess of 9, got {other:?}"),
+        }
+        // A question nearby is unaffected.
+        assert_eq!(fact(&n.ask("what is 6 fegisido 4")), Some("10"));
     }
 
     #[test]

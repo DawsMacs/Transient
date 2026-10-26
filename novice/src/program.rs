@@ -454,6 +454,13 @@ pub fn search(task: &Task) -> Outcome {
 /// not say, which is exactly where doubt belongs, and finding them costs a few thousand evaluations instead of enumerating every larger program.
 /// Each rival keeps the belief its cost allows.
 pub fn rivals(best: &Expr, task: &Task) -> (Vec<Found>, Effort) {
+    rivals_priced(best, task, None)
+}
+
+/// Like [`rivals`], but a program may get some data points wrong if it pays for each: `(price, cutoff)` gives the bits an exception costs at
+/// every data point and the most a program may cost in all (its own bits plus its exceptions). A program that fits everything is the case where
+/// nothing is paid.
+pub fn rivals_priced(best: &Expr, task: &Task, priced: Option<(&[Cost], Cost)>) -> (Vec<Found>, Effort) {
     let n = task.inputs.len();
     let mut effort = Effort::default();
     // Constants for wrapping: the task's own, then the numbers just above and well above the largest value the best program takes on the data.
@@ -470,20 +477,34 @@ pub fn rivals(best: &Expr, task: &Task) -> (Vec<Found>, Effort) {
     let cost_best = cost_of(best, task.arity, task.words.len());
     let mut kept: Vec<Found> = Vec::new();
     for cand in variants(best, task, &wrap) {
-        // Cheapest test first: the data points, stopping at the first one it gets wrong.
+        let own = cost_of(&cand, task.arity, task.words.len());
+        let limit = priced.map_or(cost_best + 32 * bits::BIT, |(_, cutoff)| cutoff);
+        if own > limit {
+            continue;
+        }
+        // Cheapest test first: the data points, stopping at the first one it gets wrong (or, when exceptions are priced, as soon as it can no
+        // longer afford them).
+        let mut cost = own;
         let mut fits = true;
-        for (p, &t) in task.inputs.iter().zip(task.target).take(n) {
+        for (i, (p, &t)) in task.inputs.iter().zip(task.target).take(n).enumerate() {
             effort.evaluations += cand.size() as u64;
             if cand.eval(p) != Some(t) {
-                fits = false;
-                break;
+                match priced {
+                    Some((price, cutoff)) => {
+                        cost += price[i];
+                        if cost > cutoff {
+                            fits = false;
+                            break;
+                        }
+                    }
+                    None => {
+                        fits = false;
+                        break;
+                    }
+                }
             }
         }
         if !fits {
-            continue;
-        }
-        let cost = cost_of(&cand, task.arity, task.words.len());
-        if cost > cost_best + 32 * bits::BIT {
             continue;
         }
         let mut probe_values = Vec::with_capacity(task.probes.len());

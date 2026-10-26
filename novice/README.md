@@ -2,7 +2,7 @@
 
 The main line of work in Matter, **rebuilt from scratch**. [`baby`](../baby/README.md) is frozen as the reference and the measuring stick; Novice shares no code with it. What carries over is the [entry exam](../baby/README.md) (a plain-file and line-protocol judge that any system, in any language, can take), the goldens-and-platform habits, and the rules below.
 
-> **Status (2026-10-25): started; rungs 0 to 2 done on the tidy adaptive exam.** It finds the kinds of question itself, explains most of them with programs priced in bits, builds later explanations from earlier ones, and states no wrong fact. See "Results so far" for the numbers and, just as important, for what they do not show. Joules are not measured yet (the energy counter was unreadable this session); work is reported as counted evaluations and wall time. The cost of learning was cut 25-fold after the first version (see "Cost").
+> **Status (2026-10-25): started; rungs 0 to 3 done on the tidy adaptive exam.** It finds the kinds of question itself, explains most of them with programs priced in bits, builds later explanations from earlier ones, states no wrong fact, and is not fooled by a teacher who is consistently wrong about some facts (except in the kinds that have no rule to check against). See "Results so far" for the numbers and, just as important, for what they do not show. Joules are not measured yet (the energy counter was unreadable this session); work is reported as counted evaluations and wall time. The cost of learning was cut 25-fold after the first version (see "Cost").
 
 Labels used below: **Hypothesis** (believed, not shown), **Measured** (a number from a run), **Open** (not started).
 
@@ -54,7 +54,7 @@ Each rung has the test that would show it works, and a joule line to fill in.
 | 0 | speaks the protocol, refuses everything | 0 wrong facts; the exam can drive a system that is not baby | done |
 | 1 | remembers what it was told (a table of facts) | 0 wrong facts; right on the facts it saw, refuses the rest | done (inside the learner; the four lookup kinds in the exam are tables) |
 | 2 | finds programs from a minimal start | right on questions it never saw, for kinds a short program can say; routing found without the labels | done on the tidy exam (seeds 1 to 3); joules open |
-| 3 | rival explanations scored in bits | on the 14 streams of baby's wrong-teacher work: as few believed mistakes as baby's, with **no tuned count** | Open |
+| 3 | rival explanations scored in bits | on the 14 streams of baby's wrong-teacher work: as few believed mistakes as baby's, with **no tuned count** | done on the tidy exam (nine streams, fewer repeats than baby at every level); the count of three falls out of the costs |
 | 4 | sources | with a second, right source added, repeats fall in kinds that have no law to check against | Open |
 | 5 | the language grows | a kind that needs an operation Novice does not start with, from worlds written apart from the learner, solved by a primitive it made | first step only: earlier kinds become words (see below); the test itself is open |
 | 6 | answers get cheaper | joules per answer on a fixed set of questions fall as it learns, wrong facts stay 0, and the break-even point (learning joules spent against answer joules saved) is reported | first step: learning cost 25-fold lower than the first learner, and composition 116 times cheaper than enumeration; no joules, no curve yet |
@@ -92,11 +92,27 @@ Counted evaluations (one operation applied at one point), seed 1; the work is al
 
 The last row is the one that matters for the bet below. Three stage-2 kinds are explained by composition (seeds 1 to 3: 352 K, 360 K and 356 K evaluations for the three together, about 117 K each). Enumerating with the same 29 words cost 13.6 M each: **about 116 times less for that step**, and about 20 times less for the whole kind (roughly 0.7 M against 14.2 M) once the failed plain pass that runs first is counted. This is the first evidence of the effect rung 6 is after (explaining a new kind gets cheaper when more kinds are known). It is one effect on one tidy exam, not yet a curve, and the cost of answering a question was never the expensive part.
 
+### A teacher who is consistently wrong about some facts (rung 3)
+
+`baby exam adapt-write DIR --seed S --wrong P`: with probability P a fact is one the teacher is wrong about, and every time it tells that fact (any phrasing) it gives the same wrong answer, so a system cannot tell. The judge counts a wrong fact as a **repeat** (the same fact was wrongly told earlier: the system believed its teacher) or **elsewhere** (a fact never wrongly told: the teacher's mistakes damaged what the system knew; must be 0). Streams without re-asks, seeds 1 to 3; baby's numbers are the ones recorded for its skeptical exam driver on the same kind of stream.
+
+| teacher wrong about | Novice repeats | baby repeats | Novice elsewhere |
+|---|---|---|---|
+| 10 % | 1 / 0 / 3 | 5 / 7 / 6 | 0 / 0 / 0 |
+| 20 % | 2 / 0 / 7 | 10 / 10 / 18 | 0 / 0 / 0 |
+| 40 % | 9 / 9 / 7 | 20 / 38 (two seeds) | 0 / 1 / 0 |
+
+With 30 % of the questions asked again (more chances to repeat a believed mistake), Novice has 4 / 4 / 6 repeats at 10 % and 6 / 7 / 17 at 20 %, and 0 elsewhere. **Every remaining wrong fact I checked is in one of the six kinds that have no rule to check against** (a prime test, an exclusive-or, four arbitrary codes): a single source cannot catch a mistake there by any means, as baby's notes also found, and a second independent source is what rung 4 is for.
+
+**How it works, and why no count is tuned.** A told answer that disagrees with a program does not remove the program. The program pays the price of an exception: the bits to say which point (`log2(points + 1)`) plus the bits to write the odd answer. Rivals that agree with the told answer gain on it. One slip costs the believed program about 14 bits, and the rival that explains a real change of rule (a ceiling at 30) costs about 16 bits more to write, so one contradiction changes nothing and two that a rival explains together win. That is baby's hand-set "three coherent answers", derived from the costs. A point where a told answer was refused is never stated as a fact, only guessed. Saying the same thing again (a re-ask, another phrasing) is counted, not weighed twice.
+
+**What it costs.** Fewer believed mistakes can be bought with refusals. On honest streams the learner is a little slower to adopt a rule that really changed (wrong guesses 1.1 % against 0.6 % before this rung, thirds 86.3 → 88.2 % against 87.1 → 88.5 % on seed 1). Under a wrong teacher it refuses more (seed 1 at 20 %: 33 % refused against 11 % on honest streams).
+
 **Caveats, plainly.**
 - **The exam is tidy and was written by the same author as the learner.** The kinds are small arithmetic rules over the integers 0 to 15. The operations Novice starts with (`+ - * min max div mod`) are my choice and fit that domain; that the exam is passed says nothing about worlds the starting operations cannot express. Two of the six unexplainable kinds (a prime test and an exclusive-or) have a rule that the starting operations cannot say; rung 5 is where that is tested properly.
 - **Words are only a first step toward a language that grows.** Earlier explanations become words; no new primitive is ever made. The two words are compositions of the starting operations.
 - **No joules.** The energy counter was unreadable this session. Counted evaluations and wall time on one core are the only cost numbers, and neither is an energy number. Nothing here yet shows that adapting makes anything cheaper in joules; the composition result is about the cost of learning a kind, not of answering a question (which was never expensive).
-- **Only the adaptive exam, only a clean teacher.** The static exam (with its traps) and the wrong-teacher tier have not been run on Novice. A source that is consistently wrong would be believed today.
+- **Only the adaptive exam.** The static exam (with its traps) has not been run on Novice. A teacher who is wrong about a whole kind of thing, not about some facts, is not caught (nothing inside one source can catch it).
 - **Guesses are labeled but crudely calibrated.** Outside the region it has seen, the confidence it states is how often its guesses at that distance have been right so far, shared across all kinds.
 - **The failed searches are still most of what is left**: the six lookup kinds are searched, fail, and are searched again as they grow.
 
@@ -111,11 +127,14 @@ The last row is the one that matters for the bet below. Three stage-2 kinds are 
 | search sizes (7 nodes; 5 once words are on offer), 200,000 expressions | `learner.rs` | rung 6 (search effort proportional to what it can win) |
 | probe points around the region, to keep rivals apart | `learner.rs` | rung 6 |
 | a group is searched once it has four points; a table group is searched again when it has doubled | `learner.rs` | rung 6 |
-| guesses outside the region: confidence = the shared record of right guesses at that distance | `learner.rs` | rung 3 |
-| a kind is named by the word that makes the answer a function of the numbers and covers the most questions | `learner.rs` | breaks with noisy lessons; rung 3 |
+| guesses outside the region: confidence = the shared record of right guesses at that distance | `learner.rs` | calibrating per kind; open |
+| the price of an exception is `log2(points + 1)` bits plus the bits of the odd answer; a repair may use programs up to 12 bits above the favorite | `learner.rs` | a teacher-reliability estimate learned per source (rung 4) |
+| a kind is named by the word that makes the answer a function of the numbers and covers the most questions | `learner.rs` | breaks with noisy lessons; open |
 | a word is any explained kind with a body of at least three nodes whose behavior is new | `learner.rs` | rung 5 (a compression test instead) |
 
 ## Mistakes and dead ends (newest first)
+
+- **A repeated answer was weighed as new evidence.** My first version of the exception price penalized the believed program every time a wrong answer was told, including when the same wrong answer came again as a re-ask, while programs found by editing were priced against it once. The believed rule (`div(x, 10)`) then lost to a rival (`div(x, 9)`) that happened to agree with some wrong answers, and the system stated a wrong fact about a fact the teacher had never got wrong (1 on one of six streams; the must-be-zero column). Fixed by weighing a (question, answer) pair once; the same stream now has 0.
 
 - **Rivals found only by editing the best program gave a wrong fact.** To save work I replaced the enumeration of larger programs by edits of the best one (wrap it in an operation, swap a constant). Cost fell from 486 M to 323 M evaluations and the exam was unchanged on seed 1, but on seed 2 the first stream question, a digit-sum kind, was answered `0` as a fact where the truth was `9`. The lessons skipped 7, 9 and 10, `x mod 9` fits every one of them, and it is about 7 bits cheaper to write than the real rule; the real rule is not one edit away from it. The enumeration had been keeping it as a rival with enough belief to stop the fact. The right completeness rule is a cost rule: any program within `RISK_BITS` of the best can keep a fact from being stated and must be considered; edits are an addition (they find ceilings and wrap-arounds that cost many bits more), not a substitute. Restored, made cheap another way (the last level is only checked), and pinned by a test built from that exact case.
 - **The widest search (every number in the data as a constant) was dead weight once contradictions are repaired by editing.** It cost 65 M evaluations, almost all failing on the lookup kinds, and removing it changed no answer on three seeds.
