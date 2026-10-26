@@ -56,7 +56,7 @@ Each rung has the test that would show it works, and a joule line to fill in.
 | 2 | finds programs from a minimal start | right on questions it never saw, for kinds a short program can say; routing found without the labels | done on the tidy exam (seeds 1 to 3); joules open |
 | 3 | rival explanations scored in bits | on the 14 streams of baby's wrong-teacher work: as few believed mistakes as baby's, with **no tuned count** | done on the tidy exam: repeats on par with baby's, 0 elsewhere, at a cost in coverage (see above); the count of three falls out of the costs |
 | 4 | sources | with a second, right source added, repeats fall in kinds that have no law to check against | done on the tidy exam: 0 wrong facts of any kind on all streams with one reliable and one unreliable source; with one source, repeats fall to 0 by stating the unreliable source's answers as guesses |
-| 5 | the language grows | a kind that needs an operation Novice does not start with, from worlds written apart from the learner, solved by a primitive it made | development set: 5 of 18 hard kinds per seed acquired, all correct, 0 wrong facts; the blind test set is open |
+| 5 | the language grows | a kind that needs an operation Novice does not start with, from worlds written apart from the learner, solved by a primitive it made | development set: 5 of 18 hard kinds per seed acquired, all correct; blind set: 1 of 16 on two seeds, 0 on the third, 0 wrong facts either way (see "The blind test of rung 5") |
 | 6 | answers get cheaper | joules per answer on a fixed set of questions fall as it learns, wrong facts stay 0, and the break-even point (learning joules spent against answer joules saved) is reported | first steps: learning cost 25-fold lower than the first learner, composition 116 times cheaper than enumeration, joules measured once; the curriculum measurement shows capability from experience but not yet a falling cost |
 
 Rungs 0 to 4 are the first milestone (the tidy exam, with a source tag). Rung 5 is the test of "genuine"; the worlds for it are written by a process that the learner's author does not read until the review, so the learner cannot be tuned to them. Rung 6 is the bet itself.
@@ -130,7 +130,32 @@ The reliabilities it measures are close to the truth (seed 3 shown): with a teac
 
 **What I did to get here, and what it cost me.** The first version accepted a recurrence whenever it was cheaper than the table, and it stated **2 to 3 wrong facts per seed** from spurious fits (a recurrence that ignored the value at the nearer point and "explained" only the rows its own reduction selected; `f(x, y) = f(x + y, 3)` for bitwise-or). Each fix is recorded under "Mistakes". The three that matter: the table's cost was computed with a code that charges large numbers heavily, which overstated what a chance fit saves for kinds with small answers, so the table is now priced with a code that learns the answers' distribution; a recurrence is fitted again on three quarters of the table and must predict the hidden quarter (four rounds, at least three hidden points reached, none wrong); and an answer worked out by walking a chain of reductions is **never a fact**, only a guess whose confidence is how often such answers have been right.
 
-**This is a development set, and I have read it.** I wrote the mechanism after reading the list of 25 kinds, so these results measure how well I did on a set I knew, not whether the mechanism generalizes. The test that counts is a second set, written without reading Novice's code and not shown to me before I run it once. It has not been run.
+**This is a development set, and I have read it.** I wrote the mechanism after reading the list of 25 kinds, so these results measure how well I did on a set I knew, not whether the mechanism generalizes. The test that counts is a second set, written without reading Novice's code and not shown to me before I ran it once. It has been run, and the result is below: much smaller.
+
+### The blind test of rung 5 (a second set, run once)
+
+The development result above was measured on a set whose kinds I had read. A second generator, `tools/hidden_worlds_b.py` (written by a separate session that did not read Novice's code; its own pull request, #33), has 23 different kinds: 11 that need a new operation (Euler's totient, number of distinct prime factors, the next prime, Fibonacci mod `m`, Collatz steps, partitions, Catalan mod `m`, base-3 digit sum, base-3 digit reversal, binomial mod `m`, Josephus), 5 composed on those, 4 controls the starting operations can express, and 3 arbitrary codes. Novice at the commit frozen beforehand (`7d89b06`; the `novice/` directory has not changed since) was run **once per seed on seeds 1 to 3, and the numbers were written down before the kinds were read**.
+
+| seed | wrong facts | wrong guesses | hard kinds acquired (of 16) | new-operation questions right | composed questions right | controls: facts / guesses / refused |
+|---|---|---|---|---|---|---|
+| 1 | 0 | 0 | 1 | 7.1 % | 0 % | 62.5 / 18.1 / 19.4 % |
+| 2 | 0 | 0 | 1 | 8.2 % | 3.5 % | 62.5 / 18.1 / 19.4 % |
+| 3 | 0 | 0 | 0 | 0 % | 2.3 % | 62.5 / 18.1 / 19.4 % |
+
+(All of those right answers are labeled guesses; none is a fact. Baby refuses every new-operation and composed question, as the generator's notes record.)
+
+**What this says.** The honesty held on a set it was not developed against: 0 wrong facts and 0 wrong guesses on all three seeds. The capability did **not** transfer much. The single kind acquired is the base-3 digit sum, found as `f(x) = r + x mod 3, r = f(x div 3)`: the same recurrence as counting one bits, in another base, with no line of code that names a base. That is real transfer of the *mechanism*. But it is one kind in sixteen on two seeds and none on the third (there the right recurrence was found and rejected, because it saves 7.8 bits over the table against an error budget of 10: sixteen small answers are borderline evidence), and 15 of the 16 hard kinds stayed unexplained. The development result of five kinds in eighteen per seed should be read as an upper bound on what the mechanism does on kinds it was not shaped by.
+
+**Why the other kinds were not reached** (found after the run, from the traces and the generator's notes):
+- *Two earlier values.* Fibonacci mod `m` and the binomial coefficient mod `m` (Pascal's rule) depend on two earlier points; a recurrence here has one reduction.
+- *A conditional step.* Collatz halves or triples depending on parity.
+- *A step that is too long.* Josephus is `f(n, k) = (f(n - 1, k) + k) mod n` zero-based, but the exam counts places from 1, so the step is nine nodes; steps are searched up to five (seven for the six best reductions).
+- *Multiplicative structure.* Totient, the number of distinct prime factors, the next prime and the sums and ranks built on them, partitions and Catalan numbers have no short recurrence in this language.
+- *Reversal.* The base-3 digit reversal is not a function of a nearer value and a digit.
+
+**A gap in the controls.** One control, `wrap` (`(k·a + c) mod m` with three constants), is refused on every seed by Novice and by baby, although it is expressible with the starting operations: seven nodes and constants that are in neither the plain list nor the five-node data-constants search. It is the same fraction (19.4 % of the control questions) on every seed.
+
+**This set is now a development set too.** I have read it, so a third, blind set would be needed before claiming anything more about generalization. Any extension that lets Novice reach the kinds above (a step over two earlier values, a conditional) is a change made with these kinds in view.
 
 ### Cost
 
