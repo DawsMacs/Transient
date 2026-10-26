@@ -42,6 +42,10 @@ const MAX_ITEMS: usize = 200_000;
 const ANSWER_SPACE: u64 = 100;
 /// The channel the lessons arrive on.
 const TEACHING: &str = "teaching";
+/// How many times the lessons count as already confirmed before anything has checked them (hand-built).
+const LESSONS_PRIOR: u64 = 1 << (RISK_BITS + 1);
+/// A probe value for a program that says nothing there.
+const UNDEFINED: i64 = i64::MIN;
 
 struct Fit {
     found: Vec<Found>,
@@ -60,15 +64,21 @@ struct Group {
     /// How many words were on offer the last time the group was tried for a composition, and how many earned words the last blind search had.
     words_tried: usize,
     enumerated_with: usize,
+    /// The size of the group, doubled, when a recurrence was last looked for (it is tried again when the group has doubled).
+    recurrence_tried: usize,
     /// Counted evaluations spent on this kind until it was first explained, and its place in the order the kinds were explained.
     spent: u64,
     explained_at: Option<usize>,
+    /// What is known of the kind's values (numeric, by point), shared with any recurrence that is defined in terms of them.
+    table: Rc<std::cell::RefCell<BTreeMap<Vec<i64>, i64>>>,
     /// What each channel said about each point, the latest claim of a channel winning.
     claims: BTreeMap<Vec<i64>, BTreeMap<String, String>>,
     /// Points where the told answer disagreed with the program believed at the time: not believed, not forgotten.
     disputed: std::collections::BTreeSet<Vec<i64>>,
     /// This kind's own record of guesses made outside its region: (right, made).
     record: (u32, u32),
+    /// The same for answers worked out by walking a chain of reductions.
+    chain_record: (u32, u32),
     /// Whether any answer it has been given was negative. A negative result for a kind that never showed one is not stated.
     negative: bool,
 }
@@ -78,6 +88,8 @@ struct Said {
     /// Distance bucket of a guess made outside the taught region, and the group that made it.
     bucket: Option<usize>,
     group: Option<usize>,
+    /// The kind whose chain of reductions worked this answer out.
+    chain_of: Option<usize>,
 }
 
 /// Work done, for the report at the end.
@@ -107,12 +119,14 @@ pub struct Novice {
     why: [u32; 8],
     /// Per channel: how often it agreed with a confident program, and how often one could be asked.
     reliability: BTreeMap<String, (u32, u32)>,
+    /// How often answers worked out by a chain of reductions have been right, over all kinds.
+    chain_record: (u32, u32),
     pub stats: Stats,
 }
 
 impl Default for Novice {
     fn default() -> Self {
-        Novice { lessons: Vec::new(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], reliability: BTreeMap::new(), stats: Stats::default() }
+        Novice { lessons: Vec::new(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], reliability: BTreeMap::new(), chain_record: (0, 0), stats: Stats::default() }
     }
 }
 
@@ -152,6 +166,31 @@ fn probes(lo: &[i64], hi: &[i64]) -> Vec<Vec<i64>> {
     out
 }
 
+/// Bits to write down a kind's answers, one after the other, with a code that learns how often each answer comes: the first time an answer
+/// appears is dear, a repeat is cheap, so answers that are concentrated in a few values cost little. This is what the answers cost if the kind
+/// has no rule; a rule must beat it. (`ANSWER_SPACE` is the number of different answers the code allows for before it has seen any.)
+fn table_cost(answers: &[i64]) -> Cost {
+    let mut seen: BTreeMap<i64, u64> = BTreeMap::new();
+    let mut cost: Cost = 0;
+    for (n, a) in answers.iter().enumerate() {
+        let count = seen.get(a).copied().unwrap_or(0);
+        let (num, den) = (2 * count + 1, 2 * n as u64 + ANSWER_SPACE);
+        cost += bits::log2(den).saturating_sub(bits::log2(num));
+        *seen.entry(*a).or_insert(0) += 1;
+    }
+    cost
+}
+
+/// Whether the expression mentions variable `i`.
+fn uses_variable(e: &Expr, i: usize) -> bool {
+    match e {
+        Expr::Var(v) => *v == i,
+        Expr::Const(_) | Expr::Fix(_) => false,
+        Expr::Bin(_, a, b) => uses_variable(a, i) || uses_variable(b, i),
+        Expr::Call(_, xs) => xs.iter().any(|x| uses_variable(x, i)),
+    }
+}
+
 /// A few points to compare two words on.
 fn grid(arity: usize) -> Vec<Vec<i64>> {
     if arity == 1 {
@@ -168,12 +207,14 @@ fn substitute(h: &Expr, with: &Expr) -> Expr {
         Expr::Const(c) => Expr::Const(*c),
         Expr::Bin(op, a, b) => Expr::Bin(*op, Box::new(substitute(a, with)), Box::new(substitute(b, with))),
         Expr::Call(lib, xs) => Expr::Call(lib.clone(), xs.iter().map(|x| substitute(x, with)).collect()),
+        Expr::Fix(_) => h.clone(),
     }
 }
 
 fn mentions(e: &Expr, word: &str) -> bool {
     match e {
         Expr::Call(lib, xs) => lib.name == word || xs.iter().any(|x| mentions(x, word)),
+        Expr::Fix(_) => false,
         Expr::Bin(_, a, b) => mentions(a, word) || mentions(b, word),
         _ => false,
     }
@@ -238,7 +279,7 @@ impl Novice {
                 hi[i] = hi[i].max(p[i]);
             }
         }
-        let table: Cost = target.iter().map(|&a| bits::uint(a.unsigned_abs())).sum();
+        let table: Cost = table_cost(&target);
         let probe = probes(&lo, &hi);
         let out = program::search_with_rivals(&Task { inputs: &inputs, target: &target, probes: &probe, arity, consts, words, max_size, rival_size: 2, max_items: MAX_ITEMS });
         if std::env::var_os("NOVICE_TRACE").is_some() {
@@ -267,7 +308,7 @@ impl Novice {
         }
         // The first blind search uses the starting operations only: every word on the alphabet makes it dearer for every kind that comes after,
         // whether or not the kind has anything to do with the word. Words are used by composition and by editing a known program.
-        if self.search_group(g, &BASE_CONSTS, &[], 7, "plain") {
+        if self.search_group(g, &BASE_CONSTS, &[], 7, "plain") || self.search_data_constants(g) {
             return;
         }
     }
@@ -305,12 +346,18 @@ impl Novice {
         // Before it has been checked, a channel is as reliable as the lessons were if it is the same teacher, and a coin toss otherwise; the
         // prior counts for two checks.
         let (prior_num, prior_den) = match (Self::family(channel) == "teacher" && channel != TEACHING, self.reliability.get(TEACHING)) {
-            (true, Some(&(agree, asked))) => (u64::from(agree) + 1, u64::from(asked) + 2),
+            (true, Some(&(agree, asked))) => (u64::from(agree) + LESSONS_PRIOR, u64::from(asked) + LESSONS_PRIOR + 1),
+            (true, None) => (LESSONS_PRIOR, LESSONS_PRIOR + 1),
             _ => (1, 2),
         };
         let (agree, asked) = self.reliability.get(channel).copied().unwrap_or((0, 0));
-        let num = u64::from(agree) * prior_den + 2 * prior_num;
-        let den = (u64::from(asked) + 2) * prior_den;
+        // The lessons are what the system exists to trust: before anything has checked them they count as having been confirmed 2^(RISK_BITS + 1)
+        // times, so one taught fact is a fact; checking can only lower that.
+        let (num, den) = if channel == TEACHING {
+            (u64::from(agree) + LESSONS_PRIOR, u64::from(asked) + LESSONS_PRIOR + 1)
+        } else {
+            (u64::from(agree) * prior_den + 2 * prior_num, (u64::from(asked) + 2) * prior_den)
+        };
         if right {
             bits::surprise(num, den)
         } else {
@@ -427,6 +474,204 @@ impl Novice {
         fit.found.truncate(64);
     }
 
+    /// Explain a kind by a recurrence over its own values: `f(p) = e(p, f(g(p)))`. The reductions `g` are proposed from everything a few nodes can
+    /// make, keeping those that bring most points down to a point whose value is known; then `e` is searched on the points that have such a
+    /// value. The points the recurrence does not account for are paid for one by one, so it is kept only if that is cheaper than the whole table.
+    fn recurrence(&mut self, g: usize) -> bool {
+        let arity = self.groups[g].arity;
+        if arity == 0 || arity > 2 {
+            return false;
+        }
+        let Some((inputs, target)) = self.inputs_and_targets(g) else { return false };
+        if inputs.len() < 8 {
+            return false;
+        }
+        let known: BTreeMap<Vec<i64>, i64> = inputs.iter().cloned().zip(target.iter().copied()).collect();
+        let whole_table: Cost = table_cost(&target);
+        let consts: Vec<i64> = (0..=8).chain([10]).collect();
+        let (pool, effort) = program::pool(&inputs, arity, &consts, if arity == 1 { 5 } else { 3 }, 30_000);
+        self.stats.evaluations += effort.evaluations;
+        let usable: Vec<usize> = (0..pool.len()).filter(|&i| pool[i].2.iter().all(|&v| v >= 0)).collect();
+        struct Reduction {
+            parts: Vec<usize>,
+            cover: usize,
+            cost: Cost,
+        }
+        let mut reductions: Vec<Reduction> = Vec::new();
+        let at = |parts: &[usize], k: usize| -> Vec<i64> { parts.iter().map(|&i| pool[i].2[k]).collect() };
+        if arity == 1 {
+            for &i in &usable {
+                let down = inputs.iter().enumerate().filter(|(k, p)| p[0] > 0 && pool[i].2[*k] < p[0]).count();
+                let positive = inputs.iter().filter(|p| p[0] > 0).count();
+                if down * 10 < positive * 9 {
+                    continue;
+                }
+                let cover = (0..inputs.len()).filter(|&k| known.contains_key(&at(&[i], k))).count();
+                if cover >= 4 {
+                    reductions.push(Reduction { parts: vec![i], cover, cost: pool[i].1 });
+                }
+            }
+        } else {
+            for &i in &usable {
+                for &j in &usable {
+                    let parts = [i, j];
+                    let moved = (0..inputs.len()).filter(|&k| at(&parts, k) != inputs[k]).count();
+                    if moved < inputs.len() {
+                        continue;
+                    }
+                    let cover = (0..inputs.len()).filter(|&k| known.contains_key(&at(&parts, k))).count();
+                    if cover >= 4 {
+                        reductions.push(Reduction { parts: parts.to_vec(), cover, cost: pool[i].1 + pool[j].1 });
+                    }
+                }
+            }
+        }
+        // The cheapest reductions first, among those that bring a good share of the points down to a point whose value is known.
+        let enough = (inputs.len() * 2 / 5).clamp(4, 10);
+        reductions.retain(|r| r.cover >= enough);
+        reductions.sort_by(|a, b| a.cost.cmp(&b.cost).then(b.cover.cmp(&a.cover)).then(a.parts.cmp(&b.parts)));
+        self.stats.searches += 1;
+        // Every reduction that has a step, then the cheapest that survives the checks.
+        let mut candidates: Vec<(Cost, Expr)> = Vec::new();
+        for (max_size, how_many) in [(5usize, 24usize), (7, 6)] {
+            for red in reductions.iter().take(how_many) {
+                let (mut rows, mut ts, mut explained) = (Vec::new(), Vec::new(), vec![false; inputs.len()]);
+                for k in 0..inputs.len() {
+                    let gp = at(&red.parts, k);
+                    if gp == inputs[k] {
+                        continue;
+                    }
+                    if let Some(&r) = known.get(&gp) {
+                        let mut row = inputs[k].clone();
+                        row.push(r);
+                        rows.push(row);
+                        ts.push(target[k]);
+                        explained[k] = true;
+                    }
+                }
+                if rows.len() < 4 {
+                    continue;
+                }
+                let out = program::search(&Task { inputs: &rows, target: &ts, probes: &[], arity: arity + 1, consts: &BASE_CONSTS, words: &[], max_size, rival_size: 0, max_items: MAX_ITEMS });
+                self.stats.evaluations += out.effort.evaluations;
+                // A step that ignores the value at the nearer point is not a recurrence: it is a program fitted to whichever rows the reduction
+                // happened to pick.
+                let Some(step) = out.found.iter().find(|f| uses_variable(&f.expr, arity)) else { continue };
+                let base_cost: Cost = table_cost(&(0..inputs.len()).filter(|&k| !explained[k]).map(|k| target[k]).collect::<Vec<i64>>());
+                let fix = program::FixDef { arity, g: red.parts.iter().map(|&i| pool[i].0.clone()).collect(), e: step.expr.clone(), table: self.groups[g].table.clone(), base_cost };
+                let whole = Expr::Fix(Rc::new(fix));
+                candidates.push((program::cost_of(&whole, arity, 0), whole));
+            }
+            // The larger steps are looked for only if the small ones gave nothing.
+            if !candidates.is_empty() {
+                break;
+            }
+        }
+        candidates.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.to_string().cmp(&b.1.to_string())));
+        candidates.dedup_by(|a, b| a.1.to_string() == b.1.to_string());
+        // Beating the table by a hair is what a chance fit does too: the saving has to clear the error budget. And a step fitted on the rows it
+        // explains says nothing about points it has not seen, so it is fitted again on part of the table and must predict the rest.
+        let mut accepted: Vec<(Cost, Expr)> = Vec::new();
+        for (cost, whole) in candidates.into_iter().take(6) {
+            if accepted.len() == 3 {
+                break;
+            }
+            if cost + u64::from(RISK_BITS) * bits::BIT >= whole_table {
+                if std::env::var_os("NOVICE_TRACE").is_some() {
+                    eprintln!("recurrence {:<14} {whole}: {:.1} bits against a table of {:.1}", self.groups[g].key, bits::as_bits(cost), bits::as_bits(whole_table));
+                }
+                continue;
+            }
+            let Expr::Fix(fix) = &whole else { continue };
+            if !self.holds_out(fix, &known, arity) {
+                if std::env::var_os("NOVICE_TRACE").is_some() {
+                    eprintln!("recurrence {:<14} {whole}: does not predict the points held out", self.groups[g].key);
+                }
+                continue;
+            }
+            accepted.push((cost, whole));
+        }
+        // They are rivals: each is true of the table, and which one reaches a point depends on the point.
+        let mut accepted = accepted.into_iter();
+        let Some((cost, whole)) = accepted.next() else { return false };
+        let rivals: Vec<Expr> = accepted.map(|a| a.1).collect();
+        if std::env::var_os("NOVICE_TRACE").is_some() {
+            eprintln!("recurrence {:<14} points {:>3} -> {whole}   saves {:.1} bits ({:.1} against a table of {:.1})", self.groups[g].key, inputs.len(), bits::as_bits(whole_table - cost), bits::as_bits(cost), bits::as_bits(whole_table));
+        }
+        // The table is shared: what is known so far goes in, and what is learned later joins it.
+        for (p, t) in &known {
+            self.groups[g].table.borrow_mut().entry(p.clone()).or_insert(*t);
+        }
+        self.finish_fit(g, whole, rivals, &inputs, &target, &[])
+    }
+
+    /// Whether a recurrence found on the whole table is also right about points it has not seen. Four times, a different quarter of the points is
+    /// hidden; the step is found again from the other three quarters and must give the right value, through the chain of reductions, at the hidden
+    /// points the chain reaches. Over the four rounds it must reach at least three of them and be right at every one.
+    fn holds_out(&mut self, fix: &Rc<program::FixDef>, known: &BTreeMap<Vec<i64>, i64>, arity: usize) -> bool {
+        let fold_of = |p: &Vec<i64>| -> u64 {
+            let mut h: u64 = 0x9E37_79B9_7F4A_7C15;
+            for &v in p {
+                h = (h ^ v as u64).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+                h ^= h >> 31;
+                h = h.wrapping_mul(0x94D0_49BB_1331_11EB);
+                h ^= h >> 29;
+            }
+            h % 4
+        };
+        let (mut reached, mut right) = (0usize, 0usize);
+        for fold in 0..4 {
+            let training: BTreeMap<Vec<i64>, i64> = known.iter().filter(|(p, _)| fold_of(p) != fold).map(|(p, t)| (p.clone(), *t)).collect();
+            let (mut rows, mut ts) = (Vec::new(), Vec::new());
+            for (p, &t) in &training {
+                let Some(gp) = fix.g.iter().map(|g| g.eval(p)).collect::<Option<Vec<i64>>>() else { continue };
+                if &gp == p {
+                    continue;
+                }
+                if let Some(&r) = training.get(&gp) {
+                    let mut row = p.clone();
+                    row.push(r);
+                    rows.push(row);
+                    ts.push(t);
+                }
+            }
+            if rows.len() < 4 {
+                continue;
+            }
+            let size = fix.e.size().max(5);
+            let out = program::search(&Task { inputs: &rows, target: &ts, probes: &[], arity: arity + 1, consts: &BASE_CONSTS, words: &[], max_size: size, rival_size: 0, max_items: MAX_ITEMS });
+            self.stats.evaluations += out.effort.evaluations;
+            let Some(step) = out.found.iter().find(|f| uses_variable(&f.expr, arity)) else { return false };
+            let again = program::FixDef { arity, g: fix.g.clone(), e: step.expr.clone(), table: Rc::new(std::cell::RefCell::new(training)), base_cost: 0 };
+            for (p, &t) in known {
+                if fold_of(p) != fold {
+                    continue;
+                }
+                if let Some(v) = again.apply(p, program::FIX_DEPTH) {
+                    reached += 1;
+                    right += usize::from(v == t);
+                }
+            }
+        }
+        if std::env::var_os("NOVICE_TRACE").is_some() {
+            eprintln!("    held out over four rounds: reached {reached}, right {right}");
+        }
+        reached >= 3 && right == reached
+    }
+
+    /// Unary kinds only: the numbers in the data as constants, for the programs that mention a number nobody has to be told about (a divisor).
+    fn search_data_constants(&mut self, g: usize) -> bool {
+        if self.groups[g].arity != 1 {
+            return false;
+        }
+        let Some((inputs, target)) = self.inputs_and_targets(g) else { return false };
+        let mut consts: Vec<i64> = BASE_CONSTS.to_vec();
+        consts.extend(target.iter().chain(inputs.iter().flatten()).copied().filter(|c| (0..=40).contains(c)));
+        consts.sort_unstable();
+        consts.dedup();
+        self.search_group(g, &consts, &[], 5, "data")
+    }
+
     /// Edit the refuted programs: change a leaf or an operation, swap a constant, or wrap any part in an operation with a constant. The constants
     /// offered are the plain ones, the told answers, and what each refuted program got wrong (what it said, and what it said minus the truth).
     fn repair(&mut self, g: usize, refuted: &[Expr], inputs: &[Vec<i64>], target: &[i64], words: &[Rc<Lib>]) -> bool {
@@ -468,7 +713,7 @@ impl Novice {
             }
         }
         kept.truncate(64);
-        let table: Cost = target.iter().map(|&a| bits::uint(a.unsigned_abs())).sum();
+        let table: Cost = table_cost(&target);
         if std::env::var_os("NOVICE_TRACE").is_some() {
             eprintln!("repair {:<14} points {:>3} consts {:>2} -> {}", self.groups[g].key, inputs.len(), consts.len(), kept.first().map(|f| f.expr.to_string()).unwrap_or_else(|| "nothing".into()));
         }
@@ -486,7 +731,7 @@ impl Novice {
         let Some((inputs, target)) = self.inputs_and_targets(g) else { return false };
         let arity = self.groups[g].arity;
         let mut composites: Vec<(Cost, Expr)> = Vec::new();
-        let table: Cost = target.iter().map(|&a| bits::uint(a.unsigned_abs())).sum();
+        let table: Cost = table_cost(&target);
         for word in offer {
             // The ways to feed the word from the question's own numbers.
             let mut feeds: Vec<Vec<Expr>> = Vec::new();
@@ -548,17 +793,13 @@ impl Novice {
         let mut found: Vec<Found> = Vec::new();
         let mut probe_values = Vec::new();
         for p in &probe {
-            match best.eval(p) {
-                Some(v) => probe_values.push(v),
-                None => return false,
-            }
+            // Where the program says nothing (a recurrence whose chain does not reach a known value) it takes no side.
+            probe_values.push(best.eval(p).unwrap_or(UNDEFINED));
         }
         found.push(Found { cost: program::cost_of(&best, arity, words.len()), expr: best.clone(), probe_values });
         for e in others {
-            let values: Option<Vec<i64>> = probe.iter().map(|p| e.eval(p)).collect();
-            if let Some(probe_values) = values {
-                found.push(Found { cost: program::cost_of(&e, arity, words.len()), expr: e, probe_values });
-            }
+            let probe_values: Vec<i64> = probe.iter().map(|p| e.eval(p).unwrap_or(UNDEFINED)).collect();
+            found.push(Found { cost: program::cost_of(&e, arity, words.len()), expr: e, probe_values });
         }
         let (more, effort) = program::rivals(&best, &task);
         self.stats.evaluations += effort.evaluations;
@@ -672,7 +913,7 @@ impl Novice {
             let g = match self.by_key.get(&key) {
                 Some(&g) => g,
                 None => {
-                    self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, enumerated_with: 0, spent: 0, explained_at: None, claims: BTreeMap::new(), disputed: Default::default(), record: (0, 0), negative: false });
+                    self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, enumerated_with: 0, recurrence_tried: 0, spent: 0, explained_at: None, table: Default::default(), claims: BTreeMap::new(), disputed: Default::default(), record: (0, 0), chain_record: (0, 0), negative: false });
                     self.by_key.insert(key, self.groups.len() - 1);
                     self.groups.len() - 1
                 }
@@ -680,6 +921,9 @@ impl Novice {
             if self.groups[g].arity == p.nums.len() {
                 self.add_point(g, &p.nums, answer);
                 self.groups[g].claims.entry(p.nums.clone()).or_default().insert(TEACHING.to_string(), answer.clone());
+                if let Ok(v) = answer.parse::<i64>() {
+                    self.groups[g].table.borrow_mut().entry(p.nums.clone()).or_insert(v);
+                }
                 touched.insert(g);
             }
         }
@@ -688,7 +932,25 @@ impl Novice {
             self.charge(g, |s| s.refit(g, &[]));
         }
         self.sleep();
+        self.last_resort();
         self.score_teaching();
+    }
+
+    /// For the kinds no closed form explains, even with the words learned so far: a recurrence over the kind's own values. A kind it explains
+    /// becomes a word like any other, so the kinds built on it are tried again.
+    fn last_resort(&mut self) {
+        let mut any = false;
+        for g in 0..self.groups.len() {
+            if self.groups[g].fit.is_none() && self.groups[g].recurrence_tried < self.groups[g].points.len() {
+                self.groups[g].recurrence_tried = self.groups[g].points.len() * 2;
+                if self.charge(g, |s| s.recurrence(g)) {
+                    any = true;
+                }
+            }
+        }
+        if any {
+            self.sleep();
+        }
     }
 }
 
@@ -703,7 +965,7 @@ impl System for Novice {
 
     fn ask(&mut self, question: &str) -> Answer {
         let p = parse(question);
-        let mut said = Said { answer: None, bucket: None, group: None };
+        let mut said = Said { answer: None, bucket: None, group: None, chain_of: None };
         let reason = std::cell::Cell::new(0usize);
         let reply = (|| {
             // A word it has never met may change what is asked: nothing is stated about such a question.
@@ -734,6 +996,24 @@ impl System for Novice {
             if value < 0 && !g.negative {
                 reason.set(5);
                 return None;
+            }
+            // A program that walks a chain of reductions is a risky kind of explanation: what it was taught or told is a fact, and what it works
+            // out is a guess whose confidence is how often such answers have been right.
+            if fit.found[0].expr.has_fix() {
+                let gi = self.group_of(&p)?;
+                if !self.groups[gi].disputed.contains(&p.nums) {
+                    if let Some((answer, top, total)) = self.believe(gi, &p.nums) {
+                        if u128::from(top) << RISK_BITS >= u128::from(total) * ((1u128 << RISK_BITS) - 1) {
+                            return Some(Answer::Fact(answer));
+                        }
+                    }
+                }
+                let shared = (1000 * (self.chain_record.0 + 1)) / (self.chain_record.1 + 2);
+                let (right, made) = g.chain_record;
+                let permille = ((1000 * right + 2 * shared) / (made + 2)).min(999);
+                said.chain_of = Some(gi);
+                reason.set(7);
+                return (permille >= 500).then(|| Answer::Guess(value.to_string(), permille));
             }
             let inside = p.nums.iter().enumerate().all(|(i, &n)| fit.lo[i] <= n && n <= fit.hi[i]);
             if inside {
@@ -776,6 +1056,12 @@ impl System for Novice {
         let p = parse(question);
         let truth = truth.trim();
         if let Some(said) = self.said.remove(question) {
+            if let (Some(gi), Some(a)) = (said.chain_of, said.answer.as_ref()) {
+                self.chain_record.1 += 1;
+                self.chain_record.0 += u32::from(a == truth);
+                self.groups[gi].chain_record.1 += 1;
+                self.groups[gi].chain_record.0 += u32::from(a == truth);
+            }
             if let (Some(b), Some(a)) = (said.bucket, said.answer) {
                 self.record[b].1 += 1;
                 self.record[b].0 += u32::from(a == truth);
@@ -790,7 +1076,7 @@ impl System for Novice {
             None => {
                 // A kind word it has never met names a new group.
                 let Some(key) = p.words.iter().filter(|w| !self.df.contains_key(*w)).min().cloned() else { return };
-                self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, enumerated_with: 0, spent: 0, explained_at: None, claims: BTreeMap::new(), disputed: Default::default(), record: (0, 0), negative: false });
+                self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, enumerated_with: 0, recurrence_tried: 0, spent: 0, explained_at: None, table: Default::default(), claims: BTreeMap::new(), disputed: Default::default(), record: (0, 0), chain_record: (0, 0), negative: false });
                 self.by_key.insert(key, self.groups.len() - 1);
                 self.groups.len() - 1
             }
@@ -859,13 +1145,16 @@ impl System for Novice {
         if agreed {
             self.groups[g].disputed.remove(&p.nums);
         }
+        if let (false, Some(v)) = (disputed, value) {
+            self.groups[g].table.borrow_mut().entry(p.nums.clone()).or_insert(v);
+        }
         if disputed {
             self.groups[g].disputed.insert(p.nums.clone());
             self.charge(g, |s| s.repair_priced(g));
             self.verified_region(g);
             // With so many exceptions to pay for that a table is cheaper, the program is not an explanation.
             if let Some((_, target)) = self.observations(g).map(|o| (0, o.into_iter().map(|x| x.1).collect::<Vec<_>>())) {
-                let table: Cost = target.iter().map(|&a| bits::uint(a.unsigned_abs())).sum();
+                let table: Cost = table_cost(&target);
                 if self.groups[g].fit.as_ref().is_some_and(|f| f.found[0].cost > table) {
                     self.groups[g].fit = None;
                 }
@@ -878,6 +1167,9 @@ impl System for Novice {
                 self.charge(g, |s| s.refit(g, &[]));
                 if self.groups[g].fit.is_some() {
                     self.sleep();
+                } else {
+                    self.sleep();
+                    self.last_resort();
                 }
             }
         }
@@ -1109,5 +1401,136 @@ mod tests {
         n.told("what is 5 fegisido 3", "8", Some("second"));
         let after = n.reliability["second"];
         assert_eq!((after.0 - before.0, after.1 - before.1), (1, 2));
+    }
+}
+
+#[cfg(test)]
+mod recurrence_tests {
+    use super::*;
+
+    fn teach_unary(n: &mut Novice, name: &str, rule: impl Fn(i64) -> i64, points: impl IntoIterator<Item = i64>) {
+        for x in points {
+            for template in ["what is {w} {x}", "{w} {x}", "{w} {x} equals"] {
+                n.teach(&template.replace("{w}", name).replace("{x}", &x.to_string()), &rule(x).to_string());
+            }
+        }
+    }
+
+    fn teach_binary(n: &mut Novice, name: &str, rule: impl Fn(i64, i64) -> i64, pairs: &[(i64, i64)]) {
+        for &(x, y) in pairs {
+            for template in ["what is {x} {w} {y}", "{x} {w} {y}", "{x} {w} {y} equals"] {
+                n.teach(&template.replace("{w}", name).replace("{x}", &x.to_string()).replace("{y}", &y.to_string()), &rule(x, y).to_string());
+            }
+        }
+    }
+
+    fn popcount(x: i64) -> i64 {
+        i64::from((x as u32).count_ones())
+    }
+
+    fn gcd(a: i64, b: i64) -> i64 {
+        if b == 0 {
+            a
+        } else {
+            gcd(b, a % b)
+        }
+    }
+
+    fn fact(a: &Answer) -> Option<&str> {
+        match a {
+            Answer::Fact(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    fn answer_text(a: &Answer) -> String {
+        match a {
+            Answer::Fact(s) => format!("fact {s}"),
+            Answer::Guess(s, p) => format!("guess {s} at {p}"),
+            Answer::Refuse => "refuse".to_string(),
+        }
+    }
+
+    #[test]
+    fn it_acquires_counting_the_one_bits_from_a_table_nobody_gave_a_rule_for() {
+        let mut n = Novice::default();
+        // Not 0, 8, 18, 19: the lessons leave gaps, as the hidden worlds do.
+        teach_unary(&mut n, "zarbosido", popcount, (1..=17).filter(|x| *x != 8));
+        n.ready();
+        assert_eq!(n.kinds(), (1, 1), "the kind should be explained by a recurrence");
+        // What was taught is a fact.
+        assert_eq!(fact(&n.ask("what is zarbosido 13")), Some("3"));
+        // What the recurrence works out is a guess with a stated confidence, right here: 8 was never taught (1 bit), 25 is beyond the range (3).
+        for (q, truth) in [("what is zarbosido 8", "1"), ("what is zarbosido 25", "3"), ("what is zarbosido 30", "4")] {
+            match n.ask(q) {
+                Answer::Guess(a, p) => {
+                    assert_eq!(a, truth, "{q}");
+                    assert!(p >= 500, "{q}: {p}");
+                }
+                other => panic!("{q}: expected a guess, got {}", answer_text(&other)),
+            }
+        }
+    }
+
+    #[test]
+    fn it_acquires_euclids_rule_from_pairs_and_answers_a_pair_it_never_saw() {
+        let mut n = Novice::default();
+        let taught: Vec<(i64, i64)> = (1..=15).flat_map(|a| (1..=15).map(move |b| (a, b))).filter(|&(a, b)| (a * 7 + b * 13) % 4 != 0).collect();
+        teach_binary(&mut n, "tarmosido", gcd, &taught);
+        n.ready();
+        assert_eq!(n.kinds(), (1, 1), "the kind should be explained by a recurrence");
+        // A pair that was not taught whose next step is: Euclid's chain reaches a known value.
+        let (a, b) = (1..=15)
+            .flat_map(|a| (1..=15).map(move |b| (a, b)))
+            .find(|&(a, b)| !taught.contains(&(a, b)) && taught.contains(&(b, a % b)))
+            .expect("some pair is missing and one step from a taught one");
+        match n.ask(&format!("what is {a} tarmosido {b}")) {
+            Answer::Guess(g, _) => assert_eq!(g, gcd(a, b).to_string(), "({a}, {b})"),
+            other => panic!("({a}, {b}): expected a guess, got {}", answer_text(&other)),
+        }
+    }
+
+    #[test]
+    fn arbitrary_codes_get_no_rule_however_many_recurrences_it_tries() {
+        let mut n = Novice::default();
+        let mut seed = 12345u64;
+        let mut code = |_: i64| {
+            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ((seed >> 33) % 100) as i64
+        };
+        let rule: Vec<i64> = (0..=20).map(|x| code(x)).collect();
+        teach_unary(&mut n, "kordulsido", |x| rule[x as usize], 0..=20);
+        n.ready();
+        assert_eq!(n.kinds(), (1, 0), "a table of arbitrary codes has no rule");
+        assert_eq!(n.ask("what is kordulsido 27"), Answer::Refuse);
+        assert_eq!(fact(&n.ask("what is kordulsido 5")), Some(rule[5].to_string().as_str()));
+    }
+
+    #[test]
+    fn a_kind_built_on_an_acquired_word_is_explained_by_composition() {
+        let mut n = Novice::default();
+        teach_unary(&mut n, "zarbosido", popcount, (1..=17).filter(|x| *x != 8));
+        // Parity of the number of one bits: a function of the first kind's value, with its own lessons.
+        teach_unary(&mut n, "morpelsido", |x| popcount(x) % 2, (1..=17).filter(|x| *x != 5));
+        n.ready();
+        assert_eq!(n.kinds(), (2, 2));
+        match n.ask("what is morpelsido 5") {
+            Answer::Guess(a, _) => assert_eq!(a, "0"),
+            other => panic!("expected a guess, got {}", answer_text(&other)),
+        }
+    }
+
+    #[test]
+    fn what_a_chain_works_out_is_never_a_fact() {
+        let mut n = Novice::default();
+        teach_unary(&mut n, "zarbosido", popcount, (1..=17).filter(|x| *x != 8));
+        n.ready();
+        for x in [8, 20, 25, 31] {
+            assert!(!matches!(n.ask(&format!("what is zarbosido {x}")), Answer::Fact(_)), "{x}");
+        }
+        // Told, it is a fact from then on, and the record of the chain's guesses is kept.
+        n.told("what is zarbosido 8", "1", Some("teacher"));
+        assert_eq!(n.chain_record, (1, 1));
+        assert_eq!(fact(&n.ask("what is zarbosido 8")), Some("1"));
     }
 }
