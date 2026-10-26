@@ -93,11 +93,13 @@ pub enum Expr {
 pub const FIX_DEPTH: u32 = 12;
 
 /// A function that is known at some points (a table that grows as the kind is taught and told things) and elsewhere satisfies
-/// `f(p) = e(p, f(g(p)))`: `g` says which nearer point to look at (one expression per argument) and `e` what to do with its value (an expression over the
-/// arguments and, as the variable after them, `f(g(p))`). Popcount is `f(x) = f(x div 2) + x mod 2`; the greatest common divisor is `f(x, y) = f(y, x mod y)`.
+/// `f(p) = e(p, f(g1(p)), ..., f(gk(p)))` for one or two nearer points: each `g` says which point to look at (one expression per argument) and `e` what
+/// to do with the values (an expression over the arguments and, as the variables after them, the values at the nearer points). Popcount is
+/// `f(x) = f(x div 2) + x mod 2`; the greatest common divisor is `f(x, y) = f(y, x mod y)`; Fibonacci numbers are `f(x) = f(x - 1) + f(x - 2)`.
 pub struct FixDef {
     pub arity: usize,
-    pub g: Vec<Expr>,
+    /// The nearer points to look at, each as one expression per argument.
+    pub steps: Vec<Vec<Expr>>,
     pub e: Expr,
     /// The values the function is known to have. Shared with the kind it belongs to, so it is live: whatever is learned about the kind later is
     /// used the next time the function is evaluated.
@@ -108,26 +110,39 @@ pub struct FixDef {
 
 impl FixDef {
     pub fn apply(&self, args: &[i64], depth: u32) -> Option<i64> {
+        self.go(args, depth, &mut BTreeMap::new())
+    }
+
+    /// The value at `args`; what has been worked out on the way is remembered, so that a step over two earlier values does not branch for ever.
+    fn go(&self, args: &[i64], depth: u32, memo: &mut BTreeMap<Vec<i64>, Option<i64>>) -> Option<i64> {
         if let Some(v) = self.table.borrow().get(args) {
             return Some(*v);
         }
         if depth == 0 {
             return None;
         }
-        let next: Vec<i64> = self.g.iter().map(|g| g.eval(args)).collect::<Option<_>>()?;
-        if next.iter().any(|&n| n < 0) || next == args {
-            return None;
+        if let Some(done) = memo.get(args) {
+            return *done;
         }
-        let r = self.apply(&next, depth - 1)?;
-        let mut vars = args.to_vec();
-        vars.push(r);
-        self.e.eval(&vars)
+        let result = (|| {
+            let mut vars = args.to_vec();
+            for step in &self.steps {
+                let next: Vec<i64> = step.iter().map(|g| g.eval(args)).collect::<Option<_>>()?;
+                if next.iter().any(|&n| n < 0) || next == args {
+                    return None;
+                }
+                vars.push(self.go(&next, depth - 1, memo)?);
+            }
+            self.e.eval(&vars)
+        })();
+        memo.insert(args.to_vec(), result);
+        result
     }
 }
 
 impl PartialEq for FixDef {
     fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.table, &other.table) && self.arity == other.arity && self.g == other.g && self.e == other.e
+        Rc::ptr_eq(&self.table, &other.table) && self.arity == other.arity && self.steps == other.steps && self.e == other.e
     }
 }
 
@@ -143,10 +158,16 @@ impl std::fmt::Display for FixDef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let all = ["x", "y", "z", "w"];
         let args: Vec<&str> = all.iter().copied().take(self.arity).collect();
-        let mut with_r = args.clone();
-        with_r.push("r");
-        let steps: Vec<String> = self.g.iter().map(|g| g.render(&args)).collect();
-        write!(f, "f({}) = {}, r = f({})", args.join(", "), self.e.render(&with_r), steps.join(", "))
+        let values = ["r", "s"];
+        let mut with_values = args.clone();
+        with_values.extend(values.iter().take(self.steps.len()));
+        let calls: Vec<String> = self
+            .steps
+            .iter()
+            .zip(values)
+            .map(|(step, v)| format!("{v} = f({})", step.iter().map(|g| g.render(&args)).collect::<Vec<_>>().join(", ")))
+            .collect();
+        write!(f, "f({}) = {}, {}", args.join(", "), self.e.render(&with_values), calls.join(", "))
     }
 }
 
@@ -182,7 +203,7 @@ impl Expr {
         match self {
             Expr::Bin(_, a, b) => 1 + a.size() + b.size(),
             Expr::Call(_, xs) => 1 + xs.iter().map(Expr::size).sum::<usize>(),
-            Expr::Fix(fix) => 1 + fix.g.iter().map(Expr::size).sum::<usize>() + fix.e.size(),
+            Expr::Fix(fix) => 1 + fix.steps.iter().flatten().map(Expr::size).sum::<usize>() + fix.e.size(),
             _ => 1,
         }
     }
@@ -222,7 +243,7 @@ pub fn cost_of(e: &Expr, arity: usize, words: usize) -> Cost {
         Expr::Bin(_, a, b) => node + cost_of(a, arity, words) + cost_of(b, arity, words),
         Expr::Call(_, xs) => node + xs.iter().map(|x| cost_of(x, arity, words)).sum::<Cost>(),
         // The step and the reduction (the step has one more variable, the value of the nearer point), and the base points the recurrence leaves.
-        Expr::Fix(fix) => node + fix.g.iter().map(|g| cost_of(g, arity, words)).sum::<Cost>() + cost_of(&fix.e, arity + 1, words) + fix.base_cost,
+        Expr::Fix(fix) => node + fix.steps.iter().flatten().map(|g| cost_of(g, arity, words)).sum::<Cost>() + cost_of(&fix.e, arity + fix.steps.len(), words) + fix.base_cost,
     }
 }
 
@@ -347,6 +368,23 @@ impl Space {
 
 /// Look for programs that fit the task. Smaller programs are built before larger ones; the search stops `rival_size` nodes after the first fit.
 pub fn search(task: &Task) -> Outcome {
+    search_inner(task, None, 0)
+}
+
+/// Like [`search`], modulo `m` if one is given, but up to `slack` of the data points may be got wrong: a rule that holds from some point on and has a
+/// few base cases at the start still fits. Which points were missed is for the caller to find out; they have to be paid for.
+pub fn search_with_slack(task: &Task, modulus: Option<i64>, slack: usize) -> Outcome {
+    search_inner(task, modulus, slack)
+}
+
+/// Like [`search`], but the answers are those of the program *reduced modulo `m`*: a program fits if its value is never negative and leaves the
+/// remainder the answer on division by `m`. The program found is the whole `mod(program, m)`. The modulus is nearly given by the data (every
+/// answer is below it), and what is left to find is a program that only has to be right up to a multiple of `m`.
+pub fn search_modular(task: &Task, m: i64) -> Outcome {
+    search_inner(task, Some(m), 0)
+}
+
+fn search_inner(task: &Task, modulus: Option<i64>, slack: usize) -> Outcome {
     let n = task.inputs.len();
     let cols = n + task.probes.len();
     let mut effort = Effort::default();
@@ -360,11 +398,27 @@ pub fn search(task: &Task) -> Outcome {
     let points = || task.inputs.iter().chain(task.probes.iter());
     let blank = Item { kind: 0, op: Op::Add, word: 0, a: 0, b: 0, cost: node };
 
+    // What the reduction modulo m adds to a program: the `mod` node, and the node and the value of the constant.
+    let wrap_cost = modulus.map_or(0, |m| 2 * node + bits::uint(m.unsigned_abs()));
+    let wrap = |e: Expr| match modulus {
+        Some(m) => Expr::Bin(Op::Mod, Box::new(e), Box::new(Expr::Const(m))),
+        None => e,
+    };
+    let reduce = |v: i64| modulus.map_or(v, |m| v % m);
+    let matches_answer = |v: i64, answer: i32| match modulus {
+        Some(m) => v >= 0 && v % m == i64::from(answer),
+        None => v == i64::from(answer),
+    };
     let check_fit = |space: &Space, id: u32, size: usize, found: &mut Vec<Found>, first: &mut Option<usize>| {
         let row = space.row(id);
-        if row[..n] == want[..] {
-            let probe_values = row[n..].iter().map(|&v| i64::from(v)).collect();
-            found.push(Found { expr: space.expr(id, task.words), cost: space.items[id as usize].cost, probe_values });
+        let mut missed = 0;
+        let fits = (0..n).all(|c| {
+            missed += usize::from(!matches_answer(i64::from(row[c]), want[c]));
+            missed <= slack
+        });
+        if fits {
+            let probe_values = row[n..].iter().map(|&v| reduce(i64::from(v))).collect();
+            found.push(Found { expr: wrap(space.expr(id, task.words)), cost: space.items[id as usize].cost + wrap_cost, probe_values });
             first.get_or_insert(size);
         }
     };
@@ -441,11 +495,15 @@ pub fn search(task: &Task) -> Outcome {
                         };
                         if last_level {
                             let mut fits = true;
+                            let mut missed = 0;
                             for c in 0..n {
                                 effort.evaluations += 1;
-                                if apply(&space, c) != Some(i64::from(want[c])) {
-                                    fits = false;
-                                    break;
+                                if !apply(&space, c).is_some_and(|v| matches_answer(v, want[c])) {
+                                    missed += 1;
+                                    if missed > slack {
+                                        fits = false;
+                                        break;
+                                    }
                                 }
                             }
                             if !fits {
@@ -455,7 +513,7 @@ pub fn search(task: &Task) -> Outcome {
                             for c in n..cols {
                                 effort.evaluations += 1;
                                 match apply(&space, c) {
-                                    Some(v) => probe_values.push(v),
+                                    Some(v) => probe_values.push(reduce(v)),
                                     None => {
                                         fits = false;
                                         break;
@@ -471,7 +529,7 @@ pub fn search(task: &Task) -> Outcome {
                                 Fun::Prim(op) => Expr::Bin(*op, Box::new(ea), Box::new(eb)),
                                 Fun::Word(w) => Expr::Call(task.words[*w].clone(), if arity == 1 { vec![ea] } else { vec![ea, eb] }),
                             };
-                            found.push(Found { expr, cost: node + sub, probe_values });
+                            found.push(Found { expr: wrap(expr), cost: node + sub + wrap_cost, probe_values });
                             first_fit_size.get_or_insert(size);
                             continue;
                         }
@@ -648,7 +706,12 @@ fn variants(e: &Expr, task: &Task, wrap: &[i64]) -> Vec<Expr> {
 
 /// The search for the best program, then the programs one edit away from it.
 pub fn search_with_rivals(task: &Task) -> Outcome {
-    let mut out = search(task);
+    search_with_rivals_in(task, None)
+}
+
+/// [`search_with_rivals`], with the answers taken modulo `m` if one is given.
+pub fn search_with_rivals_in(task: &Task, modulus: Option<i64>) -> Outcome {
+    let mut out = search_inner(task, modulus, 0);
     if let Some(best) = out.found.first().map(|f| f.expr.clone()) {
         let (more, effort) = rivals(&best, task);
         out.effort.evaluations += effort.evaluations;
