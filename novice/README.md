@@ -2,7 +2,7 @@
 
 The main line of work in Matter, **rebuilt from scratch**. [`baby`](../baby/README.md) is frozen as the reference and the measuring stick; Novice shares no code with it. What carries over is the [entry exam](../baby/README.md) (a plain-file and line-protocol judge that any system, in any language, can take), the goldens-and-platform habits, and the rules below.
 
-> **Status (2026-10-25): started; rungs 0 to 3 done on the tidy adaptive exam.** It finds the kinds of question itself, explains most of them with programs priced in bits, builds later explanations from earlier ones, states no wrong fact, and is not fooled by a teacher who is consistently wrong about some facts (except in the kinds that have no rule to check against). See "Results so far" for the numbers and, just as important, for what they do not show. Joules are not measured yet (the energy counter was unreadable this session); work is reported as counted evaluations and wall time. The cost of learning was cut 25-fold after the first version (see "Cost").
+> **Status (2026-10-25): started; rungs 0 to 3 done on the tidy adaptive exam.** It finds the kinds of question itself, explains most of them with programs priced in bits, builds later explanations from earlier ones, states no wrong fact, and is not fooled by a teacher who is consistently wrong about some facts (except in the kinds that have no rule to check against). See "Results so far" for the numbers and, just as important, for what they do not show. On the same exam it uses about 55 times less energy than baby (3.7 to 4.2 J against 221 to 226 J; see "Joules"), after its cost of learning was cut 25-fold from the first version.
 
 Labels used below: **Hypothesis** (believed, not shown), **Measured** (a number from a run), **Open** (not started).
 
@@ -57,13 +57,13 @@ Each rung has the test that would show it works, and a joule line to fill in.
 | 3 | rival explanations scored in bits | on the 14 streams of baby's wrong-teacher work: as few believed mistakes as baby's, with **no tuned count** | done on the tidy exam: repeats on par with baby's, 0 elsewhere, at a cost in coverage (see above); the count of three falls out of the costs |
 | 4 | sources | with a second, right source added, repeats fall in kinds that have no law to check against | Open |
 | 5 | the language grows | a kind that needs an operation Novice does not start with, from worlds written apart from the learner, solved by a primitive it made | first step only: earlier kinds become words (see below); the test itself is open |
-| 6 | answers get cheaper | joules per answer on a fixed set of questions fall as it learns, wrong facts stay 0, and the break-even point (learning joules spent against answer joules saved) is reported | first step: learning cost 25-fold lower than the first learner, and composition 116 times cheaper than enumeration; no joules, no curve yet |
+| 6 | answers get cheaper | joules per answer on a fixed set of questions fall as it learns, wrong facts stay 0, and the break-even point (learning joules spent against answer joules saved) is reported | first step: learning cost 25-fold lower than the first learner, and composition 116 times cheaper than enumeration; joules measured once (see "Joules"), no curve yet |
 
 Rungs 0 to 4 are the first milestone (the tidy exam, with a source tag). Rung 5 is the test of "genuine"; the worlds for it are written by a process that the learner's author does not read until the review, so the learner cannot be tuned to them. Rung 6 is the bet itself.
 
 ## Results so far (2026-10-25)
 
-Measured on the adaptive exam (`baby exam adapt-write DIR --seed S`: 45 kinds, 3,048 lessons, a stream of 787 questions with the truth told after each answer), the same files for both systems, one desktop core, no joules. "Facts right" and "wrong guesses" are shares of all 787 questions; the judge's thirds are the first, middle and last third of the stream.
+Measured on the adaptive exam (`baby exam adapt-write DIR --seed S`: 45 kinds, 3,048 lessons, a stream of 787 questions with the truth told after each answer), the same files for both systems, one desktop core. "Facts right" and "wrong guesses" are shares of all 787 questions; the judge's thirds are the first, middle and last third of the stream.
 
 | seed | system | wrong facts | facts right | wrong guesses | refused | right, 1st third → last third | wall time |
 |---|---|---|---|---|---|---|---|
@@ -77,6 +77,17 @@ Measured on the adaptive exam (`baby exam adapt-write DIR --seed S`: 45 kinds, 3
 The kinds that change their rule outside what was taught (a sum that saturates at 30, one that wraps at 40) climb from 72.0-84.4 % right in the first third to 96.2-100 % in the last in Novice (seeds 1 to 3), and from 68.0-78.1 % to 92.3-97.4 % in baby. The 11.2 % refused are the same in both: the six kinds that have no rule it can say (a prime test, an exclusive-or, four arbitrary codes), which cannot be answered before they are told.
 
 **What it found, with no labels and no menu of mechanisms** (seed 1): `x + y`, `x - y`, `x + 1`, `div(x, 2)`, `max(x, y) - min(x, y)`, `x * 3`, `div(x, 10) + mod(x, 10)`, `mod(x + y, 40)` (the 40 is the number a refuted `x + y` got wrong: it said 45 where the truth was 5), `min(x + y, 3 * 10)`, and, built on words it had earned, `sum_of_squares(x, y) + 1`, `div(sum_of_squares(x, y), 2)` and `average(x, y) * average(x, y)`. Two kinds became words (sum of squares, average); the other 37 explained kinds did not.
+
+### Joules (first measurements, 2026-10-25)
+
+The CPU package's own counter (RAPL), joules above the machine's idle draw, on the seed-1 adaptive exam, one desktop core. Novice is measured as a child process through the exam's protocol, baby in-process; "stream" is answering the 787 questions *and* absorbing the truth told after each, because for both systems that is one loop.
+
+| | teaching (3,048 lessons) | stream (787 questions, truths told) | total | right answers per joule |
+|---|---|---|---|---|
+| Novice (4 runs) | 3.3 to 3.8 J (0.33 s) | 0.36 to 0.42 J (0.03 to 0.06 s), about 0.5 mJ per question | **3.7 to 4.2 J** | 164 to 184 |
+| baby (3 runs) | 121 to 123 J (10.3 s) | 100 to 104 J (8.7 to 8.8 s), about 130 mJ per question | **221 to 226 J** | 3.0 to 3.1 |
+
+So about **55 times less energy for the same exam**, with 689 right answers against 685. Caveats: these are upper bounds (the counter includes whatever else the machine was doing: it warned of other processes during every run, and Novice's runs last a third of a second, so a background process weighs heavily in them); it is one machine, one seed, and the clean exam; baby's own notes recorded 65 J on 2026-10-23, before its skeptical exam driver, and today's build measures 221 to 226 J in each of three runs; and the comparison is of two systems that learn differently, not of one idea against another. What it does show is that Novice's design is not just faster in wall time: it is cheaper in energy, by a margin that survives the noise. Nine tenths of Novice's energy is teaching (the first search for programs); absorbing a told answer costs it a fraction of a millijoule, a few thousandths of baby's. That is still not the thing the efficiency bet claims (that *adapting* makes a system cheaper): nothing here yet shows its energy per answer falling as it learns.
 
 ### Cost
 
@@ -111,7 +122,7 @@ Wrong facts about facts never wrongly told ("elsewhere", must be 0): **0 in ever
 **Caveats, plainly.**
 - **The exam is tidy and was written by the same author as the learner.** The kinds are small arithmetic rules over the integers 0 to 15. The operations Novice starts with (`+ - * min max div mod`) are my choice and fit that domain; that the exam is passed says nothing about worlds the starting operations cannot express. Two of the six unexplainable kinds (a prime test and an exclusive-or) have a rule that the starting operations cannot say; rung 5 is where that is tested properly.
 - **Words are only a first step toward a language that grows.** Earlier explanations become words; no new primitive is ever made. The two words are compositions of the starting operations.
-- **No joules.** The energy counter was unreadable this session. Counted evaluations and wall time on one core are the only cost numbers, and neither is an energy number. Nothing here yet shows that adapting makes anything cheaper in joules; the composition result is about the cost of learning a kind, not of answering a question (which was never expensive).
+- **Joules are upper bounds from one machine and one seed.** Nothing here yet shows that adapting makes anything cheaper in joules; the composition result is about the cost of learning a kind, not of answering a question (which was never expensive).
 - **Only the adaptive exam.** The static exam (with its traps) has not been run on Novice. A teacher who is wrong about a whole kind of thing, not about some facts, is not caught (nothing inside one source can catch it).
 - **Guesses are labeled but crudely calibrated.** Outside the region it has seen, the confidence it states is the kind's own record of right guesses, shrunk toward the shared record at that distance. The judge has not yet been asked whether the stated confidences match the realized rates.
 - **The failed searches are still most of what is left**: the six lookup kinds are searched, fail, and are searched again as they grow.
