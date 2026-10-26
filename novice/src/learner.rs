@@ -16,6 +16,11 @@
 //! widens the region. One that none gives starts the search again with the new point included, which is the expensive case. The numbers the
 //! refuted programs got wrong (what they said minus what was true) are offered to that search as constants: a contradiction names the ceiling.
 //!
+//! **Sources.** What the lessons said and what each told source says are separate channels, and a channel is as reliable as it has been where a
+//! program was confident (a check that only kinds with a rule allow). In a kind with no rule, each channel that spoke counts for its reliability,
+//! and the answer is believed as much as they jointly allow: one channel measured at 80 % can only be a guess, two independent ones that agree
+//! can be a fact, two that disagree favor the more reliable one with a stated doubt.
+//!
 //! **Words.** A kind that has a program becomes a word the language can use, so a later kind can be built from earlier ones. A word has to
 //! earn its place: all of them are offered to the kinds still unexplained, and only the ones that turn up in a new explanation are kept.
 
@@ -33,6 +38,10 @@ const MIN_POINTS: usize = 4;
 /// Constants every search may use (a hand-built choice). Later searches add the numbers that appear in the data.
 const BASE_CONSTS: [i64; 5] = [0, 1, 2, 3, 10];
 const MAX_ITEMS: usize = 200_000;
+/// How many answers a wrong source might have given instead (a hand-built guess of the size of the space of answers).
+const ANSWER_SPACE: u64 = 100;
+/// The channel the lessons arrive on.
+const TEACHING: &str = "teaching";
 
 struct Fit {
     found: Vec<Found>,
@@ -53,6 +62,8 @@ struct Group {
     /// Counted evaluations spent on this kind until it was first explained, and its place in the order the kinds were explained.
     spent: u64,
     explained_at: Option<usize>,
+    /// What each channel said about each point, the latest claim of a channel winning.
+    claims: BTreeMap<Vec<i64>, BTreeMap<String, String>>,
     /// Points where the told answer disagreed with the program believed at the time: not believed, not forgotten.
     disputed: std::collections::BTreeSet<Vec<i64>>,
     /// This kind's own record of guesses made outside its region: (right, made).
@@ -93,12 +104,14 @@ pub struct Novice {
     words: Vec<Rc<Lib>>,
     explained: usize,
     why: [u32; 8],
+    /// Per channel: how often it agreed with a confident program, and how often one could be asked.
+    reliability: BTreeMap<String, (u32, u32)>,
     pub stats: Stats,
 }
 
 impl Default for Novice {
     fn default() -> Self {
-        Novice { lessons: Vec::new(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], stats: Stats::default() }
+        Novice { lessons: Vec::new(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], reliability: BTreeMap::new(), stats: Stats::default() }
     }
 }
 
@@ -266,6 +279,75 @@ impl Novice {
             fit.lo = lo;
             fit.hi = hi;
         }
+    }
+
+    /// The sources that are one speaker: the lessons and the exam's main teacher are the same teacher, so what they say is not independent.
+    fn family(channel: &str) -> &str {
+        match channel {
+            TEACHING | "told" | "teacher" => "teacher",
+            other => other,
+        }
+    }
+
+    /// Bits a channel pays for agreeing with the truth (`-log2` of its reliability), or for being wrong in one particular way
+    /// (`-log2` of `(1 - reliability) / (ANSWER_SPACE - 1)`). Reliability is the Laplace estimate from the times it could be checked.
+    fn channel_cost(&self, channel: &str, right: bool) -> Cost {
+        // Before it has been checked, a channel is as reliable as the lessons were if it is the same teacher, and a coin toss otherwise; the
+        // prior counts for two checks.
+        let (prior_num, prior_den) = match (Self::family(channel) == "teacher" && channel != TEACHING, self.reliability.get(TEACHING)) {
+            (true, Some(&(agree, asked))) => (u64::from(agree) + 1, u64::from(asked) + 2),
+            _ => (1, 2),
+        };
+        let (agree, asked) = self.reliability.get(channel).copied().unwrap_or((0, 0));
+        let num = u64::from(agree) * prior_den + 2 * prior_num;
+        let den = (u64::from(asked) + 2) * prior_den;
+        if right {
+            bits::surprise(num, den)
+        } else {
+            bits::log2(den * (ANSWER_SPACE - 1)).saturating_sub(bits::log2(den - num))
+        }
+    }
+
+    /// What the channels that spoke about a point jointly make of it: the most believed answer, its share of the belief, and the whole (fixed
+    /// point). An answer nobody gave carries belief too: any of the other answers in the space could be the truth if all the channels erred.
+    fn believe(&self, g: usize, nums: &[i64]) -> Option<(String, u64, u64)> {
+        let claims = self.groups[g].claims.get(nums)?;
+        let mut candidates: Vec<&String> = claims.values().collect();
+        candidates.sort();
+        candidates.dedup();
+        let cost = |answer: Option<&String>| -> Cost { claims.iter().map(|(c, said)| self.channel_cost(c, Some(said) == answer)).sum() };
+        let costs: Vec<Cost> = candidates.iter().map(|a| cost(Some(*a))).collect();
+        let other = cost(None);
+        let floor = costs.iter().copied().chain([other]).min()?;
+        let other_count = ANSWER_SPACE.saturating_sub(candidates.len() as u64).max(1);
+        let weights: Vec<u64> = costs.iter().map(|c| bits::exp2_neg(c - floor)).collect();
+        let total: u64 = weights.iter().sum::<u64>() + other_count * bits::exp2_neg(other - floor);
+        let (best, top) = weights.iter().enumerate().max_by(|a, b| a.1.cmp(b.1).then(candidates[b.0].cmp(candidates[a.0])))?;
+        Some((candidates[best].clone(), *top, total))
+    }
+
+    /// The program's answer at a point, if the point is inside the region it has been checked in and all but 2^-RISK_BITS of the belief is on it.
+    fn confident_value(&self, g: usize, nums: &[i64]) -> Option<i64> {
+        let fit = self.groups[g].fit.as_ref()?;
+        if !nums.iter().enumerate().all(|(i, &n)| fit.lo[i] <= n && n <= fit.hi[i]) {
+            return None;
+        }
+        let (value, top, total) = program::weigh(&fit.found, nums)?;
+        (u128::from(top) << RISK_BITS >= u128::from(total) * ((1u128 << RISK_BITS) - 1)).then_some(value)
+    }
+
+    /// How reliable the lessons were, as far as they can be checked: the points of the kinds that have a program.
+    fn score_teaching(&mut self) {
+        let mut tally = (0u32, 0u32);
+        for g in &self.groups {
+            let Some(fit) = &g.fit else { continue };
+            for (nums, said) in &g.claims {
+                let Some(answer) = said.get(TEACHING).and_then(|a| a.parse::<i64>().ok()) else { continue };
+                tally.1 += 1;
+                tally.0 += u32::from(fit.found[0].expr.eval(nums) == Some(answer));
+            }
+        }
+        self.reliability.insert(TEACHING.to_string(), tally);
     }
 
     /// Every distinct (point, numeric answer) the group has been given.
@@ -567,19 +649,21 @@ impl Novice {
             let g = match self.by_key.get(&key) {
                 Some(&g) => g,
                 None => {
-                    self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, spent: 0, explained_at: None, disputed: Default::default(), record: (0, 0), negative: false });
+                    self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, spent: 0, explained_at: None, claims: BTreeMap::new(), disputed: Default::default(), record: (0, 0), negative: false });
                     self.by_key.insert(key, self.groups.len() - 1);
                     self.groups.len() - 1
                 }
             };
             if self.groups[g].arity == p.nums.len() {
                 self.add_point(g, &p.nums, answer);
+                self.groups[g].claims.entry(p.nums.clone()).or_default().insert(TEACHING.to_string(), answer.clone());
             }
         }
         for g in 0..self.groups.len() {
             self.charge(g, |s| s.refit(g, &[]));
         }
         self.sleep();
+        self.score_teaching();
     }
 }
 
@@ -609,7 +693,13 @@ impl System for Novice {
             }
             if g.fit.is_none() {
                 reason.set(3);
-                return majority(g.points.get(&p.nums)?).map(|a| Answer::Fact(a.to_string()));
+                let gi = self.group_of(&p)?;
+                let (answer, top, total) = self.believe(gi, &p.nums)?;
+                if u128::from(top) << RISK_BITS >= u128::from(total) * ((1u128 << RISK_BITS) - 1) {
+                    return Some(Answer::Fact(answer));
+                }
+                let permille = (u128::from(top) * 1000 / u128::from(total.max(1))) as u32;
+                return (permille >= 500).then(|| Answer::Guess(answer, permille.min(999)));
             }
             let fit = g.fit.as_ref()?;
             let Some((value, top, total)) = program::weigh(&fit.found, &p.nums) else {
@@ -657,7 +747,7 @@ impl System for Novice {
         reply
     }
 
-    fn told(&mut self, question: &str, truth: &str, _source: Option<&str>) {
+    fn told(&mut self, question: &str, truth: &str, source: Option<&str>) {
         let p = parse(question);
         let truth = truth.trim();
         if let Some(said) = self.said.remove(question) {
@@ -675,7 +765,7 @@ impl System for Novice {
             None => {
                 // A kind word it has never met names a new group.
                 let Some(key) = p.words.iter().filter(|w| !self.df.contains_key(*w)).min().cloned() else { return };
-                self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, spent: 0, explained_at: None, disputed: Default::default(), record: (0, 0), negative: false });
+                self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, spent: 0, explained_at: None, claims: BTreeMap::new(), disputed: Default::default(), record: (0, 0), negative: false });
                 self.by_key.insert(key, self.groups.len() - 1);
                 self.groups.len() - 1
             }
@@ -686,13 +776,22 @@ impl System for Novice {
         if self.groups[g].arity != p.nums.len() {
             return;
         }
-        // The same answer to the same question again (a re-ask, another phrasing) is not new evidence: it is counted, not weighed twice.
-        let again = self.groups[g].points.get(&p.nums).is_some_and(|a| a.contains_key(truth));
+        // The same answer to the same question again from the same speaker (a re-ask, another phrasing, the lessons and then the teacher) is not
+        // new evidence: it is counted, not weighed twice.
+        let channel = source.unwrap_or("told").to_string();
+        let value = truth.parse::<i64>().ok();
+        let again = self.groups[g].claims.get(&p.nums).is_some_and(|c| c.iter().any(|(ch, a)| Self::family(ch) == Self::family(&channel) && a == truth));
         self.add_point(g, &p.nums, truth);
         if again {
             return;
         }
-        let value = truth.parse::<i64>().ok();
+        // Where a program is confident, what the channel says is a check on the channel.
+        if let (Some(v), Some(confident)) = (value, self.confident_value(g, &p.nums)) {
+            let tally = self.reliability.entry(channel.clone()).or_insert((0, 0));
+            tally.1 += 1;
+            tally.0 += u32::from(confident == v);
+        }
+        self.groups[g].claims.entry(p.nums.clone()).or_default().insert(channel, truth.to_string());
         let points = self.groups[g].points.len() as u64;
         let mut disputed = false;
         let mut agreed = false;
@@ -762,6 +861,7 @@ impl System for Novice {
 
     fn quit(&mut self) {
         eprintln!("refusals by reason [other, unknown word, arity, table miss, no program value, negative, inside but unsure, outside and record low]: {:?}", self.why);
+        eprintln!("channel reliability (agreed with a confident program / times it could be checked): {:?}", self.reliability);
         let s = self.stats;
         let fits = self.groups.iter().filter(|g| g.fit.is_some()).count();
         eprintln!(
@@ -856,9 +956,17 @@ mod tests {
         let mut n = taught();
         assert_eq!(fact(&n.ask("what is 6 fegisido 3")), Some("9"));
         n.told("what is 6 fegisido 3", "9", None);
-        // A kind it knows nothing about yet becomes a group when it is told.
+        // A kind it knows nothing about yet becomes a group when it is told. Told once, by a teacher whose lessons were all consistent but few, it
+        // is believed, not yet a fact.
         n.told("what is 4 zorbosido 2", "8", None);
-        assert_eq!(fact(&n.ask("what is 4 zorbosido 2")), Some("8"));
+        match n.ask("what is 4 zorbosido 2") {
+            Answer::Fact(a) => assert_eq!(a, "8"),
+            Answer::Guess(a, p) => {
+                assert_eq!(a, "8");
+                assert!(p >= 900, "{p}");
+            }
+            Answer::Refuse => panic!("refused"),
+        }
     }
 
     #[test]
@@ -915,5 +1023,66 @@ mod tests {
         assert!(!matches!(n.ask("what is lokesido 9"), Answer::Fact(_)), "{:?}", n.ask("what is lokesido 9"));
         // Where the rivals agree it is still a fact.
         assert_eq!(fact(&n.ask("what is lokesido 4")), Some("4"));
+    }
+
+    /// A kind with no rule (arbitrary codes), taught, with the reliabilities that checking elsewhere would have measured.
+    fn codes() -> Novice {
+        let mut n = Novice::default();
+        for (x, a) in [(1, 44), (2, 97), (3, 5), (4, 63), (5, 18), (6, 71), (7, 39), (8, 52)] {
+            n.teach(&format!("what is zigsido {x}"), &a.to_string());
+        }
+        n.ready();
+        n.reliability.insert(TEACHING.to_string(), (3000, 3000));
+        n.reliability.insert("teacher".to_string(), (80, 100));
+        n.reliability.insert("second".to_string(), (95, 100));
+        n
+    }
+
+    #[test]
+    fn two_sources_that_agree_make_a_fact() {
+        let mut n = codes();
+        n.told("what is zigsido 9", "30", Some("teacher"));
+        n.told("what is zigsido 9", "30", Some("second"));
+        assert_eq!(fact(&n.ask("what is zigsido 9")), Some("30"));
+    }
+
+    #[test]
+    fn two_sources_that_disagree_favor_the_more_reliable_one_with_doubt() {
+        let mut n = codes();
+        n.told("what is zigsido 10", "31", Some("teacher"));
+        n.told("what is zigsido 10", "77", Some("second"));
+        match n.ask("what is zigsido 10") {
+            Answer::Guess(a, p) => {
+                assert_eq!(a, "77");
+                assert!((700..=950).contains(&p), "stated {p}");
+            }
+            other => panic!("expected a guess, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn one_source_measured_at_eighty_percent_can_only_guess() {
+        let mut n = codes();
+        n.told("what is zigsido 11", "12", Some("teacher"));
+        match n.ask("what is zigsido 11") {
+            Answer::Guess(a, p) => {
+                assert_eq!(a, "12");
+                assert!((700..=850).contains(&p), "stated {p}");
+            }
+            other => panic!("expected a guess, got {other:?}"),
+        }
+        // What the lessons taught stays a fact.
+        assert_eq!(fact(&n.ask("what is zigsido 2")), Some("97"));
+    }
+
+    #[test]
+    fn a_source_is_judged_where_a_program_can_check_it() {
+        let mut n = taught();
+        let before = n.reliability.get("second").copied().unwrap_or((0, 0));
+        // 6 + 3 is 9 and the program is sure inside the taught region: a source that says 15 is caught out, one that says 9 is confirmed.
+        n.told("what is 6 fegisido 3", "15", Some("second"));
+        n.told("what is 5 fegisido 3", "8", Some("second"));
+        let after = n.reliability["second"];
+        assert_eq!((after.0 - before.0, after.1 - before.1), (1, 2));
     }
 }

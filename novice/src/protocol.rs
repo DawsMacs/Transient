@@ -65,8 +65,9 @@ pub fn serve<S: System>(system: &mut S, input: impl BufRead, mut output: impl Wr
             }
             // TOLD id truth unit [source]: the unit is dropped; a fourth field, if the exam sends one, is the source.
             "TOLD" if f.len() >= 3 => {
+                // The question stays known: with two sources the exam tells the same answer's question twice.
                 if let Some(at) = asked.iter().position(|(id, _)| id == f[1]) {
-                    let (_, question) = asked.remove(at);
+                    let question = asked[at].1.clone();
                     let source = f.get(4).copied().filter(|s| !s.is_empty());
                     system.told(&question, f[2], source);
                 }
@@ -124,6 +125,14 @@ mod tests {
     fn answers_are_formatted_for_the_exam() {
         let (_, out) = run("READY\nASK\tS1\twhat is 1 plus 1\nASK\tS2\twhat is 3 foo 4\nQUIT\n");
         assert_eq!(out, "READY\nANSWER\tS1\tfact\t2\t1.000\nANSWER\tS2\tguess\t7\t0.625\n");
+    }
+
+    #[test]
+    fn two_sources_may_tell_the_same_question() {
+        let (spy, _) = run("ASK\tS1\tq one\nTOLD\tS1\ta\tunit\tteacher\nTOLD\tS1\tb\tunit\tsecond\nQUIT\n");
+        assert_eq!(spy.told.len(), 2);
+        assert_eq!(spy.told[0], ("q one".to_string(), "a".to_string(), Some("teacher".to_string())));
+        assert_eq!(spy.told[1], ("q one".to_string(), "b".to_string(), Some("second".to_string())));
     }
 
     #[test]
