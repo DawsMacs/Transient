@@ -216,7 +216,7 @@ impl Paid {
 
 /// The words of a question as a set, in alphabetical order, one string.
 fn bag_of(p: &Parsed) -> String {
-    let mut words = p.words.clone();
+    let mut words = p.seq.clone();
     words.sort();
     words.join(" ")
 }
@@ -1330,12 +1330,12 @@ impl Novice {
     /// Keep what was said to a question with no numbers, in the words it was said in.
     fn remember_lookup(&mut self, p: &Parsed, answer: &str) {
         if p.nums.is_empty() {
-            let ordered = p.words.join(" ");
+            let ordered = p.seq.join(" ");
             self.exact.entry(ordered.clone()).or_default().insert(answer.to_string());
             let bag = self.bags.entry(bag_of(p)).or_default();
             bag.0.insert(ordered);
             bag.1.insert(answer.to_string());
-            self.lookups.push((p.words.clone(), answer.to_string()));
+            self.lookups.push((p.seq.clone(), answer.to_string()));
             self.frames = None;
         }
     }
@@ -1491,7 +1491,7 @@ impl System for Novice {
             // A question with no numbers is a lookup, not an instance of a kind: the words that two facts share name no kind, and the answer of
             // one must not be given for the other. It is answered only in the words it was taught or told in, and only if those never differed.
             if p.nums.is_empty() {
-                if let Some(answers) = self.exact.get(&p.words.join(" ")) {
+                if let Some(answers) = self.exact.get(&p.seq.join(" ")) {
                     return (answers.len() == 1).then(|| Answer::Fact(answers.iter().next().cloned().unwrap_or_default()));
                 }
                 // The same words in an order nobody used: a guess, as sure as the lessons have earned (two orders that agreed every time so far
@@ -1509,7 +1509,7 @@ impl System for Novice {
                 // The same fact in a frame it was not taught in: as sure as the frame words that are new to it have been seen to change nothing
                 // (each one, the Laplace estimate of its pairs; all of them together, the product), a fact only if that leaves less than
                 // 2^-RISK_BITS of doubt.
-                let m = self.frames.as_ref()?.lookup(&p.words)?;
+                let m = self.frames.as_ref()?.lookup(&p.seq)?;
                 let (num, den) = (0..m.new_words).fold((1u128, 1u128), |(n, d), _| (n * u128::from(m.support.min(1 << 40) + 1), d * u128::from(m.support.min(1 << 40) + 2)));
                 let (num, den) = m.order_support.map_or((num, den), |k| (num * u128::from(k.min(1 << 40) + 1), den * u128::from(k.min(1 << 40) + 2)));
                 if num << RISK_BITS >= den * ((1u128 << RISK_BITS) - 1) {
@@ -2408,7 +2408,38 @@ mod recurrence_tests {
         assert_eq!(n.ask("bites dog man"), Answer::Refuse);
     }
 
-    const NUMBER_WORDS: [&str; 11] = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+    #[test]
+    fn a_word_said_twice_is_not_the_same_question_as_the_word_said_once() {
+        // Digits of an invented positional counting repeat ("sed sed" is not "sed"): the sixth blind set told a wrong fact for each repeat.
+        let mut n = Novice::default();
+        n.teach("what is gokiyarn sed sed", "gar");
+        n.teach("what is gokiyarn sed", "sim");
+        n.teach("what is gokiyarn sim sim", "bat");
+        n.teach("what is henuyarn sim", "dag");
+        n.ready();
+        assert_eq!(fact(&n.ask("what is gokiyarn sed sed")), Some("gar"));
+        assert_eq!(fact(&n.ask("what is gokiyarn sed")), Some("sim"));
+        // Taught only with the digit twice, asked with it once, and the other way round: nothing was taught for these words.
+        assert_eq!(n.ask("what is gokiyarn sim"), Answer::Refuse);
+        assert_eq!(n.ask("what is henuyarn sim sim"), Answer::Refuse);
+    }
+
+    #[test]
+    fn a_word_said_twice_does_not_make_a_frame_word_of_the_difference_between_two_wordings() {
+        // "sim sim" and "sim" are different content: a pair of lessons that answer alike by chance must not show that "what is" changes nothing
+        // for a fact whose words repeat.
+        let mut n = Novice::default();
+        for (i, k) in ["gokiyarn", "henuyarn", "luloryarn", "zareyarn", "ronirnyarn", "sukuyarn", "mamiyarn", "doniryarn"].iter().enumerate() {
+            n.teach(&format!("please {k} sim sim"), &format!("a{i}"));
+            n.teach(&format!("what is {k} sim"), &format!("a{i}"));
+            n.teach(&format!("please {k} sed"), &format!("b{i}"));
+        }
+        n.ready();
+        // "what is K sim sim" was never taught; with "what is" in doubt it may be a guess at most, never a fact.
+        assert!(fact(&n.ask("what is gokiyarn sim sim")).is_none());
+    }
+
+    const NUMBER_WORDS: [&str; 11] =["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
 
     /// Teach a kind of two number words, as the static exam does: three wordings of every pair, the answer a word as well.
     fn teach_word_kind(n: &mut Novice, name: &str, pairs: &[(usize, usize)], rule: impl Fn(usize, usize) -> usize) {

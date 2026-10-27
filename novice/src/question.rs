@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 DawsMacs
-//! Reading a question: the numbers in it, in order, and the other words, lowercased and without repeats. Nothing else is assumed about wording.
+//! Reading a question: the numbers in it, in order, and the other words, lowercased, as a set (`words`, no repeats) and as said (`seq`, every one, in
+//! order). Nothing else is assumed about wording.
 
 /// A question taken apart.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Parsed {
     pub words: Vec<String>,
+    /// The same words as said, repeats and order kept: "sed sed" is not "sed". Questions with no numbers are lookups by these.
+    pub seq: Vec<String>,
     pub nums: Vec<i64>,
 }
 
@@ -17,6 +20,7 @@ pub fn parse(question: &str) -> Parsed {
 /// [`parse`], where the words in `numerals` (learned from the lessons, see `numerals`) are numbers too.
 pub fn parse_with(question: &str, numerals: &std::collections::BTreeMap<String, i64>) -> Parsed {
     let mut words: Vec<String> = Vec::new();
+    let mut seq: Vec<String> = Vec::new();
     let mut nums = Vec::new();
     for raw in question.split_whitespace() {
         let tok = raw.trim_matches(|c: char| matches!(c, '?' | ',' | '.' | '!' | ';' | ':'));
@@ -30,11 +34,12 @@ pub fn parse_with(question: &str, numerals: &std::collections::BTreeMap<String, 
         } else {
             let w = tok.to_lowercase();
             if !words.contains(&w) {
-                words.push(w);
+                words.push(w.clone());
             }
+            seq.push(w);
         }
     }
-    Parsed { words, nums }
+    Parsed { words, seq, nums }
 }
 
 #[cfg(test)]
