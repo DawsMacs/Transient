@@ -226,6 +226,21 @@ By kind on the third set's controls: the fold `max(a mod 11, 3) - 3` is found as
 
 **Not done.** The scaled floor, the hard kinds of all three sets, and a fourth blind set to test whether any of this (the recurrences, the shape constants) generalizes.
 
+### The fourth blind test (a fourth set, run once)
+
+A fourth set of kinds was written by a separate session that had not read Novice's code (`tools/hidden_worlds_d.py`, pull request #39): 11 kinds that need a new operation, 4 composed on those, 4 controls the starting operations can express, 3 arbitrary codes (348 questions per seed, 234 of them on hard kinds). Novice at the commit frozen beforehand (`21ae967`; its code is identical to `9288b6d`, the only change under `novice/` since then is a renamed heading in this file) was run **once per seed on seeds 1 to 3, and the numbers below were written down before the kinds or the key were read.**
+
+| seed | wrong facts | hard questions answered right (234 each seed) | hard guesses: right / wrong | controls (72): facts / right guesses / refused | kinds explained by a program (of 22) | evaluations | energy |
+|---|---|---|---|---|---|---|---|
+| 1 | 0 | **0** | 0 / 0 | 75.0 % / 25.0 % / 0 % | 4 | 53.4 M | 5.71 J |
+| 2 | 0 | **0** | 4 / 1 | 77.8 % / 22.2 % / 0 % | 4 | 54.4 M | 5.03 J |
+| 3 | 0 | **0** | 7 / 2 | 73.6 % / 26.4 % / 0 % | 4 | 62.2 M | 7.31 J |
+
+- Hard kinds acquired: **0 of 15 on every seed.** No hard question was answered right as a fact. The 3 arbitrary codes were refused every time (42 of 42 on each seed).
+- Wrong facts: **0 on every seed.** Refusals are reported apart from wrong answers: 276, 271 and 267 of 348 questions were refused. "Guesses" are answers the judge counts separately from facts (a program the system is not yet sure of); on hard kinds they were right 0, 4 and 7 times and wrong 0, 1 and 2 times.
+- Controls: all 72 were answered on each seed, with no wrong answer (facts 54, 56 and 53; right guesses 18, 16 and 19). In the third set, 75 to 98 % of the controls were refused. Baby's controls here: 59.7 %, 59.7 % and 38.9 % as facts (`tools/hidden_worlds_d.md`); the memorizer scores 0.
+- Energy is the CPU package's own counter above idle draw, teaching plus answering; the meter warned that other processes shared the machine, so the figures are upper bounds. The run took about 13.4 s of wall time per seed.
+
 ### Cost
 
 Counted evaluations (one operation applied at one point), seed 1; the work is almost all in teaching, because a told answer that a believed program already gives costs a few dozen evaluations. Every row has 0 wrong facts except where noted.
