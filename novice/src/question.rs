@@ -11,6 +11,11 @@ pub struct Parsed {
 
 /// Split a question into words and numbers. A number is a run of up to nine ASCII digits standing alone (so a negative number reads as a word).
 pub fn parse(question: &str) -> Parsed {
+    parse_with(question, &std::collections::BTreeMap::new())
+}
+
+/// [`parse`], where the words in `numerals` (learned from the lessons, see `numerals`) are numbers too.
+pub fn parse_with(question: &str, numerals: &std::collections::BTreeMap<String, i64>) -> Parsed {
     let mut words: Vec<String> = Vec::new();
     let mut nums = Vec::new();
     for raw in question.split_whitespace() {
@@ -20,6 +25,8 @@ pub fn parse(question: &str) -> Parsed {
         }
         if tok.len() <= 9 && tok.bytes().all(|b| b.is_ascii_digit()) {
             nums.push(tok.parse().unwrap_or(0));
+        } else if let Some(&n) = numerals.get(&tok.to_lowercase()) {
+            nums.push(n);
         } else {
             let w = tok.to_lowercase();
             if !words.contains(&w) {

@@ -26,9 +26,10 @@
 
 use crate::bits::{self, Cost};
 use crate::fit;
+use crate::numerals;
 use crate::program::{self, Expr, Found, Lib, Task};
 use crate::protocol::{Answer, System};
-use crate::question::{parse, Parsed};
+use crate::question::{parse_with, Parsed};
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
@@ -89,6 +90,8 @@ struct Group {
     chain_record: (u32, u32),
     /// Whether any answer it has been given was negative. A negative result for a kind that never showed one is not stated.
     negative: bool,
+    /// The answers of this kind were number words: a number it works out is spoken as the word for it, or not at all.
+    speaks: bool,
 }
 
 struct Said {
@@ -115,6 +118,13 @@ pub struct Stats {
 
 pub struct Novice {
     lessons: Vec<(Parsed, String)>,
+    /// The lessons as they were said (question, answer), kept until the words that are numbers have been looked for.
+    raw: Vec<(String, String)>,
+    /// Whether the answer of each lesson was a number word that was turned into a number.
+    lesson_spoke: Vec<bool>,
+    /// The words that are numbers (learned: see `numerals`), and the word for each number the lessons have a word for.
+    numerals: BTreeMap<String, i64>,
+    spoken: BTreeMap<i64, String>,
     df: BTreeMap<String, u32>,
     groups: Vec<Group>,
     by_key: BTreeMap<String, usize>,
@@ -144,7 +154,7 @@ pub struct Novice {
 
 impl Default for Novice {
     fn default() -> Self {
-        Novice { lessons: Vec::new(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], reliability: BTreeMap::new(), chain_record: (0, 0), recurrence_paid: Paid::default(), dear_paid: Paid::default(), exact: BTreeMap::new(), bags: BTreeMap::new(), shape_paid: Paid::default(), stats: Stats::default() }
+        Novice { lessons: Vec::new(), raw: Vec::new(), lesson_spoke: Vec::new(), numerals: BTreeMap::new(), spoken: BTreeMap::new(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], reliability: BTreeMap::new(), chain_record: (0, 0), recurrence_paid: Paid::default(), dear_paid: Paid::default(), exact: BTreeMap::new(), bags: BTreeMap::new(), shape_paid: Paid::default(), stats: Stats::default() }
     }
 }
 
@@ -1284,6 +1294,28 @@ impl Novice {
         }
     }
 
+    /// An answer that is the word of a number, as that number (and whether it was); any other answer as it is.
+    fn as_number(&self, answer: &str) -> (String, bool) {
+        match self.numerals.get(&answer.to_lowercase()) {
+            Some(n) => (n.to_string(), true),
+            None => (answer.to_string(), false),
+        }
+    }
+
+    /// What a kind whose answers are number words says: the word for the number, and nothing if no lesson has a word for it.
+    fn speak(&mut self, p: &Parsed, reply: Answer) -> Answer {
+        let Some(gi) = self.group_of(p) else { return reply };
+        if self.numerals.is_empty() || !self.groups[gi].speaks {
+            return reply;
+        }
+        let word = |this: &Self, a: &str| a.parse::<i64>().ok().and_then(|n| this.spoken.get(&n).cloned());
+        match reply {
+            Answer::Fact(a) => word(self, &a).map_or_else(|| { self.why[0] += 1; Answer::Refuse }, Answer::Fact),
+            Answer::Guess(a, pm) => word(self, &a).map_or_else(|| { self.why[0] += 1; Answer::Refuse }, |w| Answer::Guess(w, pm)),
+            Answer::Refuse => Answer::Refuse,
+        }
+    }
+
     /// Keep what was said to a question with no numbers, in the words it was said in.
     fn remember_lookup(&mut self, p: &Parsed, answer: &str) {
         if p.nums.is_empty() {
@@ -1319,7 +1351,29 @@ impl Novice {
     }
 
     fn make_groups(&mut self) {
+        // Words that are numbers, if the lessons say so: every lesson is read again with them as numbers, and the kinds of numbers are then kinds of
+        // numbers, learned as any other.
+        if self.numerals.is_empty() && !self.raw.is_empty() {
+            let found = numerals::learn(&self.raw);
+            let raw = std::mem::take(&mut self.raw);
+            if !found.is_empty() {
+                if std::env::var_os("NOVICE_TRACE").is_some() {
+                    eprintln!("numerals {found:?}");
+                }
+                self.spoken = found.iter().map(|(w, v)| (*v, w.clone())).collect();
+                self.numerals = found;
+                self.lessons.clear();
+                self.lesson_spoke.clear();
+                for (q, a) in raw {
+                    let (answer, spoke) = self.as_number(&a);
+                    self.lessons.push((parse_with(&q, &self.numerals), answer));
+                    self.lesson_spoke.push(spoke);
+                }
+            }
+        }
         let lessons = std::mem::take(&mut self.lessons);
+        let mut spoke = std::mem::take(&mut self.lesson_spoke);
+        spoke.resize(lessons.len(), false);
         for (p, _) in &lessons {
             for w in &p.words {
                 *self.df.entry(w.clone()).or_insert(0) += 1;
@@ -1355,11 +1409,12 @@ impl Novice {
             let g = match self.by_key.get(&key) {
                 Some(&g) => g,
                 None => {
-                    self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, enumerated_with: 0, recurrence_tried: 0, spent: 0, explained_at: None, table: Default::default(), claims: BTreeMap::new(), disputed: Default::default(), record: (0, 0), chain_record: (0, 0), negative: false });
+                    self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, enumerated_with: 0, recurrence_tried: 0, spent: 0, explained_at: None, table: Default::default(), claims: BTreeMap::new(), disputed: Default::default(), record: (0, 0), chain_record: (0, 0), negative: false, speaks: false });
                     self.by_key.insert(key, self.groups.len() - 1);
                     self.groups.len() - 1
                 }
             };
+            self.groups[g].speaks |= spoke[i];
             if self.groups[g].arity == p.nums.len() {
                 self.add_point(g, &p.nums, answer);
                 self.groups[g].claims.entry(p.nums.clone()).or_default().insert(TEACHING.to_string(), answer.clone());
@@ -1398,9 +1453,14 @@ impl Novice {
 
 impl System for Novice {
     fn teach(&mut self, question: &str, answer: &str) {
-        let p = parse(question);
+        let p = parse_with(question, &self.numerals);
         self.remember_lookup(&p, answer.trim());
-        self.lessons.push((p, answer.trim().to_string()));
+        if self.numerals.is_empty() {
+            self.raw.push((question.to_string(), answer.trim().to_string()));
+        }
+        let (answer, spoke) = self.as_number(answer.trim());
+        self.lessons.push((p, answer));
+        self.lesson_spoke.push(spoke);
     }
 
     fn ready(&mut self) {
@@ -1408,7 +1468,7 @@ impl System for Novice {
     }
 
     fn ask(&mut self, question: &str) -> Answer {
-        let p = parse(question);
+        let p = parse_with(question, &self.numerals);
         let mut said = Said { answer: None, bucket: None, group: None, chain_of: None };
         let reason = std::cell::Cell::new(0usize);
         let reply = (|| {
@@ -1512,12 +1572,13 @@ impl System for Novice {
             said.bucket = None;
         }
         self.said.insert(question.to_string(), said);
-        reply
+        self.speak(&p, reply)
     }
 
     fn told(&mut self, question: &str, truth: &str, source: Option<&str>) {
-        let p = parse(question);
-        let truth = truth.trim();
+        let p = parse_with(question, &self.numerals);
+        let truth = self.as_number(truth.trim()).0;
+        let truth = truth.as_str();
         self.remember_lookup(&p, truth);
         if let Some(said) = self.said.remove(question) {
             if let (Some(gi), Some(a)) = (said.chain_of, said.answer.as_ref()) {
@@ -1540,7 +1601,7 @@ impl System for Novice {
             None => {
                 // A kind word it has never met names a new group.
                 let Some(key) = p.words.iter().filter(|w| !self.df.contains_key(*w)).min().cloned() else { return };
-                self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, enumerated_with: 0, recurrence_tried: 0, spent: 0, explained_at: None, table: Default::default(), claims: BTreeMap::new(), disputed: Default::default(), record: (0, 0), chain_record: (0, 0), negative: false });
+                self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, enumerated_with: 0, recurrence_tried: 0, spent: 0, explained_at: None, table: Default::default(), claims: BTreeMap::new(), disputed: Default::default(), record: (0, 0), chain_record: (0, 0), negative: false, speaks: false });
                 self.by_key.insert(key, self.groups.len() - 1);
                 self.groups.len() - 1
             }
@@ -2318,6 +2379,64 @@ mod recurrence_tests {
         n.ready();
         assert_eq!(fact(&n.ask("man bites dog")), Some("news"));
         assert_eq!(n.ask("bites dog man"), Answer::Refuse);
+    }
+
+    const NUMBER_WORDS: [&str; 11] = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+
+    /// Teach a kind of two number words, as the static exam does: three wordings of every pair, the answer a word as well.
+    fn teach_word_kind(n: &mut Novice, name: &str, pairs: &[(usize, usize)], rule: impl Fn(usize, usize) -> usize) {
+        for &(a, b) in pairs {
+            for template in ["what is {a} {k} {b}", "{a} {k} {b}", "{a} {k} {b} equals"] {
+                n.teach(&template.replace("{a}", NUMBER_WORDS[a]).replace("{k}", name).replace("{b}", NUMBER_WORDS[b]), NUMBER_WORDS[rule(a, b)]);
+            }
+        }
+    }
+
+    fn word_pairs() -> Vec<(usize, usize)> {
+        (0..=5).flat_map(|a| (0..=5).map(move |b| (a, b))).filter(|&(a, b)| (a, b) == (0, 0) || (a * 3 + b * 5) % 4 != 0).collect()
+    }
+
+    #[test]
+    fn words_that_are_numbers_are_found_and_the_learner_works_with_them() {
+        let mut n = Novice::default();
+        teach_word_kind(&mut n, "bidevubi", &word_pairs(), |a, b| a + b);
+        teach_word_kind(&mut n, "dufavubi", &word_pairs(), |a, b| a.abs_diff(b));
+        // A kind about things, whose answers are words that repeat and are no numbers.
+        for (i, w) in ["bafoba", "tadaba", "podoba", "mifuba", "ligaba", "nufeba", "pefoba", "dageba"].iter().enumerate() {
+            for template in ["how is {w} sedavubi", "{w} is sedavubi how", "sedavubi {w}"] {
+                n.teach(&template.replace("{w}", w), ["vetupa", "bevapa", "zovapa", "vetupa", "bevapa", "zovapa", "vetupa", "bevapa"][i]);
+            }
+        }
+        n.ready();
+        // A pair that was never taught, inside the range: worked out from the program for adding.
+        let held = word_pairs();
+        let (a, b) = (0..=5).flat_map(|a| (0..=5).map(move |b| (a, b))).find(|p| !held.contains(p) && p.0 + p.1 <= 8).expect("a pair that was not taught");
+        match n.ask(&format!("what is {} bidevubi {}", NUMBER_WORDS[a], NUMBER_WORDS[b])) {
+            Answer::Fact(w) | Answer::Guess(w, _) => assert_eq!(w, NUMBER_WORDS[a + b], "{a} + {b}"),
+            Answer::Refuse => panic!("refused {a} + {b}"),
+        }
+        // The second kind, explained once the words are numbers.
+        match n.ask("what is five dufavubi one") {
+            Answer::Fact(w) | Answer::Guess(w, _) => assert_eq!(w, "four"),
+            Answer::Refuse => panic!("refused five dufavubi one"),
+        }
+        // Beyond the numbers taught as arguments: six is only ever an answer, and is a number all the same.
+        match n.ask("what is zero bidevubi six") {
+            Answer::Fact(w) | Answer::Guess(w, _) => assert_eq!(w, "six"),
+            Answer::Refuse => panic!("refused zero bidevubi six"),
+        }
+        // A result with no word is not spoken: six and six make a number that no lesson has a word for.
+        assert_eq!(n.ask("what is six bidevubi six"), Answer::Refuse);
+        // Things are still things.
+        assert_eq!(fact(&n.ask("how is bafoba sedavubi")), Some("vetupa"));
+    }
+
+    #[test]
+    fn without_a_kind_that_adds_no_word_is_a_number() {
+        let mut n = Novice::default();
+        teach_word_kind(&mut n, "dudovubi", &word_pairs(), |a, b| a.max(b));
+        n.ready();
+        assert_eq!(n.ask("what is three dudovubi three"), Answer::Refuse);
     }
 
     #[test]
