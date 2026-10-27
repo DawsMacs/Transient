@@ -25,6 +25,7 @@
 //! earn its place: all of them are offered to the kinds still unexplained, and only the ones that turn up in a new explanation are kept.
 
 use crate::bits::{self, Cost};
+use crate::fit;
 use crate::program::{self, Expr, Found, Lib, Task};
 use crate::protocol::{Answer, System};
 use crate::question::{parse, Parsed};
@@ -40,6 +41,8 @@ const BASE_CONSTS: [i64; 5] = [0, 1, 2, 3, 10];
 const MAX_ITEMS: usize = 200_000;
 /// How many answers a wrong source might have given instead (a hand-built guess of the size of the space of answers).
 const ANSWER_SPACE: u64 = 100;
+/// The most bits a member of a fitted family is charged over the cheapest member (see `search_fitted`).
+const FAMILY_RIVAL_BITS: u64 = 3;
 /// Evaluations each stage of the search for a recurrence may cost per bit of what the kind's table would cost: the most a rule can save is the table,
 /// so it bounds what is worth spending (hand-built).
 const EFFORT_PER_BIT: u64 = 10_000;
@@ -275,6 +278,28 @@ fn uses_from(e: &Expr, from: usize) -> bool {
     }
 }
 
+/// The smallest box that holds all the points.
+fn bounding_box(inputs: &[Vec<i64>], arity: usize) -> (Vec<i64>, Vec<i64>) {
+    let (mut lo, mut hi) = (inputs[0].clone(), inputs[0].clone());
+    for p in inputs {
+        for i in 0..arity {
+            lo[i] = lo[i].min(p[i]);
+            hi[i] = hi[i].max(p[i]);
+        }
+    }
+    (lo, hi)
+}
+
+/// Every point of the box from the lowest taught number to just beyond the highest, at most 40 numbers along an axis.
+fn dense_probes(lo: &[i64], hi: &[i64]) -> Vec<Vec<i64>> {
+    let mut out: Vec<Vec<i64>> = vec![Vec::new()];
+    for i in 0..lo.len() {
+        let axis: Vec<i64> = (lo[i]..=(2 * hi[i] + 5).min(lo[i] + 39)).collect();
+        out = out.iter().flat_map(|prefix| axis.iter().map(move |&x| prefix.iter().copied().chain([x]).collect())).collect();
+    }
+    out
+}
+
 /// A few points to compare two words on.
 fn grid(arity: usize) -> Vec<Vec<i64>> {
     if arity == 1 {
@@ -397,7 +422,7 @@ impl Novice {
         }
         // The first blind search uses the starting operations only: every word on the alphabet makes it dearer for every kind that comes after,
         // whether or not the kind has anything to do with the word. Words are used by composition and by editing a known program.
-        if self.search_group(g, &BASE_CONSTS, &[], 7, "plain") || self.search_data_constants(g) || self.search_modulo(g) || self.search_shape(g) {
+        if self.search_group(g, &BASE_CONSTS, &[], 7, "plain") || self.search_data_constants(g) || self.search_modulo(g) || self.search_shape(g) || self.search_fitted(g) {
             return;
         }
     }
@@ -882,6 +907,66 @@ impl Novice {
         let won = self.search_group(g, &consts, &[], 7, "shape");
         self.shape_paid.won += u32::from(won);
         won
+    }
+
+    /// The floor of a line or plane with large constants, and a sum of multiples (or a quadratic of one variable) reduced modulo a constant: families with a few integers that no
+    /// enumeration reaches, fitted directly (see `fit`). Every member of the family that gives all the answers is kept, so the ones that disagree
+    /// beyond the data stay as rivals.
+    fn search_fitted(&mut self, g: usize) -> bool {
+        let arity = self.groups[g].arity;
+        if arity == 0 || arity > 2 {
+            return false;
+        }
+        let Some((inputs, target)) = self.inputs_and_targets(g) else { return false };
+        for (label, fitted) in [("floor", fit::floors(&inputs, &target)), ("modular", fit::modular(&inputs, &target))] {
+            self.stats.searches += 1;
+            self.stats.evaluations += fitted.work;
+            let (lo, hi) = bounding_box(&inputs, arity);
+            let probe = probes(&lo, &hi);
+            // The family's members agree on the data and differ beyond it, and the differences are small: the sparse probes (which tell programs
+            // apart for the enumerations) would call two slopes close to each other the same program. So the members are told apart on every
+            // point of the box out to just beyond the data, and the ones that give the highest and the lowest value anywhere are always kept.
+            let dense = dense_probes(&lo, &hi);
+            let mut rows: Vec<(Found, Vec<i64>)> = Vec::new();
+            for expr in fitted.exprs {
+                self.stats.evaluations += dense.len() as u64;
+                let values: Option<Vec<i64>> = dense.iter().map(|p| expr.eval(p)).collect();
+                let probe_values: Option<Vec<i64>> = probe.iter().map(|p| expr.eval(p)).collect();
+                if let (Some(values), Some(probe_values), true) = (values, probe_values, inputs.iter().zip(&target).all(|(p, &t)| expr.eval(p) == Some(t))) {
+                    rows.push((Found { cost: program::cost_of(&expr, arity, 0), expr, probe_values }, values));
+                }
+            }
+            rows.sort_by(|x, y| x.0.cost.cmp(&y.0.cost).then_with(|| x.0.expr.size().cmp(&y.0.expr.size())).then_with(|| x.0.expr.to_string().cmp(&y.0.expr.to_string())));
+            let mut reps: Vec<(Found, Vec<i64>)> = Vec::new();
+            for row in rows {
+                if !reps.iter().any(|k| k.1 == row.1) {
+                    reps.push(row);
+                }
+            }
+            let mut keep: std::collections::BTreeSet<usize> = (0..reps.len().min(64)).collect();
+            for i in 0..dense.len() {
+                let value = |r: usize| reps[r].1[i];
+                keep.extend((0..reps.len()).min_by_key(|&r| (value(r), r)));
+                keep.extend((0..reps.len()).max_by_key(|&r| (value(r), std::cmp::Reverse(r))));
+            }
+            let mut kept: Vec<Found> = reps.into_iter().enumerate().filter(|(r, _)| keep.contains(r)).map(|(_, (f, _))| f).collect();
+            // Members that fit the data equally are not much less believable because their constants are dearer to write: the data does not
+            // choose between them, so none is charged more than a few bits over the cheapest, and where they disagree the answer is in doubt.
+            if let Some(best) = kept.first().map(|f| f.cost) {
+                for f in &mut kept {
+                    f.cost = f.cost.min(best + FAMILY_RIVAL_BITS * bits::BIT);
+                }
+            }
+            if std::env::var_os("NOVICE_TRACE").is_some() {
+                let shown = kept.first().map(|f| f.expr.to_string()).unwrap_or_else(|| "nothing".into());
+                eprintln!("fit {:<18} {label:<10} points {:>3} -> {:>9} checks, {shown}", self.groups[g].key, inputs.len(), fitted.work);
+            }
+            if kept.first().is_some_and(|f| f.cost < table_cost(&target)) {
+                self.groups[g].fit = Some(Fit { found: kept, lo, hi });
+                return true;
+            }
+        }
+        false
     }
 
     /// A kind whose answers all lie below some number may be a rule reduced modulo that number: `(k * x + c) mod m`. The modulus is nearly given
@@ -1862,6 +1947,81 @@ mod recurrence_tests {
         n.ready();
         assert_eq!(n.kinds(), (1, 1));
         assert_eq!(fact(&n.ask("what is folmursido 15")), Some(rule(15).to_string().as_str()));
+    }
+
+    #[test]
+    fn a_floor_of_a_line_with_large_constants_is_found_from_where_its_steps_fall() {
+        // (29 * x + 11) div 9: three constants that no short list has, and seven nodes; the steps are 3 or 4 about every point.
+        let rule = |x: i64| (29 * x + 11) / 9;
+        let mut n = Novice::default();
+        teach_unary(&mut n, "flormosido", rule, (0..=19).filter(|x| *x != 6 && *x != 13));
+        n.ready();
+        assert_eq!(n.kinds(), (1, 1), "the steps of a floor announce its slope as a ratio");
+        assert_eq!(fact(&n.ask("what is flormosido 6")), Some(rule(6).to_string().as_str()));
+        match n.ask("what is flormosido 27") {
+            Answer::Guess(a, _) | Answer::Fact(a) => assert_eq!(a, rule(27).to_string()),
+            Answer::Refuse => panic!("refused a point beyond the range of a closed-form rule"),
+        }
+    }
+
+    #[test]
+    fn a_floor_of_a_plane_with_large_constants_is_found() {
+        // (5 * x + 7 * y + 13) div 11: nine nodes, out of reach of an enumeration.
+        let rule = |x: i64, y: i64| (5 * x + 7 * y + 13) / 11;
+        let taught: Vec<(i64, i64)> = (1..=15).flat_map(|a| (1..=15).map(move |b| (a, b))).filter(|&(a, b)| (a * 7 + b * 13) % 4 != 0).collect();
+        let mut n = Novice::default();
+        teach_binary(&mut n, "florplasido", rule, &taught);
+        n.ready();
+        assert_eq!(n.kinds(), (1, 1), "a plane's floor should be fitted");
+        let (a, b) = (1..=15).flat_map(|a| (1..=15).map(move |b| (a, b))).find(|p| !taught.contains(p)).expect("a pair that was not taught");
+        assert_eq!(fact(&n.ask(&format!("what is {a} florplasido {b}"))), Some(rule(a, b).to_string().as_str()));
+    }
+
+    #[test]
+    fn a_sum_of_two_multiples_reduced_modulo_a_constant_is_found() {
+        // (13 * x + 22 * y + 5) mod 47: every residue appears, the modulus is just above the largest answer.
+        let rule = |x: i64, y: i64| (13 * x + 22 * y + 5) % 47;
+        let taught: Vec<(i64, i64)> = (1..=15).flat_map(|a| (1..=15).map(move |b| (a, b))).filter(|&(a, b)| (a * 7 + b * 13) % 4 != 0).collect();
+        let mut n = Novice::default();
+        teach_binary(&mut n, "resmodsido", rule, &taught);
+        n.ready();
+        assert_eq!(n.kinds(), (1, 1));
+        let (a, b) = (1..=15).flat_map(|a| (1..=15).map(move |b| (a, b))).find(|p| !taught.contains(p)).expect("a pair that was not taught");
+        assert_eq!(fact(&n.ask(&format!("what is {a} resmodsido {b}"))), Some(rule(a, b).to_string().as_str()));
+    }
+
+    #[test]
+    fn a_quadratic_reduced_modulo_a_constant_is_found() {
+        // (37 * x * x + 5 * x + 11) mod 53: nine nodes and three large constants.
+        let rule = |x: i64| (37 * x * x + 5 * x + 11) % 53;
+        let mut n = Novice::default();
+        teach_unary(&mut n, "quadmodsido", rule, (0..=19).filter(|x| *x != 6 && *x != 13));
+        n.ready();
+        assert_eq!(n.kinds(), (1, 1));
+        assert_eq!(fact(&n.ask("what is quadmodsido 6")), Some(rule(6).to_string().as_str()));
+        match n.ask("what is quadmodsido 27") {
+            Answer::Guess(a, _) | Answer::Fact(a) => assert_eq!(a, rule(27).to_string()),
+            Answer::Refuse => panic!("refused a point beyond the range of a closed-form rule"),
+        }
+    }
+
+    #[test]
+    fn a_random_staircase_is_not_a_floor_of_a_line() {
+        // Rising, but by steps of 0 to 3 drawn at random: monotone, and no line floors to it.
+        let mut seed = 777u64;
+        let mut total = 0i64;
+        let table: Vec<i64> = (0..=20)
+            .map(|_| {
+                seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                total += ((seed >> 33) % 4) as i64;
+                total
+            })
+            .collect();
+        let mut n = Novice::default();
+        teach_unary(&mut n, "stairmosido", |x| table[x as usize], 0..=20);
+        n.ready();
+        assert_eq!(n.kinds(), (1, 0), "a random staircase has no rule");
+        assert_eq!(n.ask("what is stairmosido 27"), Answer::Refuse);
     }
 
     #[test]
