@@ -273,6 +273,21 @@ On set D the four new ones are exactly the two floors, the sum of two multiples 
 
 **Still open, in order of value:** (1) large constants in recurrences (a square plus a constant modulo 58 as a function of the previous answer); (2) the cost of failing; (3) a static exam and goldens for Novice; (4) per-source exception prices; (5) the cost-versus-experience curve in joules. A fifth, blind set is the test of whether this generalizes.
 
+### The fifth blind test (a fifth set, run once)
+
+A fifth set of kinds was written by a separate session that had not read Novice's code (`tools/hidden_worlds_e.py`, pull request #42): 11 kinds that need more than the starting operations, 4 composed on those, 4 controls the starting operations can express, 3 arbitrary codes (364 questions per seed, 242 of them on hard kinds). It was commissioned after the floor and modulus stage (pull request #41) as the test of whether that stage generalizes. Novice at the commit frozen beforehand (`5e5a114`; the `novice/` directory on `main` is identical to the one at `e365383`, the merge of #41) was run **once per seed on seeds 1 to 3, and the numbers below were written down before the kinds or the key were read.**
+
+| seed | wrong facts | hard questions answered right (242 each seed) | hard guesses: right / wrong | controls (72): facts / right guesses / refused | kinds explained by a program (of 22) | evaluations | energy |
+|---|---|---|---|---|---|---|---|
+| 1 | 0 | **0** | 0 / 0 | 77.8 % / 22.2 % / 0 % | 4 | 52.5 M | 7.50 J |
+| 2 | 0 | **0** | 0 / 0 | 81.9 % / 18.1 % / 0 % | 4 | 53.8 M | 7.10 J |
+| 3 | 0 | **0** | 0 / 0 | 56.9 % / 13.9 % / 29.2 % | 3 | 66.0 M | 8.48 J |
+
+- Hard kinds acquired: **0 of 15 on every seed.** No hard question was answered, as a fact or as a guess. The 3 arbitrary codes were refused every time (50 of 50 on each seed).
+- Wrong facts: **0 on every seed**, and no wrong guess anywhere. Refusals are reported apart from wrong answers: 292, 292 and 313 of 364 questions were refused.
+- Controls: all 72 answered on seeds 1 and 2 (facts 56 and 59, right guesses 16 and 13); on seed 3 one control kind was not explained (facts 41, right guesses 10, refused 21 of 72).
+- Energy is the CPU package's own counter above idle draw, teaching plus answering, about 13.6 to 13.9 s of wall time per seed.
+
 ### Cost
 
 Counted evaluations (one operation applied at one point), seed 1; the work is almost all in teaching, because a told answer that a believed program already gives costs a few dozen evaluations. Every row has 0 wrong facts except where noted.
