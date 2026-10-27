@@ -422,7 +422,7 @@ impl Novice {
         }
         // The first blind search uses the starting operations only: every word on the alphabet makes it dearer for every kind that comes after,
         // whether or not the kind has anything to do with the word. Words are used by composition and by editing a known program.
-        if self.search_group(g, &BASE_CONSTS, &[], 7, "plain") || self.search_data_constants(g) || self.search_modulo(g) || self.search_shape(g) || self.search_fitted(g) {
+        if self.search_group(g, &BASE_CONSTS, &[], 7, "plain") || self.search_data_constants(g) || self.search_modulo(g) || self.search_shape(g) || self.search_fitted(g) || self.search_affine(g) {
             return;
         }
     }
@@ -919,54 +919,105 @@ impl Novice {
         }
         let Some((inputs, target)) = self.inputs_and_targets(g) else { return false };
         for (label, fitted) in [("floor", fit::floors(&inputs, &target)), ("modular", fit::modular(&inputs, &target))] {
-            self.stats.searches += 1;
-            self.stats.evaluations += fitted.work;
-            let (lo, hi) = bounding_box(&inputs, arity);
-            let probe = probes(&lo, &hi);
-            // The family's members agree on the data and differ beyond it, and the differences are small: the sparse probes (which tell programs
-            // apart for the enumerations) would call two slopes close to each other the same program. So the members are told apart on every
-            // point of the box out to just beyond the data, and the ones that give the highest and the lowest value anywhere are always kept.
-            let dense = dense_probes(&lo, &hi);
-            let mut rows: Vec<(Found, Vec<i64>)> = Vec::new();
-            for expr in fitted.exprs {
-                self.stats.evaluations += dense.len() as u64;
-                let values: Option<Vec<i64>> = dense.iter().map(|p| expr.eval(p)).collect();
-                let probe_values: Option<Vec<i64>> = probe.iter().map(|p| expr.eval(p)).collect();
-                if let (Some(values), Some(probe_values), true) = (values, probe_values, inputs.iter().zip(&target).all(|(p, &t)| expr.eval(p) == Some(t))) {
-                    rows.push((Found { cost: program::cost_of(&expr, arity, 0), expr, probe_values }, values));
-                }
-            }
-            rows.sort_by(|x, y| x.0.cost.cmp(&y.0.cost).then_with(|| x.0.expr.size().cmp(&y.0.expr.size())).then_with(|| x.0.expr.to_string().cmp(&y.0.expr.to_string())));
-            let mut reps: Vec<(Found, Vec<i64>)> = Vec::new();
-            for row in rows {
-                if !reps.iter().any(|k| k.1 == row.1) {
-                    reps.push(row);
-                }
-            }
-            let mut keep: std::collections::BTreeSet<usize> = (0..reps.len().min(64)).collect();
-            for i in 0..dense.len() {
-                let value = |r: usize| reps[r].1[i];
-                keep.extend((0..reps.len()).min_by_key(|&r| (value(r), r)));
-                keep.extend((0..reps.len()).max_by_key(|&r| (value(r), std::cmp::Reverse(r))));
-            }
-            let mut kept: Vec<Found> = reps.into_iter().enumerate().filter(|(r, _)| keep.contains(r)).map(|(_, (f, _))| f).collect();
-            // Members that fit the data equally are not much less believable because their constants are dearer to write: the data does not
-            // choose between them, so none is charged more than a few bits over the cheapest, and where they disagree the answer is in doubt.
-            if let Some(best) = kept.first().map(|f| f.cost) {
-                for f in &mut kept {
-                    f.cost = f.cost.min(best + FAMILY_RIVAL_BITS * bits::BIT);
-                }
-            }
-            if std::env::var_os("NOVICE_TRACE").is_some() {
-                let shown = kept.first().map(|f| f.expr.to_string()).unwrap_or_else(|| "nothing".into());
-                eprintln!("fit {:<18} {label:<10} points {:>3} -> {:>9} checks, {shown}", self.groups[g].key, inputs.len(), fitted.work);
-            }
-            if kept.first().is_some_and(|f| f.cost < table_cost(&target)) {
-                self.groups[g].fit = Some(Fit { found: kept, lo, hi });
+            if self.adopt_family(g, &inputs, &target, fitted.exprs, fitted.work, label) {
                 return true;
             }
         }
         false
+    }
+
+    /// Keep a family of programs that all give the answers (see `search_fitted`) as the explanation of the group if the best of them is cheaper than
+    /// the table. `work` is what finding them cost.
+    fn adopt_family(&mut self, g: usize, inputs: &[Vec<i64>], target: &[i64], exprs: Vec<Expr>, work: u64, label: &str) -> bool {
+        let arity = self.groups[g].arity;
+        self.stats.searches += 1;
+        self.stats.evaluations += work;
+        let (lo, hi) = bounding_box(inputs, arity);
+        let probe = probes(&lo, &hi);
+        // The family's members agree on the data and differ beyond it, and the differences are small: the sparse probes (which tell programs
+        // apart for the enumerations) would call two slopes close to each other the same program. So the members are told apart on every
+        // point of the box out to just beyond the data, and the ones that give the highest and the lowest value anywhere are always kept.
+        let dense = dense_probes(&lo, &hi);
+        let mut rows: Vec<(Found, Vec<i64>)> = Vec::new();
+        for expr in exprs {
+            self.stats.evaluations += dense.len() as u64;
+            let values: Option<Vec<i64>> = dense.iter().map(|p| expr.eval(p)).collect();
+            let probe_values: Option<Vec<i64>> = probe.iter().map(|p| expr.eval(p)).collect();
+            if let (Some(values), Some(probe_values), true) = (values, probe_values, inputs.iter().zip(target).all(|(p, &t)| expr.eval(p) == Some(t))) {
+                rows.push((Found { cost: program::cost_of(&expr, arity, 0), expr, probe_values }, values));
+            }
+        }
+        rows.sort_by(|x, y| x.0.cost.cmp(&y.0.cost).then_with(|| x.0.expr.size().cmp(&y.0.expr.size())).then_with(|| x.0.expr.to_string().cmp(&y.0.expr.to_string())));
+        let mut reps: Vec<(Found, Vec<i64>)> = Vec::new();
+        for row in rows {
+            if !reps.iter().any(|k| k.1 == row.1) {
+                reps.push(row);
+            }
+        }
+        let mut keep: std::collections::BTreeSet<usize> = (0..reps.len().min(64)).collect();
+        for i in 0..dense.len() {
+            let value = |r: usize| reps[r].1[i];
+            keep.extend((0..reps.len()).min_by_key(|&r| (value(r), r)));
+            keep.extend((0..reps.len()).max_by_key(|&r| (value(r), std::cmp::Reverse(r))));
+        }
+        let mut kept: Vec<Found> = reps.into_iter().enumerate().filter(|(r, _)| keep.contains(r)).map(|(_, (f, _))| f).collect();
+        // Members that fit the data equally are not much less believable because their constants are dearer to write: the data does not
+        // choose between them, so none is charged more than a few bits over the cheapest, and where they disagree the answer is in doubt.
+        if let Some(best) = kept.first().map(|f| f.cost) {
+            for f in &mut kept {
+                f.cost = f.cost.min(best + FAMILY_RIVAL_BITS * bits::BIT);
+            }
+        }
+        if std::env::var_os("NOVICE_TRACE").is_some() {
+            let shown = kept.first().map(|f| f.expr.to_string()).unwrap_or_else(|| "nothing".into());
+            eprintln!("fit {:<18} {label:<10} points {:>3} -> {:>9} checks, {shown}", self.groups[g].key, inputs.len(), work);
+        }
+        if kept.first().is_some_and(|f| f.cost < table_cost(target)) {
+            self.groups[g].fit = Some(Fit { found: kept, lo, hi });
+            return true;
+        }
+        false
+    }
+
+    /// A simple program times a constant plus a constant: `k * p + c` with `p` of at most five nodes over the starting operations (the pool of
+    /// everything those make). The constants are not searched for; two points where `p` differs give them, and the rest only has to agree. This is
+    /// what reaches `2 * min(a, b) + 5` (seven nodes, and 5 is not in the plain search's short list), and it works for kinds of two numbers,
+    /// which have no stage of their own for the numbers in their data.
+    fn search_affine(&mut self, g: usize) -> bool {
+        let arity = self.groups[g].arity;
+        if arity == 0 || arity > 2 {
+            return false;
+        }
+        let Some((inputs, target)) = self.inputs_and_targets(g) else { return false };
+        let distinct: std::collections::BTreeSet<i64> = target.iter().copied().collect();
+        if inputs.len() < 10 || distinct.len() < 4 {
+            return false;
+        }
+        let (pool, effort) = program::pool(&inputs, arity, &[1, 2, 3], if arity == 1 { 3 } else { 5 }, 12_000);
+        let mut work = effort.evaluations;
+        let mut exprs: Vec<Expr> = Vec::new();
+        for (e, _, vals) in &pool {
+            let Some(j) = (1..vals.len()).find(|&j| vals[j] != vals[0]) else { continue };
+            let (dt, dv) = (target[j] - target[0], vals[j] - vals[0]);
+            if dt % dv != 0 || dt / dv < 1 {
+                continue;
+            }
+            let (k, c) = (dt / dv, target[0] - dt / dv * vals[0]);
+            work += vals.len() as u64;
+            if !vals.iter().zip(&target).all(|(&v, &t)| k * v + c == t) || (k == 1 && c == 0) {
+                continue;
+            }
+            let scaled = if k == 1 { e.clone() } else { Expr::Bin(program::Op::Mul, Box::new(e.clone()), Box::new(Expr::Const(k))) };
+            exprs.push(match c {
+                0 => scaled,
+                c if c > 0 => Expr::Bin(program::Op::Add, Box::new(scaled), Box::new(Expr::Const(c))),
+                c => Expr::Bin(program::Op::Sub, Box::new(scaled), Box::new(Expr::Const(-c))),
+            });
+            if exprs.len() >= 600 {
+                break;
+            }
+        }
+        self.adopt_family(g, &inputs, &target, exprs, work, "affine")
     }
 
     /// A kind whose answers all lie below some number may be a rule reduced modulo that number: `(k * x + c) mod m`. The modulus is nearly given
@@ -2003,6 +2054,63 @@ mod recurrence_tests {
             Answer::Guess(a, _) | Answer::Fact(a) => assert_eq!(a, rule(27).to_string()),
             Answer::Refuse => panic!("refused a point beyond the range of a closed-form rule"),
         }
+    }
+
+    fn all_pairs() -> Vec<(i64, i64)> {
+        (1..=15).flat_map(|a| (1..=15).map(move |b| (a, b))).collect()
+    }
+
+    fn some_pairs_held_out() -> (Vec<(i64, i64)>, (i64, i64)) {
+        let taught: Vec<(i64, i64)> = all_pairs().into_iter().filter(|&(a, b)| (a * 7 + b * 13) % 4 != 0).collect();
+        let held = all_pairs().into_iter().find(|p| !taught.contains(p)).expect("a pair that was not taught");
+        (taught, held)
+    }
+
+    #[test]
+    fn a_rule_of_two_numbers_with_a_constant_out_of_the_short_list_is_found() {
+        // 2 * min(a, b) + 5: seven nodes, and 5 is not one of the constants the plain search has.
+        let rule = |x: i64, y: i64| 2 * x.min(y) + 5;
+        let (taught, (a, b)) = some_pairs_held_out();
+        let mut n = Novice::default();
+        teach_binary(&mut n, "offmodsido", rule, &taught);
+        n.ready();
+        assert_eq!(n.kinds(), (1, 1), "the answers are a simple program plus a constant");
+        assert_eq!(fact(&n.ask(&format!("what is {a} offmodsido {b}"))), Some(rule(a, b).to_string().as_str()));
+    }
+
+    #[test]
+    fn a_product_plus_a_large_constant_and_a_scaled_maximum_are_found() {
+        let (taught, (a, b)) = some_pairs_held_out();
+        for (name, rule) in [("prodoffsido", (|x: i64, y: i64| x * y + 17) as fn(i64, i64) -> i64), ("scalemaxsido", |x: i64, y: i64| 5 * x.max(y) + 9)] {
+            let mut n = Novice::default();
+            teach_binary(&mut n, name, rule, &taught);
+            n.ready();
+            assert_eq!(n.kinds(), (1, 1), "{name}");
+            assert_eq!(fact(&n.ask(&format!("what is {a} {name} {b}"))), Some(rule(a, b).to_string().as_str()), "{name}");
+        }
+    }
+
+    #[test]
+    fn a_table_of_pairs_that_is_a_program_plus_a_constant_only_by_accident_is_refused() {
+        // Arbitrary codes over pairs: no pooled program plus a constant fits sixty points.
+        let (taught, _) = some_pairs_held_out();
+        let mut seed = 4242u64;
+        let codes: Vec<i64> = taught
+            .iter()
+            .map(|_| {
+                seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                ((seed >> 33) % 30) as i64
+            })
+            .collect();
+        let mut n = Novice::default();
+        for (i, &(x, y)) in taught.iter().enumerate() {
+            for template in ["what is {x} {w} {y}", "{x} {w} {y}", "{x} {w} {y} equals"] {
+                n.teach(&template.replace("{w}", "noisepairsido").replace("{x}", &x.to_string()).replace("{y}", &y.to_string()), &codes[i].to_string());
+            }
+        }
+        n.ready();
+        assert_eq!(n.kinds(), (1, 0));
+        assert_eq!(n.ask("what is 3 noisepairsido 20"), Answer::Refuse);
     }
 
     #[test]

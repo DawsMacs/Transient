@@ -298,6 +298,21 @@ A fifth set of kinds was written by a separate session that had not read Novice'
 
 **This set is now a development set too.** Open items, in order of value: (1) constants of two-argument kinds (the control above); (2) the cost of failing; (3) a static exam and goldens for Novice; (4) per-source exception prices; (5) the cost-versus-experience curve in joules. The hard kinds of this set are a list of mechanisms that Novice does not have (a loop with a state over digits, a table over a grid, a recursion on the binary digits, a recurrence with a reduction by division), none of which a change of constants will reach.
 
+### After the fifth blind test: a simple program times a constant plus a constant
+
+The fifth blind test missed one control, `2 * min(a, b) + 5`, on one seed: seven nodes, and 5 is not in the plain search's short list; the stage that adds the numbers in the data as constants is for one-argument kinds only. A last stage now tries `k * p + c` for every program `p` of the pool of what the starting operations make (up to five nodes for two arguments, three for one, over the constants 1, 2 and 3): two points where `p` differs give `k` and `c`, and the other points only have to agree. The constants are computed, not searched for. The fits go through the same family handling as the floors (members told apart on every point out to just beyond the data, the extremes kept, equal fits charged at most 3 bits apart), so a disagreement beyond the data is a guess.
+
+Tests first: three new unit tests (`2 * min(a, b) + 5`, `a * b + 17`, `5 * max(a, b) + 9`, and a table of arbitrary codes over pairs that must stay refused); the first two failed before the stage and pass after; 54 tests in all. Results (all sets are development sets now; wrong facts 0 on every set and seed and on the original exam):
+
+| | kinds explained, before | after | evaluations, before | after |
+|---|---|---|---|---|
+| set E (seeds 1 to 3) | 4 / 4 / 3 | 4 / 4 / 4 | 52.5 / 53.8 / 66.0 M | 53.6 / 54.9 / 53.2 M |
+| sets A to D, original exam | unchanged | unchanged | 74 to 76 M (A), 52 to 54 M (B), 54 to 57 M (C), 44 to 50 M (D), 27 to 29 M (original) | +0.2 to +1.8 M (up to +2.3 %) |
+
+Nothing else changed in any answer. The first version (a pool of five nodes for one argument too, over the plain constants) cost +4 to +5 % on every exam where it explained nothing; one argument now uses three nodes (the data and shape stages already cover that ground) and fewer constants, which brought it to 2 % or less. This stage is added to the cost of failing, which is the biggest cost left.
+
+**Still open, in order of value:** (1) the cost of failing; (2) a static exam and goldens for Novice; (3) per-source exception prices; (4) the cost-versus-experience curve in joules. The hard kinds of the fifth set are mechanisms Novice does not have (a loop with a state over digits, a table over a grid, a recursion on the binary digits), not constants.
+
 ### Cost
 
 Counted evaluations (one operation applied at one point), seed 1; the work is almost all in teaching, because a told answer that a believed program already gives costs a few dozen evaluations. Every row has 0 wrong facts except where noted.
