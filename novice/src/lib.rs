@@ -6,6 +6,7 @@
 
 pub mod bits;
 pub mod fit;
+pub mod frames;
 pub mod learner;
 pub mod program;
 pub mod protocol;
