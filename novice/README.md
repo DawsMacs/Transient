@@ -251,6 +251,28 @@ A fourth set of kinds was written by a separate session that had not read Novice
 
 **This set is now a development set too.** Open items, in order of value: (1) the scaled floor `(m * a + c) div d`, by fitting a slope as a ratio from where the steps fall, and large constants in recurrences; (2) the cost of failing; (3) a static exam and goldens for Novice; (4) per-source exception prices; (5) the cost-versus-experience curve in joules.
 
+### After the fourth blind test: floors and moduli fitted directly
+
+The fourth blind test left a sharp gap: floors of a line or plane with larger constants (`(43 * a + 65) div 12`, `(17 * a + 15 * b + 42) div 42`) and sums of multiples or quadratics reduced modulo a constant (`(46 * a * a + 43) mod 89`). Written in the language they take seven to nine nodes and constants no short list has, so no enumeration reaches them, and the shape stage (a few places where the slope changes) gives a floor nothing, since its step changes at almost every point. Each is a family with three or four integers, and the data pins them, so they are fitted instead of enumerated (`src/fit.rs`, a last stage after the shape stage):
+
+- **Floor of a line or plane** `(m * x + n * y + c) div d`. Every pair of points that differ in one variable brackets that slope as a ratio (the floor of a line lifts by its slope times the distance, give or take less than 1); if the brackets cannot hold, nothing is tried, which is what keeps the stage cheap on the kinds that are not floors. Inside the brackets, each divisor up to 128 (64 for two variables) and each numerator give an interval for `c`, empty or not.
+- **Sum of multiples modulo `k`** `(m * x + n * y + c) mod k`, for the moduli just above the largest answer; and **a quadratic of one variable modulo `k`**, where the second differences over consecutive numbers are all the same number modulo `k`, so `k` divides every difference between two of them (the moduli are the divisors of that gcd above the largest answer, since a sample of 16 residues rarely holds the largest).
+- **Doubt must be kept.** Every member of the family that fits the data is kept, told apart on every point of the box out to just beyond the data (not on the sparse probe points the enumerations use, which called two close slopes the same program), and the members that give the highest and lowest value anywhere are always kept. Members that fit equally are not charged more than 3 bits over the cheapest, because the data does not choose between them: where they disagree, the answer is a guess, not a fact. My first version, without these two things, stated one wrong fact on one seed (a floor of `53 / 32` taken for `13 / 8`, which part ways at 24: 41 against 42). The exam found it, not a unit test: I could not reproduce it in a unit test after an exhaustive search over the held-out patterns I tried.
+
+**Results.** The sets below are all development sets (set D was read before this change was made, and the change was made with it in view), so this says what the stage does on the kinds it was built for, not how it generalizes. Wrong facts: 0 on every set and seed. Unit tests: 51 (new ones use constants that are in no set: `(29 * x + 11) div 9`, `(5 * x + 7 * y + 13) div 11`, `(13 * x + 22 * y + 5) mod 47`, `(37 * x * x + 5 * x + 11) mod 53`, and a random staircase that must not be a floor).
+
+| set (seeds 1 to 3) | kinds explained by a program, before | after | evaluations, before | after |
+|---|---|---|---|---|
+| original adaptive exam | 39 | 39 | 26.7 to 29.1 M | 26.9 to 29.3 M |
+| set A | 8 / 9 / 9 | the same | 74.1 to 76.1 M | 74.4 to 76.3 M |
+| set B | 5 / 5 / 5 | the same | 52.1 to 54.3 M | 52.1 to 54.3 M |
+| set C | 3 / 3 / 2 | 3 / 4 / 3 | 58.2 to 62.4 M | 54.9 to 57.1 M |
+| set D | 4 / 4 / 4 | **8 / 8 / 8** | 53.4 to 62.2 M | 43.8 to 50.0 M |
+
+On set D the four new ones are exactly the two floors, the sum of two multiples modulo 84 and the quadratic modulo 89, on all three seeds: 4 of 15 hard kinds, and 11 still not acquired. On set C one more control was explained on two seeds. The stage costs about 0.2 M evaluations on the exams where it explains nothing (under 1 %); its first version, bounded by the range of the answers instead of the bracket, tripled the cost of the original exam (29 M to 72 to 90 M) and was replaced. Evaluations fall on sets C and D because a kind that is explained stops being searched for.
+
+**Still open, in order of value:** (1) large constants in recurrences (a square plus a constant modulo 58 as a function of the previous answer); (2) the cost of failing; (3) a static exam and goldens for Novice; (4) per-source exception prices; (5) the cost-versus-experience curve in joules. A fifth, blind set is the test of whether this generalizes.
+
 ### Cost
 
 Counted evaluations (one operation applied at one point), seed 1; the work is almost all in teaching, because a told answer that a believed program already gives costs a few dozen evaluations. Every row has 0 wrong facts except where noted.
@@ -333,6 +355,7 @@ Seeds 2 and 3 have the same shape (batch 7: 2.47 M and 2.62 M evaluations agains
 
 ## Mistakes and dead ends (newest first)
 
+- **A fitted family without doubt stated a wrong fact.** The first version of the floor fit kept one program per behavior on the sparse probe points, so a slope of `13 / 8` that agrees with the data hid the true `53 / 32` that differs from it first at 24, and the system said 41 where the truth was 42 (one wrong fact, set D seed 3). The members are now told apart on every point out to just beyond the data, the extremes are always kept, and equal fits are charged at most 3 bits apart. A second mistake in the same stage: bounding the slopes by the range of the answers instead of by pairs of points tripled the cost of the original exam.
 - **Scaling all the effort by the success rate lost recurrences.** My first version of the adaptive effort scaled every stage by how often recurrences had been found. The base-3 digit sum then disappeared on one seed (and something else on a seed of the first development set), because by the time a late kind was reached the estimate had fallen so far that even the cheap first stage was starved. The first stage always gets its full allowance now; the traces showed it costs about 0.6 M and that the larger steps and the pairs cost 1.0 to 1.5 M each.
 - **The constant 26.** The shape constants first missed the intercept of the second line segment (26 for `max(x, 3x - 26)`), so a unit test of a threshold failed even though the exam found the same shape by luck; each straight piece's constant term is now one of the extracted numbers.
 
