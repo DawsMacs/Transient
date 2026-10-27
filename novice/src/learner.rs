@@ -41,6 +41,8 @@ const BASE_CONSTS: [i64; 5] = [0, 1, 2, 3, 10];
 const MAX_ITEMS: usize = 200_000;
 /// How many answers a wrong source might have given instead (a hand-built guess of the size of the space of answers).
 const ANSWER_SPACE: u64 = 100;
+/// A word in this many lessons is part of the frame or the kind of a question, not the thing asked about.
+const COMMON_WORD: u32 = 10;
 /// The most bits a member of a fitted family is charged over the cheapest member (see `search_fitted`).
 const FAMILY_RIVAL_BITS: u64 = 3;
 /// Evaluations each stage of the search for a recurrence may cost per bit of what the kind's table would cost: the most a rule can save is the table,
@@ -133,6 +135,8 @@ pub struct Novice {
     dear_paid: Paid,
     /// Questions with no numbers (lookups, not instances of a kind): the answers each was ever given in exactly those words.
     exact: BTreeMap<String, std::collections::BTreeSet<String>>,
+    /// The same, by the words of the question taken as a set: every order it was ever asked in, and every answer any of them was given.
+    bags: BTreeMap<String, (std::collections::BTreeSet<String>, std::collections::BTreeSet<String>)>,
     /// The same for the search with the numbers a kind's shape announces.
     shape_paid: Paid,
     pub stats: Stats,
@@ -140,7 +144,7 @@ pub struct Novice {
 
 impl Default for Novice {
     fn default() -> Self {
-        Novice { lessons: Vec::new(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], reliability: BTreeMap::new(), chain_record: (0, 0), recurrence_paid: Paid::default(), dear_paid: Paid::default(), exact: BTreeMap::new(), shape_paid: Paid::default(), stats: Stats::default() }
+        Novice { lessons: Vec::new(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], reliability: BTreeMap::new(), chain_record: (0, 0), recurrence_paid: Paid::default(), dear_paid: Paid::default(), exact: BTreeMap::new(), bags: BTreeMap::new(), shape_paid: Paid::default(), stats: Stats::default() }
     }
 }
 
@@ -194,6 +198,13 @@ impl Paid {
         let chance = 1000 * (u64::from(self.won) + 1) / (u64::from(self.tried) + 2);
         (2 * chance).clamp(100, 1500)
     }
+}
+
+/// The words of a question as a set, in alphabetical order, one string.
+fn bag_of(p: &Parsed) -> String {
+    let mut words = p.words.clone();
+    words.sort();
+    words.join(" ")
 }
 
 /// Bits to write down a kind's answers, one after the other, with a code that learns how often each answer comes: the first time an answer
@@ -1276,8 +1287,35 @@ impl Novice {
     /// Keep what was said to a question with no numbers, in the words it was said in.
     fn remember_lookup(&mut self, p: &Parsed, answer: &str) {
         if p.nums.is_empty() {
-            self.exact.entry(p.words.join(" ")).or_default().insert(answer.to_string());
+            let ordered = p.words.join(" ");
+            self.exact.entry(ordered.clone()).or_default().insert(answer.to_string());
+            let bag = self.bags.entry(bag_of(p)).or_default();
+            bag.0.insert(ordered);
+            bag.1.insert(answer.to_string());
         }
+    }
+
+    /// How often two orders of the same words, both taught or told, have given the same answer: `(agreements, pairs)`, counting each further order of
+    /// a set of words as one pair. This is the only evidence there is about whether order matters in these questions.
+    fn reordering_record(&self, signature: &str) -> (u64, u64) {
+        let mut record = (0, 0);
+        for (bag, (orders, answers)) in &self.bags {
+            if orders.len() < 2 || self.signature(bag) != signature {
+                continue;
+            }
+            let pairs = orders.len() as u64 - 1;
+            record.1 += pairs;
+            if answers.len() == 1 {
+                record.0 += pairs;
+            }
+        }
+        record
+    }
+
+    /// The words of a question that many lessons share (the frame and the kind, not the thing asked about), as one string. Two questions with the same
+    /// signature are the same sort of question, so what was seen of one is evidence about the other.
+    fn signature(&self, bag: &str) -> String {
+        bag.split(' ').filter(|w| self.df.get(*w).copied().unwrap_or(0) >= COMMON_WORD).collect::<Vec<_>>().join(" ")
     }
 
     fn make_groups(&mut self) {
@@ -1377,8 +1415,21 @@ impl System for Novice {
             // A question with no numbers is a lookup, not an instance of a kind: the words that two facts share name no kind, and the answer of
             // one must not be given for the other. It is answered only in the words it was taught or told in, and only if those never differed.
             if p.nums.is_empty() {
-                let answers = self.exact.get(&p.words.join(" "))?;
-                return (answers.len() == 1).then(|| Answer::Fact(answers.iter().next().cloned().unwrap_or_default()));
+                if let Some(answers) = self.exact.get(&p.words.join(" ")) {
+                    return (answers.len() == 1).then(|| Answer::Fact(answers.iter().next().cloned().unwrap_or_default()));
+                }
+                // The same words in an order nobody used: a guess, as sure as the lessons have earned (two orders that agreed every time so far
+                // make a good guess, never a fact), and none at all if any order of these words was ever given another answer.
+                let bag = bag_of(&p);
+                let (_, answers) = self.bags.get(&bag)?;
+                // Only the same sort of question can vouch for it: where no order was ever taught twice, or the two orders ever disagreed, nothing
+                // shows that order does not matter, and the new order is refused.
+                let (agree, pairs) = self.reordering_record(&self.signature(&bag));
+                if pairs == 0 || agree < pairs || answers.len() != 1 {
+                    return None;
+                }
+                let permille = (1000 * (agree + 1) / (pairs + 2)).min(999) as u32;
+                return Some(Answer::Guess(answers.iter().next().cloned().unwrap_or_default(), permille));
             }
             // A word it has never met may change what is asked: nothing is stated about such a question.
             if p.words.iter().any(|w| !self.df.contains_key(w)) {
@@ -2213,6 +2264,60 @@ mod recurrence_tests {
         n.teach("how is bafoba sedavubi", "favapa");
         n.ready();
         assert_eq!(n.ask("how is bafoba sedavubi"), Answer::Refuse);
+    }
+
+    #[test]
+    fn a_new_order_of_the_words_of_a_taught_question_is_a_guess_with_the_confidence_the_lessons_earn() {
+        let mut n = Novice::default();
+        // Facts taught in two orders each: in every one the two orders gave the same answer, which is the evidence that order does not matter here.
+        for (a, w) in [("bafoba", "vetupa"), ("tadaba", "bavapa"), ("podoba", "favapa"), ("mifuba", "bevapa"), ("ligaba", "gutopa")] {
+            n.teach(&format!("how is {a} sedavubi"), w);
+            n.teach(&format!("{a} is sedavubi how"), w);
+        }
+        // And one fact taught in one order only.
+        n.teach("how is nufeba sedavubi", "nevapa");
+        n.ready();
+        match n.ask("is nufeba sedavubi how") {
+            Answer::Guess(a, p) => {
+                assert_eq!(a, "nevapa");
+                assert!((800..1000).contains(&p), "five orders agreed out of five: {p}");
+            }
+            other => panic!("expected a guess, got {}", answer_text(&other)),
+        }
+        // What was taught in exactly those words is still a fact.
+        assert_eq!(fact(&n.ask("how is nufeba sedavubi")), Some("nevapa"));
+        // The words of a question nobody taught, in any order, are refused.
+        assert_eq!(n.ask("sedavubi how nufeba bafoba"), Answer::Refuse);
+    }
+
+    #[test]
+    fn a_new_order_is_refused_where_no_order_was_ever_taught_twice() {
+        // A kind of two words taught in one order per pair: nothing shows whether "two plus five" is "five plus two", so it is a trap, not a guess.
+        let mut n = Novice::default();
+        for (a, b, w) in [("five", "two", "three"), ("one", "four", "five"), ("six", "three", "three"), ("nine", "one", "eight"), ("four", "four", "zero"), ("seven", "two", "five"), ("eight", "five", "three"), ("two", "two", "zero"), ("three", "one", "two"), ("six", "six", "zero"), ("ten", "four", "six"), ("five", "one", "four")] {
+            n.teach(&format!("what is {a} nidovubi {b}"), w);
+            n.teach(&format!("{a} nidovubi {b}"), w);
+        }
+        // Facts of another kind that were taught in two orders, and agreed.
+        for (a, w) in [("bafoba", "vetupa"), ("tadaba", "bavapa"), ("podoba", "favapa"), ("mifuba", "bevapa"), ("ligaba", "gutopa"), ("nufeba", "nevapa")] {
+            n.teach(&format!("how is {a} sedavubi"), w);
+            n.teach(&format!("{a} is sedavubi how"), w);
+        }
+        n.ready();
+        assert_eq!(n.ask("what is two nidovubi five"), Answer::Refuse);
+        assert_eq!(n.ask("what is five nidovubi two"), Answer::Fact("three".into()));
+        // The other kind, whose orders were taught and agreed, still gets its guess for a new order.
+        assert!(matches!(n.ask("is bafoba sedavubi how"), Answer::Guess(..) | Answer::Fact(..)));
+    }
+
+    #[test]
+    fn when_the_order_of_the_words_changes_the_answer_a_new_order_is_refused() {
+        let mut n = Novice::default();
+        n.teach("man bites dog", "news");
+        n.teach("dog bites man", "usual");
+        n.ready();
+        assert_eq!(fact(&n.ask("man bites dog")), Some("news"));
+        assert_eq!(n.ask("bites dog man"), Answer::Refuse);
     }
 
     #[test]
