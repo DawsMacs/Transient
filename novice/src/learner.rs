@@ -129,6 +129,8 @@ pub struct Novice {
     chain_record: (u32, u32),
     /// How often the search for a recurrence has found one.
     recurrence_paid: Paid,
+    /// The dear stages of the recurrence search (larger steps, two earlier values), which only run when the first stage found nothing.
+    dear_paid: Paid,
     /// The same for the search with the numbers a kind's shape announces.
     shape_paid: Paid,
     pub stats: Stats,
@@ -136,7 +138,7 @@ pub struct Novice {
 
 impl Default for Novice {
     fn default() -> Self {
-        Novice { lessons: Vec::new(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], reliability: BTreeMap::new(), chain_record: (0, 0), recurrence_paid: Paid::default(), shape_paid: Paid::default(), stats: Stats::default() }
+        Novice { lessons: Vec::new(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], reliability: BTreeMap::new(), chain_record: (0, 0), recurrence_paid: Paid::default(), dear_paid: Paid::default(), shape_paid: Paid::default(), stats: Stats::default() }
     }
 }
 
@@ -652,7 +654,7 @@ impl Novice {
         // The first stage (small steps, one earlier value) is where recurrences are almost always found and it is cheap: it gets its full allowance.
         // The dearer stages (larger steps, two earlier values) get an allowance scaled by how often a recurrence has been found so far.
         let full = (bits::as_bits(whole_table) as u64).max(1) * EFFORT_PER_BIT;
-        let scaled = full * self.recurrence_paid.share() / 1000;
+        let scaled = full * self.dear_paid.share() / 1000;
         let budget_now = std::cell::Cell::new(full);
         let fit = |this: &mut Self, chosen: &[&Reduction], max_size: usize, slack_cap: usize| -> Option<(Cost, Expr)> {
             if this.stats.evaluations - started.get() > budget_now.get() {
@@ -695,6 +697,9 @@ impl Novice {
         for (max_size, how_many) in [(5usize, 24usize), (7, 6)] {
             started.set(self.stats.evaluations);
             budget_now.set(if max_size == 5 { full } else { scaled });
+            if max_size != 5 {
+                self.dear_paid.tried += 1;
+            }
             let stage_start = self.stats.evaluations;
             let mut candidates: Vec<(Cost, Expr)> = Vec::new();
             for (i, red) in reductions.iter().take(how_many).enumerate() {
@@ -708,6 +713,7 @@ impl Novice {
             }
             accepted = self.accept_recurrences(g, candidates, whole_table, &known, arity);
             if !accepted.is_empty() {
+                self.dear_paid.won += u32::from(max_size != 5);
                 break;
             }
         }
@@ -736,6 +742,7 @@ impl Novice {
                 eprintln!("stage {:<12} pairs: {} evaluations, {} candidates", self.groups[g].key, self.stats.evaluations - pairs_start, candidates.len());
             }
             accepted = self.accept_recurrences(g, candidates, whole_table, &known, arity);
+            self.dear_paid.won += u32::from(!accepted.is_empty());
         }
         // They are rivals: each is true of the table, and which one reaches a point depends on the point.
         let mut accepted = accepted.into_iter();
@@ -2111,6 +2118,48 @@ mod recurrence_tests {
         n.ready();
         assert_eq!(n.kinds(), (1, 0));
         assert_eq!(n.ask("what is 3 noisepairsido 20"), Answer::Refuse);
+    }
+
+    /// Kinds that a recurrence explains from the first stage, then kinds of arbitrary codes that nothing explains: the spend on each.
+    fn spends_on_failing_after_successes() -> (Vec<u64>, (usize, usize)) {
+        let bit_length = |x: i64| i64::from(64 - (x as u64).leading_zeros());
+        let digit_sum3 = |mut x: i64| {
+            let mut t = 0;
+            while x > 0 {
+                t += x % 3;
+                x /= 3;
+            }
+            t
+        };
+        let twos = |x: i64| if x == 0 { 0 } else { i64::from(x.trailing_zeros()) };
+        let mut n = Novice::default();
+        teach_unary(&mut n, "zarbosido", popcount, (1..=22).filter(|x| *x != 8));
+        teach_unary(&mut n, "bitlensido", bit_length, (1..=22).filter(|x| *x != 9));
+        teach_unary(&mut n, "tridigsido", digit_sum3, (1..=22).filter(|x| *x != 10));
+        teach_unary(&mut n, "twosumsido", twos, (1..=22).filter(|x| *x != 12));
+        let mut seed = 31337u64;
+        for k in 0..8 {
+            let rule: Vec<i64> = (0..=22)
+                .map(|_| {
+                    seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                    ((seed >> 33) % 100) as i64
+                })
+                .collect();
+            teach_unary(&mut n, &format!("noise{}sido", ["a", "b", "c", "d", "e", "f", "g", "h"][k]), |x| rule[x as usize], (0..=22).filter(|x| *x != 7 && *x != 14));
+        }
+        n.ready();
+        let mut noise: Vec<(String, u64)> = n.groups.iter().filter(|g| g.key.starts_with("noise")).map(|g| (g.key.clone(), g.spent)).collect();
+        noise.sort();
+        (noise.into_iter().map(|(_, spent)| spent).collect(), n.kinds())
+    }
+
+    #[test]
+    fn what_a_failing_kind_costs_falls_with_the_failures_that_came_before_it() {
+        let (spent, kinds) = spends_on_failing_after_successes();
+        assert_eq!(kinds, (12, 4), "four recurrences found, eight kinds of arbitrary codes left unexplained");
+        // Same kind of data, same size: the dear stages (larger steps, two earlier values) have never paid, so after seven failures they get
+        // little. Before this was a fall of a quarter; the first stage and the closed forms are paid in full every time.
+        assert!(spent[7] * 10 < spent[0] * 6, "the eighth failing kind cost {} against {} for the first", spent[7], spent[0]);
     }
 
     #[test]

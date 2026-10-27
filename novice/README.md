@@ -313,6 +313,22 @@ Nothing else changed in any answer. The first version (a pool of five nodes for 
 
 **Still open, in order of value:** (1) the cost of failing; (2) a static exam and goldens for Novice; (3) per-source exception prices; (4) the cost-versus-experience curve in joules. The hard kinds of the fifth set are mechanisms Novice does not have (a loop with a state over digits, a table over a grid, a recursion on the binary digits), not constants.
 
+### The cost of failing, second step: the dear stages get their own track record
+
+Where the work goes, on a set where almost nothing is explained (set E, seed 1: 53.5 M evaluations, 18 of 22 kinds unexplained): the closed-form stages cost about 15 M, the recurrence search about 32 M, and of that most is the second and third stage (larger steps of seven nodes, and pairs of earlier values), which only run when the first stage (steps of five nodes over one earlier value) found nothing. Those two stages were funded by the success rate of recurrences *overall*, which is the first stage's rate: on a set where the first stage keeps winning, the dear stages looked promising and were paid in full every time, though they had never won. I counted which stage won in every recurrence found on sets A to E and the original exam (30 recurrences on 13 runs): **all 30 were found by the first stage**; none by the larger steps and none by pairs.
+
+The dear stages now have their own record (`dear_paid`: how often they ran and how often they won), and their allowance is twice their own chance of success, between a tenth and one and a half of the full allowance, as before. A new unit test teaches four kinds a recurrence explains and then eight kinds of arbitrary codes: the eighth failing kind must cost less than 60 % of the first (it cost 73 % before). Results (the answers do not change: every row of the judge's table and the number of kinds explained are identical before and after; wrong facts 0 everywhere):
+
+| set (seeds 1 to 3) | evaluations before | after |
+|---|---|---|
+| A | 76.1 to 78.1 M | 58.4 to 60.6 M (about 23 % less) |
+| B | 53.0 to 55.2 M | 49.6 to 51.3 M |
+| C, E | 53.8 to 57.8 M, 53.2 to 54.9 M | the same: nothing wins there, so the dear stages were already at the floor |
+| D | 44.0 to 50.3 M | 42.8 to 48.6 M |
+| original exam | 27.3 to 29.7 M | the same |
+
+**What is left of the cost of failing, and what I did not do.** On sets like C and E the work is 53 to 58 M evaluations, almost all of it failed searches: the first recurrence stage at its full allowance for every kind (about 1 to 4 M each) and the closed-form stages (about 0.8 M each). I measured what the first stage costs when it succeeds: 43 to 113 % of its allowance (median about 65 %). Cutting the first stage's allowance for a system that has failed many times would therefore lose recurrences that are found late in a stream, which is the mistake recorded below for an earlier version. The way down from here is a cheaper check that a kind can have a step at all, before enumerating one, not a smaller allowance.
+
 ### Cost
 
 Counted evaluations (one operation applied at one point), seed 1; the work is almost all in teaching, because a told answer that a believed program already gives costs a few dozen evaluations. Every row has 0 wrong facts except where noted.
