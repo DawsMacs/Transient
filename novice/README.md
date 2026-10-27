@@ -226,6 +226,31 @@ By kind on the third set's controls: the fold `max(a mod 11, 3) - 3` is found as
 
 **Not done.** The scaled floor, the hard kinds of all three sets, and a fourth blind set to test whether any of this (the recurrences, the shape constants) generalizes.
 
+### The fourth blind test (a fourth set, run once)
+
+A fourth set of kinds was written by a separate session that had not read Novice's code (`tools/hidden_worlds_d.py`, pull request #39): 11 kinds that need a new operation, 4 composed on those, 4 controls the starting operations can express, 3 arbitrary codes (348 questions per seed, 234 of them on hard kinds). Novice at the commit frozen beforehand (`21ae967`; its code is identical to `9288b6d`, the only change under `novice/` since then is a renamed heading in this file) was run **once per seed on seeds 1 to 3, and the numbers below were written down before the kinds or the key were read.**
+
+| seed | wrong facts | hard questions answered right (234 each seed) | hard guesses: right / wrong | controls (72): facts / right guesses / refused | kinds explained by a program (of 22) | evaluations | energy |
+|---|---|---|---|---|---|---|---|
+| 1 | 0 | **0** | 0 / 0 | 75.0 % / 25.0 % / 0 % | 4 | 53.4 M | 5.71 J |
+| 2 | 0 | **0** | 4 / 1 | 77.8 % / 22.2 % / 0 % | 4 | 54.4 M | 5.03 J |
+| 3 | 0 | **0** | 7 / 2 | 73.6 % / 26.4 % / 0 % | 4 | 62.2 M | 7.31 J |
+
+- Hard kinds acquired: **0 of 15 on every seed.** No hard question was answered right as a fact. The 3 arbitrary codes were refused every time (42 of 42 on each seed).
+- Wrong facts: **0 on every seed.** Refusals are reported apart from wrong answers: 276, 271 and 267 of 348 questions were refused. "Guesses" are answers the judge counts separately from facts (a program the system is not yet sure of); on hard kinds they were right 0, 4 and 7 times and wrong 0, 1 and 2 times.
+- Controls: all 72 were answered on each seed, with no wrong answer (facts 54, 56 and 53; right guesses 18, 16 and 19). In the third set, 75 to 98 % of the controls were refused before the constants stage described above was added (with that set in view). Baby's controls here: 59.7 %, 59.7 % and 38.9 % as facts (`tools/hidden_worlds_d.md`); the memorizer scores 0.
+- Energy is the CPU package's own counter above idle draw, teaching plus answering; the meter warned that other processes shared the machine, so the figures are upper bounds. The run took about 13.4 s of wall time per seed.
+
+**What this says** (written after the key of seed 1 was read; the other seeds draw other constants for the same kinds):
+- **The honesty held again** (0 wrong facts on three seeds), and the four controls were all explained, including the one with a scaled floor of small constants (`a + a div 3`, in the form `a + a div (2 + 3)` on one seed), a remainder, a product and a maximum. The explained programs are exactly the four controls: no hard kind was explained, and no unexplainable code was. This is the one new result of the constants stage on kinds it was not built with: its constants (3, 7) were not in the short fixed list. It is a narrow result, since the controls are the kinds the starting operations can express.
+- **No hard kind was acquired: 0 of 15, against 0 of 15 on the third set and 1 of 16 on the second.** Taken with the earlier blind sets, that is at most 1 of 46 hard kinds (counting the best seeds of the second set) on kinds nobody had shaped the mechanism for. The development sets (5 to 7 of 18) overstate what it does, as written above, and the blind numbers are the ones to quote.
+- **The open gap is now sharp.** Two of the hard kinds are floors of a line or plane with larger constants (for example `(43 * a + 65) div 12` and `(17 * a + 15 * b + 42) div 42`, which the key says can be learned from the slope 43/12 read off where the steps fall) and two more are remainders of polynomials or sums with constants up to 89 and 84. They are in reach of a program, none was found, and none of them needs a conditional, a loop or a long step. A floor of a line steps by 3 or 4 about every step, so the shape stage (which looks for a few places where the slope changes) gives such a kind nothing. I have not diagnosed the failure of each kind; that this is the cause is a hypothesis, to be tested by the scaled-floor work listed below.
+- **The others need what the third set already showed was missing:** a loop on a pair (the Euclid step count), a recurrence in which a term looks itself up (Golomb), a first-order recurrence in the answers with a square and a modulus of 58, a numeral system with Fibonacci weights, a conditional on the number of 1 bits or on the position among triangular numbers, and compositions of those. The four composed kinds are blocked because the kinds they compose are.
+- **The work was 53 to 62 M evaluations and 5 to 7 J**, against 84 to 89 M for the third set before the effort scaling: the cost of failing fell, but 18 of the 22 kinds still pay for a full chain of failed searches.
+- Which questions the 4 and 7 right guesses on hard kinds were was not examined.
+
+**This set is now a development set too.** Open items, in order of value: (1) the scaled floor `(m * a + c) div d`, by fitting a slope as a ratio from where the steps fall, and large constants in recurrences; (2) the cost of failing; (3) a static exam and goldens for Novice; (4) per-source exception prices; (5) the cost-versus-experience curve in joules.
+
 ### Cost
 
 Counted evaluations (one operation applied at one point), seed 1; the work is almost all in teaching, because a told answer that a believed program already gives costs a few dozen evaluations. Every row has 0 wrong facts except where noted.
