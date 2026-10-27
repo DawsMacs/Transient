@@ -26,6 +26,7 @@
 
 use crate::bits::{self, Cost};
 use crate::fit;
+use crate::frames::{self, Frames};
 use crate::numerals;
 use crate::program::{self, Expr, Found, Lib, Task};
 use crate::protocol::{Answer, System};
@@ -147,6 +148,9 @@ pub struct Novice {
     exact: BTreeMap<String, std::collections::BTreeSet<String>>,
     /// The same, by the words of the question taken as a set: every order it was ever asked in, and every answer any of them was given.
     bags: BTreeMap<String, (std::collections::BTreeSet<String>, std::collections::BTreeSet<String>)>,
+    /// Every lesson or told answer to a question without numbers (the words of the question, the answer), and what was learned from them about frames.
+    lookups: Vec<(Vec<String>, String)>,
+    frames: Option<Frames>,
     /// The same for the search with the numbers a kind's shape announces.
     shape_paid: Paid,
     pub stats: Stats,
@@ -154,7 +158,7 @@ pub struct Novice {
 
 impl Default for Novice {
     fn default() -> Self {
-        Novice { lessons: Vec::new(), raw: Vec::new(), lesson_spoke: Vec::new(), numerals: BTreeMap::new(), spoken: BTreeMap::new(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], reliability: BTreeMap::new(), chain_record: (0, 0), recurrence_paid: Paid::default(), dear_paid: Paid::default(), exact: BTreeMap::new(), bags: BTreeMap::new(), shape_paid: Paid::default(), stats: Stats::default() }
+        Novice { lessons: Vec::new(), raw: Vec::new(), lesson_spoke: Vec::new(), numerals: BTreeMap::new(), spoken: BTreeMap::new(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], reliability: BTreeMap::new(), chain_record: (0, 0), recurrence_paid: Paid::default(), dear_paid: Paid::default(), exact: BTreeMap::new(), bags: BTreeMap::new(), lookups: Vec::new(), frames: None, shape_paid: Paid::default(), stats: Stats::default() }
     }
 }
 
@@ -1316,6 +1320,13 @@ impl Novice {
         }
     }
 
+    /// What the lookups say about frames, built when first needed after anything new was said.
+    fn ensure_frames(&mut self) {
+        if self.frames.is_none() {
+            self.frames = Some(frames::build(&self.lookups));
+        }
+    }
+
     /// Keep what was said to a question with no numbers, in the words it was said in.
     fn remember_lookup(&mut self, p: &Parsed, answer: &str) {
         if p.nums.is_empty() {
@@ -1324,6 +1335,8 @@ impl Novice {
             let bag = self.bags.entry(bag_of(p)).or_default();
             bag.0.insert(ordered);
             bag.1.insert(answer.to_string());
+            self.lookups.push((p.words.clone(), answer.to_string()));
+            self.frames = None;
         }
     }
 
@@ -1469,6 +1482,9 @@ impl System for Novice {
 
     fn ask(&mut self, question: &str) -> Answer {
         let p = parse_with(question, &self.numerals);
+        if p.nums.is_empty() {
+            self.ensure_frames();
+        }
         let mut said = Said { answer: None, bucket: None, group: None, chain_of: None };
         let reason = std::cell::Cell::new(0usize);
         let reply = (|| {
@@ -1481,15 +1497,26 @@ impl System for Novice {
                 // The same words in an order nobody used: a guess, as sure as the lessons have earned (two orders that agreed every time so far
                 // make a good guess, never a fact), and none at all if any order of these words was ever given another answer.
                 let bag = bag_of(&p);
-                let (_, answers) = self.bags.get(&bag)?;
-                // Only the same sort of question can vouch for it: where no order was ever taught twice, or the two orders ever disagreed, nothing
-                // shows that order does not matter, and the new order is refused.
-                let (agree, pairs) = self.reordering_record(&self.signature(&bag));
-                if pairs == 0 || agree < pairs || answers.len() != 1 {
-                    return None;
+                if let Some((_, answers)) = self.bags.get(&bag) {
+                    // Only the same sort of question can vouch for it: where no order was ever taught twice, or the two orders ever disagreed, nothing
+                    // shows that order does not matter, and the new order is refused.
+                    let (agree, pairs) = self.reordering_record(&self.signature(&bag));
+                    if pairs > 0 && agree == pairs && answers.len() == 1 {
+                        let permille = (1000 * (agree + 1) / (pairs + 2)).min(999) as u32;
+                        return Some(Answer::Guess(answers.iter().next().cloned().unwrap_or_default(), permille));
+                    }
                 }
-                let permille = (1000 * (agree + 1) / (pairs + 2)).min(999) as u32;
-                return Some(Answer::Guess(answers.iter().next().cloned().unwrap_or_default(), permille));
+                // The same fact in a frame it was not taught in: as sure as the frame words that are new to it have been seen to change nothing
+                // (each one, the Laplace estimate of its pairs; all of them together, the product), a fact only if that leaves less than
+                // 2^-RISK_BITS of doubt.
+                let m = self.frames.as_ref()?.lookup(&p.words)?;
+                let (num, den) = (0..m.new_words).fold((1u128, 1u128), |(n, d), _| (n * u128::from(m.support.min(1 << 40) + 1), d * u128::from(m.support.min(1 << 40) + 2)));
+                let (num, den) = m.order_support.map_or((num, den), |k| (num * u128::from(k.min(1 << 40) + 1), den * u128::from(k.min(1 << 40) + 2)));
+                if num << RISK_BITS >= den * ((1u128 << RISK_BITS) - 1) {
+                    return Some(Answer::Fact(m.answer));
+                }
+                let permille = (1000 * num / den) as u32;
+                return (permille >= 500).then(|| Answer::Guess(m.answer, permille.min(999)));
             }
             // A word it has never met may change what is asked: nothing is stated about such a question.
             if p.words.iter().any(|w| !self.df.contains_key(w)) {
@@ -2437,6 +2464,39 @@ mod recurrence_tests {
         teach_word_kind(&mut n, "dudovubi", &word_pairs(), |a, b| a.max(b));
         n.ready();
         assert_eq!(n.ask("what is three dudovubi three"), Answer::Refuse);
+    }
+
+    #[test]
+    fn a_fact_asked_in_a_frame_it_was_not_taught_in_is_answered_as_surely_as_the_frame_has_earned() {
+        let mut n = Novice::default();
+        for (i, e) in ["bafoba", "tadaba", "podoba", "mifuba", "ligaba", "nufeba", "pefoba", "dageba", "kuvaba", "retiba", "gobaba", "zinuba"].iter().enumerate() {
+            let (a, b) = (format!("ta{i}pa"), format!("tu{i}pa"));
+            for q in [format!("how is {e} sedavubi"), format!("{e} is sedavubi how"), format!("sedavubi {e}")] {
+                n.teach(&q, &a);
+            }
+            for q in [format!("what is the madovubi of {e}"), format!("madovubi of {e}"), format!("the madovubi of {e}")] {
+                n.teach(&q, &b);
+            }
+            if i < 8 {
+                for q in [format!("name the sedovubi of {e}"), format!("the sedovubi of {e}"), format!("sedovubi {e}")] {
+                    n.teach(&q, &format!("to{i}pa"));
+                }
+            }
+        }
+        n.ready();
+        // "name" was seen to change nothing in eight pairs, "what" in many more: new to the fact, they are as sure as that.
+        match n.ask("name the madovubi of podoba") {
+            Answer::Fact(a) | Answer::Guess(a, _) => assert_eq!(a, "tu2pa"),
+            Answer::Refuse => panic!("refused a fact in a new frame"),
+        }
+        match n.ask("what is mifuba sedavubi") {
+            Answer::Fact(a) | Answer::Guess(a, _) => assert_eq!(a, "ta3pa"),
+            Answer::Refuse => panic!("refused a fact in a new frame"),
+        }
+        // Not facts the lessons have: two kinds at once, a thing nobody knows, a kind taught for other things only.
+        assert_eq!(n.ask("what is the sedavubi of podoba madovubi"), Answer::Refuse);
+        assert_eq!(n.ask("what is the madovubi of kufoba"), Answer::Refuse);
+        assert_eq!(n.ask("what is the sedovubi of zinuba"), Answer::Refuse);
     }
 
     #[test]

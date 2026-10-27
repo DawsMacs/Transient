@@ -2,7 +2,7 @@
   group           n fact right     WRONG guess right  guess wrong   refused
   beyond       3376       0.0%      0.0%      100.0%         0.0%      0.0%
   never         392      96.9%      0.0%        3.1%         0.0%      0.0%
-  reworded      420      48.6%      0.0%       10.0%         0.0%     41.4%
+  reworded      420      62.9%      0.0%       10.0%         0.0%     27.1%
   taught        504     100.0%      0.0%        0.0%         0.0%      0.0%
   trap          140       0.0%      0.0%        0.0%         0.0%    100.0%
 
@@ -563,18 +563,18 @@ Q00547	refuse
 Q00548	refuse		
 Q00549	refuse		
 Q00550	refuse		
-Q00551	refuse		
-Q00552	refuse		
-Q00553	refuse		
-Q00554	refuse		
-Q00555	refuse		
-Q00556	refuse		
-Q00557	refuse		
-Q00558	refuse		
-Q00559	refuse		
-Q00560	refuse		
-Q00561	refuse		
-Q00562	refuse		
+Q00551	fact	tevapa	
+Q00552	fact	nitopa	
+Q00553	fact	kutupa	
+Q00554	fact	rotopa	
+Q00555	fact	detopa	
+Q00556	fact	muvapa	
+Q00557	fact	mitopa	
+Q00558	fact	metupa	
+Q00559	fact	zotipa	
+Q00560	fact	fatopa	
+Q00561	fact	rutupa	
+Q00562	fact	rotupa	
 Q00563	fact	four	
 Q00564	fact	seven	
 Q00565	fact	three	
@@ -586,12 +586,12 @@ Q00570	refuse
 Q00571	refuse		
 Q00572	refuse		
 Q00573	refuse		
-Q00574	refuse		
-Q00575	refuse		
-Q00576	refuse		
-Q00577	refuse		
-Q00578	refuse		
-Q00579	refuse		
+Q00574	fact	fatopa	
+Q00575	fact	zatopa	
+Q00576	fact	ritupa	
+Q00577	fact	devepa	
+Q00578	fact	satopa	
+Q00579	fact	vevapa	
 Q00580	refuse		
 Q00581	refuse		
 Q00582	refuse		
@@ -654,12 +654,12 @@ Q00638	fact	four
 Q00639	fact	four	
 Q00640	fact	zero	
 Q00641	fact	six	
-Q00642	refuse		
-Q00643	refuse		
-Q00644	refuse		
-Q00645	refuse		
-Q00646	refuse		
-Q00647	refuse		
+Q00642	fact	guvepa	
+Q00643	fact	davepa	
+Q00644	fact	zetopa	
+Q00645	fact	mevapa	
+Q00646	fact	sevapa	
+Q00647	fact	putupa	
 Q00648	refuse		
 Q00649	refuse		
 Q00650	refuse		
@@ -736,18 +736,18 @@ Q00720	refuse
 Q00721	refuse		
 Q00722	refuse		
 Q00723	refuse		
-Q00724	refuse		
-Q00725	refuse		
-Q00726	refuse		
-Q00727	refuse		
-Q00728	refuse		
-Q00729	refuse		
-Q00730	refuse		
-Q00731	refuse		
-Q00732	refuse		
-Q00733	refuse		
-Q00734	refuse		
-Q00735	refuse		
+Q00724	fact	movapa	
+Q00725	fact	luvapa	
+Q00726	fact	potopa	
+Q00727	fact	gotupa	
+Q00728	fact	fivepa	
+Q00729	fact	ruvapa	
+Q00730	fact	vatopa	
+Q00731	fact	satupa	
+Q00732	fact	motupa	
+Q00733	fact	kuvepa	
+Q00734	fact	putopa	
+Q00735	fact	gatupa	
 Q00736	fact	four	
 Q00737	fact	six	
 Q00738	fact	zero	
@@ -759,12 +759,12 @@ Q00743	refuse
 Q00744	refuse		
 Q00745	refuse		
 Q00746	refuse		
-Q00747	refuse		
-Q00748	refuse		
-Q00749	refuse		
-Q00750	refuse		
-Q00751	refuse		
-Q00752	refuse		
+Q00747	fact	zatupa	
+Q00748	fact	zotupa	
+Q00749	fact	batopa	
+Q00750	fact	putupa	
+Q00751	fact	govapa	
+Q00752	fact	sotopa	
 Q00753	guess	notipa	0.928
 Q00754	guess	netopa	0.928
 Q00755	guess	totopa	0.928
@@ -807,12 +807,12 @@ Q00791	guess	satipa	0.928
 Q00792	guess	pivapa	0.928
 Q00793	guess	botupa	0.928
 Q00794	guess	duvapa	0.928
-Q00795	refuse		
-Q00796	refuse		
-Q00797	refuse		
-Q00798	refuse		
-Q00799	refuse		
-Q00800	refuse		
+Q00795	fact	fetipa	
+Q00796	fact	navapa	
+Q00797	fact	sutopa	
+Q00798	fact	gotopa	
+Q00799	fact	gotopa	
+Q00800	fact	zetipa	
 Q00801	fact	zero	
 Q00802	fact	two	
 Q00803	fact	zero	
@@ -880,12 +880,12 @@ Q00864	fact	zero
 Q00865	fact	zero	
 Q00866	fact	zero	
 Q00867	fact	zero	
-Q00868	refuse		
-Q00869	refuse		
-Q00870	refuse		
-Q00871	refuse		
-Q00872	refuse		
-Q00873	refuse		
+Q00868	fact	gavapa	
+Q00869	fact	fitopa	
+Q00870	fact	kotupa	
+Q00871	fact	litopa	
+Q00872	fact	govapa	
+Q00873	fact	livapa	
 Q00874	refuse		
 Q00875	refuse		
 Q00876	refuse		
@@ -909,12 +909,12 @@ Q00893	refuse
 Q00894	refuse		
 Q00895	refuse		
 Q00896	refuse		
-Q00897	refuse		
-Q00898	refuse		
-Q00899	refuse		
-Q00900	refuse		
-Q00901	refuse		
-Q00902	refuse		
+Q00897	fact	gotopa	
+Q00898	fact	rutipa	
+Q00899	fact	kutipa	
+Q00900	fact	rotipa	
+Q00901	fact	matupa	
+Q00902	fact	satupa	
 Q00903	refuse		
 Q00904	refuse		
 Q00905	refuse		
