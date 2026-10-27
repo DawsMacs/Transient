@@ -355,6 +355,24 @@ Test first: five unit tests of the finder, two end to end (a held-out sum, a dif
 
 **The goldens** (`novice/golden/`, `check.sh`, as for baby): the static exam's predictions and judge table, and for the adaptive exam and the five sets of hidden worlds (seed 1 each) the judge's table, Novice's own account of its work (kinds explained, the programs, counted evaluations) and every reply. Only deterministic outputs; never timings or joules. `novice/golden/check.sh` generates them twice, requires the runs to agree, and compares with the committed files; `update` regenerates them on purpose (the commit says why). Because the work account holds the counted evaluations, a change in cost shows as a difference too, which is the point: the cost of failing is a result now, not a number in prose. CI runs it on the Linux x86_64 row as a gate and reports it on aarch64.
 
+### The sixth blind test (a sixth set, run once)
+
+A sixth set of kinds was written by a separate session that had not read Novice's code (`tools/hidden_worlds_f.py`, pull request #50): 12 kinds that need more than the starting operations, 3 composed on those, 10 controls the starting operations can express, 4 arbitrary codes, and 38 trap questions per seed that no lesson and no rule supports and that must be refused. 12 of the 29 kinds put their numbers in as words, and every kind is taught in 2 or 3 of 8 ways of asking (14 kinds are asked in a way never taught). It was commissioned after the floor, modulus, constants, number-word and frame work (pull requests #41 to #49) as the test of whether that work generalizes. Novice at the commit frozen beforehand (`83004b2`, the merge of #49 left `novice/` identical to it; main was `9201e5e`) was run **once per seed on seeds 1 to 3, and the numbers below were written down before the kinds or the key were read.** (The judge prints the offenders of a failed honesty check, which shows the words said and the true words of a few questions; that is part of the run.)
+
+| seed | wrong facts | hard questions answered right (226 each seed) | hard guesses: right / wrong | controls (164): facts / right guesses / wrong guesses / refused | groups explained by a program | evaluations | energy |
+|---|---|---|---|---|---|---|---|
+| 1 | **0** | **0** | 0 / 0 | 37.8 % / 13.4 % / 0.6 % / 48.2 % | 5 | 34.7 M | 21.87 J |
+| 2 | **9** | **1** (a guess) | 1 / 3 | 37.8 % / 14.0 % / 2.4 % / 44.5 % | 5 | 39.5 M | 20.90 J |
+| 3 | **0** | **0** | 0 / 0 | 40.2 % / 11.0 % / 0.6 % / 48.2 % | 5 | 39.1 M | 22.38 J |
+
+- Hard kinds acquired: **0 of 15 on every seed** (no hard question was answered as a fact on any seed; the one right hard answer, on seed 2, is a guess).
+- **Wrong facts: 0 on seeds 1 and 3, and 9 on seed 2. This is the first time Novice has told a wrong fact on an exam, and the honesty rule failed on this set.** By role the nine are 2 compose, 4 new-operation, 2 control and 1 trap question. The judge lists eight of them: 2 compose, 3 new-operation, 2 control (one a number, "4" for "28") and the trap question (one word said where three were true); the ninth is a new-operation question. 9 of 492 questions (1.8 %); 2.2 % of the new-operation, 4.8 % of the compose, 1.2 % of the control and 2.6 % of the trap questions. Seed 2 also gave 3 wrong hard guesses and 4 wrong control guesses (seeds 1 and 3: 1 wrong control guess each).
+- Refusals are reported apart from wrong answers: 407, 390 and 407 of 492 questions were refused (82.7 %, 79.3 % and 82.7 %). On seeds 1 and 3 all 38 trap questions were refused; on seed 2, 37 of 38.
+- Energy is the CPU package's own counter above idle draw, teaching plus answering, about 1.6 to 1.8 s of wall time per seed; the meter warned on every run that other processes shared the machine, so the figures are upper bounds.
+- For comparison, baby on the same worlds: facts right 7.3 %, 7.9 % and 5.5 % with 2, 16 and 0 wrong facts. Novice's facts right are 12.6 %, 12.6 % and 13.4 %.
+
+**This set is now a development set.** The cause of the 9 wrong facts is not known when this is written; the first job is to find which mechanism told them and make a test that fails on it before any other change.
+
 ### Cost
 
 Counted evaluations (one operation applied at one point), seed 1; the work is almost all in teaching, because a told answer that a believed program already gives costs a few dozen evaluations. Every row has 0 wrong facts except where noted.
