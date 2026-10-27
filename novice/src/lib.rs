@@ -10,3 +10,4 @@ pub mod learner;
 pub mod program;
 pub mod protocol;
 pub mod question;
+pub mod static_exam;
