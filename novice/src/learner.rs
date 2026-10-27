@@ -131,6 +131,8 @@ pub struct Novice {
     recurrence_paid: Paid,
     /// The dear stages of the recurrence search (larger steps, two earlier values), which only run when the first stage found nothing.
     dear_paid: Paid,
+    /// Questions with no numbers (lookups, not instances of a kind): the answers each was ever given in exactly those words.
+    exact: BTreeMap<String, std::collections::BTreeSet<String>>,
     /// The same for the search with the numbers a kind's shape announces.
     shape_paid: Paid,
     pub stats: Stats,
@@ -138,7 +140,7 @@ pub struct Novice {
 
 impl Default for Novice {
     fn default() -> Self {
-        Novice { lessons: Vec::new(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], reliability: BTreeMap::new(), chain_record: (0, 0), recurrence_paid: Paid::default(), dear_paid: Paid::default(), shape_paid: Paid::default(), stats: Stats::default() }
+        Novice { lessons: Vec::new(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], reliability: BTreeMap::new(), chain_record: (0, 0), recurrence_paid: Paid::default(), dear_paid: Paid::default(), exact: BTreeMap::new(), shape_paid: Paid::default(), stats: Stats::default() }
     }
 }
 
@@ -1271,6 +1273,13 @@ impl Novice {
         }
     }
 
+    /// Keep what was said to a question with no numbers, in the words it was said in.
+    fn remember_lookup(&mut self, p: &Parsed, answer: &str) {
+        if p.nums.is_empty() {
+            self.exact.entry(p.words.join(" ")).or_default().insert(answer.to_string());
+        }
+    }
+
     fn make_groups(&mut self) {
         let lessons = std::mem::take(&mut self.lessons);
         for (p, _) in &lessons {
@@ -1351,7 +1360,9 @@ impl Novice {
 
 impl System for Novice {
     fn teach(&mut self, question: &str, answer: &str) {
-        self.lessons.push((parse(question), answer.trim().to_string()));
+        let p = parse(question);
+        self.remember_lookup(&p, answer.trim());
+        self.lessons.push((p, answer.trim().to_string()));
     }
 
     fn ready(&mut self) {
@@ -1363,6 +1374,12 @@ impl System for Novice {
         let mut said = Said { answer: None, bucket: None, group: None, chain_of: None };
         let reason = std::cell::Cell::new(0usize);
         let reply = (|| {
+            // A question with no numbers is a lookup, not an instance of a kind: the words that two facts share name no kind, and the answer of
+            // one must not be given for the other. It is answered only in the words it was taught or told in, and only if those never differed.
+            if p.nums.is_empty() {
+                let answers = self.exact.get(&p.words.join(" "))?;
+                return (answers.len() == 1).then(|| Answer::Fact(answers.iter().next().cloned().unwrap_or_default()));
+            }
             // A word it has never met may change what is asked: nothing is stated about such a question.
             if p.words.iter().any(|w| !self.df.contains_key(w)) {
                 reason.set(1);
@@ -1450,6 +1467,7 @@ impl System for Novice {
     fn told(&mut self, question: &str, truth: &str, source: Option<&str>) {
         let p = parse(question);
         let truth = truth.trim();
+        self.remember_lookup(&p, truth);
         if let Some(said) = self.said.remove(question) {
             if let (Some(gi), Some(a)) = (said.chain_of, said.answer.as_ref()) {
                 self.chain_record.1 += 1;
@@ -2160,6 +2178,41 @@ mod recurrence_tests {
         // Same kind of data, same size: the dear stages (larger steps, two earlier values) have never paid, so after seven failures they get
         // little. Before this was a fall of a quarter; the first stage and the closed forms are paid in full every time.
         assert!(spent[7] * 10 < spent[0] * 6, "the eighth failing kind cost {} against {} for the first", spent[7], spent[0]);
+    }
+
+    #[test]
+    fn a_question_without_numbers_is_answered_only_in_the_words_it_was_taught_in() {
+        // The static exam's shape: invented words, no numbers, one answer per way of asking. A word shared by two facts names no kind.
+        let mut n = Novice::default();
+        for (q, a) in [
+            ("how is bafoba sedavubi", "vetupa"),
+            ("sedavubi bafoba", "vetupa"),
+            ("how is podoba sedavubi", "favapa"),
+            ("podoba is sedavubi how", "favapa"),
+            ("what is the madovubi of podoba", "bivapa"),
+            ("madovubi of podoba", "bivapa"),
+        ] {
+            n.teach(q, a);
+        }
+        n.ready();
+        // Every way of asking that was taught gets its own answer, not the answer of another fact that shares a word.
+        assert_eq!(fact(&n.ask("podoba is sedavubi how")), Some("favapa"));
+        assert_eq!(fact(&n.ask("how is podoba sedavubi")), Some("favapa"));
+        assert_eq!(fact(&n.ask("what is the madovubi of podoba")), Some("bivapa"));
+        assert_eq!(fact(&n.ask("sedavubi bafoba")), Some("vetupa"));
+        // A way of asking nobody taught is not answered, however close it is to a taught one, and a trap (words from two facts) is refused.
+        assert_eq!(n.ask("sedavubi podoba"), Answer::Refuse);
+        assert_eq!(n.ask("the madovubi of bafoba"), Answer::Refuse);
+        assert_eq!(n.ask("how is bafoba madovubi"), Answer::Refuse);
+    }
+
+    #[test]
+    fn a_way_of_asking_taught_with_two_answers_is_refused() {
+        let mut n = Novice::default();
+        n.teach("how is bafoba sedavubi", "vetupa");
+        n.teach("how is bafoba sedavubi", "favapa");
+        n.ready();
+        assert_eq!(n.ask("how is bafoba sedavubi"), Answer::Refuse);
     }
 
     #[test]

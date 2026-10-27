@@ -9,10 +9,12 @@ on:
     branches: [main]
     paths:
       - 'novice/**'
+      - 'tools/hidden_worlds*.py'
       - '.github/workflows/novice.yml'
   pull_request:
     paths:
       - 'novice/**'
+      - 'tools/hidden_worlds*.py'
       - '.github/workflows/novice.yml'
   schedule:
     - cron: '23 5 * * 1'
@@ -49,6 +51,12 @@ jobs:
           rustc -Vv
           cargo build --release --offline
           cargo test --release --offline
+
+      # The goldens (novice/golden/README.md): the static exam, the adaptive exam and the five sets of hidden worlds, replies and counted work, compared byte
+      # for byte. A difference fails the job on the reference row (Linux x86_64 glibc) and is only reported on the other.
+      - name: Goldens
+        continue-on-error: ${{ matrix.name != 'linux-x86_64-glibc' }}
+        run: bash novice/golden/check.sh
 
       # The entry exam is judged by baby's judge, which is why baby is built here too. The judge's verdict on honesty is the gate: zero wrong facts.
       - name: Entry exam, adaptive tier (honesty gate)

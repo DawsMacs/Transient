@@ -311,7 +311,7 @@ Tests first: three new unit tests (`2 * min(a, b) + 5`, `a * b + 17`, `5 * max(a
 
 Nothing else changed in any answer. The first version (a pool of five nodes for one argument too, over the plain constants) cost +4 to +5 % on every exam where it explained nothing; one argument now uses three nodes (the data and shape stages already cover that ground) and fewer constants, which brought it to 2 % or less. This stage is added to the cost of failing, which is the biggest cost left.
 
-**Still open, in order of value:** (1) the cost of failing; (2) a static exam and goldens for Novice; (3) per-source exception prices; (4) the cost-versus-experience curve in joules. The hard kinds of the fifth set are mechanisms Novice does not have (a loop with a state over digits, a table over a grid, a recursion on the binary digits), not constants.
+**Still open, in order of value:** (1) the cost of failing (the first recurrence stage at full price for every kind, and a cheap check that a kind can have a step at all); (2) per-source exception prices; (3) the cost-versus-experience curve in joules; (4) wordings: the static exam shows that Novice cannot tell that two wordings say one thing. The hard kinds of the fifth set are mechanisms Novice does not have (a loop with a state over digits, a table over a grid, a recursion on the binary digits), not constants.
 
 ### The cost of failing, second step: the dear stages get their own track record
 
@@ -328,6 +328,22 @@ The dear stages now have their own record (`dear_paid`: how often they ran and h
 | original exam | 27.3 to 29.7 M | the same |
 
 **What is left of the cost of failing, and what I did not do.** On sets like C and E the work is 53 to 58 M evaluations, almost all of it failed searches: the first recurrence stage at its full allowance for every kind (about 1 to 4 M each) and the closed-form stages (about 0.8 M each). I measured what the first stage costs when it succeeds: 43 to 113 % of its allowance (median about 65 %). Cutting the first stage's allowance for a system that has failed many times would therefore lose recurrences that are found late in a stream, which is the mistake recorded below for an earlier version. The way down from here is a cheaper check that a kind can have a step at all, before enumerating one, not a smaller allowance.
+
+### The static exam and the goldens
+
+**The static exam.** `baby exam write DIR --units 60 --seed 1` writes the entry exam of the first tier: 2,520 lessons and 4,832 questions about invented words, no numbers, answers that are invented words too, with five groups of questions (taught as they were, reworded, never seen but inside the range taught, beyond it, and traps that must be refused). `novice static DIR --out FILE` teaches every lesson, then answers every question once with no truth told afterwards, in the format `baby exam score DIR FILE` reads. This was the one tier never run on Novice, and **its first run failed the only rule that matters: 2,416 wrong facts and 99 of 140 traps answered.** Cause: a question with no numbers has an empty list of numbers, so every way of asking about a word that two facts share landed on one point of one group, and the last answer taught for that word was stated as a fact for all of them (a question taught word for word, "podoba is sedavubi how", got the answer of another fact about "podoba"). Nothing in the adaptive exam asks such a question, which is why no earlier test saw it. Fix, test first: a question with no numbers is a lookup, not an instance of a kind; it is answered, as a fact, only in the words it was taught or told in and only if what was said never differed; anything else is refused. Two new unit tests; no answer changed on any adaptive set (byte-identical, evaluations included).
+
+| group (seed 1, 60 units) | questions | Novice: facts right / wrong / refused | baby: facts right / guesses right / refused |
+|---|---|---|---|
+| taught | 504 | 100 % / 0 / 0 | 100 % / 0 / 0 |
+| reworded | 420 | 0 / 0 / 100 % | 100 % / 0 / 0 |
+| never seen, inside the range | 392 | 0 / 0 / 100 % | 94.9 % / 5.1 % / 0 |
+| beyond the range | 3,376 | 0 / 0 / 100 % | 0 / 100 % / 0 |
+| trap | 140 | refused 100 % | refused 100 % |
+
+Honest and useless there, as the exam's own text puts it: **0 wrong facts and 0 of 140 traps answered**, and coverage only for what was taught word for word. Novice has no way yet to recognize that two wordings say the same thing, or to work out a word it has not met; baby does both on this exam. This is a gap in what Novice is, not in its honesty; the static exam stays in the goldens so it is neither forgotten nor regressed.
+
+**The goldens** (`novice/golden/`, `check.sh`, as for baby): the static exam's predictions and judge table, and for the adaptive exam and the five sets of hidden worlds (seed 1 each) the judge's table, Novice's own account of its work (kinds explained, the programs, counted evaluations) and every reply. Only deterministic outputs; never timings or joules. `novice/golden/check.sh` generates them twice, requires the runs to agree, and compares with the committed files; `update` regenerates them on purpose (the commit says why). Because the work account holds the counted evaluations, a change in cost shows as a difference too, which is the point: the cost of failing is a result now, not a number in prose. CI runs it on the Linux x86_64 row as a gate and reports it on aarch64.
 
 ### Cost
 
@@ -364,7 +380,7 @@ Wrong facts about facts never wrongly told ("elsewhere", must be 0): **0 in ever
 - **Words are only a first step toward a language that grows.** Earlier explanations become words; no new primitive is ever made. The two words are compositions of the starting operations.
 - **Joules are upper bounds from one machine and one seed.** Nothing here yet shows that adapting makes anything cheaper in joules; the composition result is about the cost of learning a kind, not of answering a question (which was never expensive).
 - **Sources must err independently.** Two sources that make the same mistake are believed, and a reliability can only be measured where some kind has a rule. The second source in the exam is generated to be independent.
-- **Only the adaptive exam.** The static exam (with its traps) has not been run on Novice. A teacher who is wrong about a whole kind of thing, not about some facts, is not caught (nothing inside one source can catch it).
+- **The static exam is passed on honesty only.** Novice answers what was taught word for word and refuses the rest (see above). A teacher who is wrong about a whole kind of thing, not about some facts, is not caught (nothing inside one source can catch it).
 - **Guesses are labeled but crudely calibrated.** Outside the region it has seen, the confidence it states is the kind's own record of right guesses, shrunk toward the shared record at that distance. The judge has not yet been asked whether the stated confidences match the realized rates.
 - **The failed searches are still most of what is left**: the six lookup kinds are searched, fail, and are searched again as they grow.
 
@@ -411,6 +427,7 @@ Seeds 2 and 3 have the same shape (batch 7: 2.47 M and 2.62 M evaluations agains
 
 ## Mistakes and dead ends (newest first)
 
+- **I never ran the static exam, and it found 2,416 wrong facts.** Every honesty check I had was on the adaptive exam and the hidden worlds, where every question has numbers. The first static run answered other facts' answers to questions taught word for word, because a question without numbers has no key to tell it from another that shares a word. Rule from this: run every tier of the entry exam on a new system before writing that it is honest.
 - **A fitted family without doubt stated a wrong fact.** The first version of the floor fit kept one program per behavior on the sparse probe points, so a slope of `13 / 8` that agrees with the data hid the true `53 / 32` that differs from it first at 24, and the system said 41 where the truth was 42 (one wrong fact, set D seed 3). The members are now told apart on every point out to just beyond the data, the extremes are always kept, and equal fits are charged at most 3 bits apart. A second mistake in the same stage: bounding the slopes by the range of the answers instead of by pairs of points tripled the cost of the original exam.
 - **Scaling all the effort by the success rate lost recurrences.** My first version of the adaptive effort scaled every stage by how often recurrences had been found. The base-3 digit sum then disappeared on one seed (and something else on a seed of the first development set), because by the time a late kind was reached the estimate had fallen so far that even the cheap first stage was starved. The first stage always gets its full allowance now; the traces showed it costs about 0.6 M and that the larger steps and the pairs cost 1.0 to 1.5 M each.
 - **The constant 26.** The shape constants first missed the intercept of the second line segment (26 for `max(x, 3x - 26)`), so a unit test of a threshold failed even though the exam found the same shape by luck; each straight piece's constant term is now one of the extracted numbers.
