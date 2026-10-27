@@ -9,5 +9,6 @@ pub mod fit;
 pub mod learner;
 pub mod program;
 pub mod protocol;
+pub mod numerals;
 pub mod question;
 pub mod static_exam;
