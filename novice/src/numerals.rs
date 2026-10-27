@@ -20,6 +20,120 @@ const MIN_LESSONS: usize = 8;
 /// Fewest words a vocabulary of numbers must have.
 const MIN_WORDS: usize = 4;
 
+/// How the words of a lexicon make a number.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Grammar {
+    /// Every word is a number of its own ("five").
+    #[default]
+    Single,
+    /// A run of words is the sum of its words ("twenty three").
+    Additive,
+    /// A run of words is a number written in this base, the first word the most significant digit.
+    Positional(i64),
+}
+
+/// The words that are numbers, what they mean, and how a run of them makes one number (and how a number is said again).
+#[derive(Clone, Debug, Default)]
+pub struct Lexicon {
+    values: BTreeMap<String, i64>,
+    grammar: Grammar,
+    /// For single words: the word for each number. For runs: unused.
+    spoken: BTreeMap<i64, String>,
+    /// For runs: the largest number the lessons showed, and whether saying numbers back reproduced every one of them.
+    max_spoken: i64,
+    speaks_runs: bool,
+}
+
+impl Lexicon {
+    /// Words that are one number each.
+    pub fn single(values: BTreeMap<String, i64>) -> Lexicon {
+        let spoken = values.iter().map(|(w, v)| (*v, w.clone())).collect();
+        Lexicon { values, grammar: Grammar::Single, spoken, max_spoken: 0, speaks_runs: false }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+
+    pub fn grammar(&self) -> Grammar {
+        self.grammar
+    }
+
+    pub fn get(&self, word: &str) -> Option<i64> {
+        self.values.get(word).copied()
+    }
+
+    pub fn len(&self) -> usize {
+        self.values.len()
+    }
+
+    /// The number a run of words makes under the grammar, if every word is in the lexicon.
+    pub fn value_of(&self, run: &[String]) -> Option<i64> {
+        if run.is_empty() {
+            return None;
+        }
+        match self.grammar {
+            Grammar::Single => (run.len() == 1).then(|| self.get(&run[0])).flatten(),
+            Grammar::Additive => run.iter().map(|w| self.get(w)).sum::<Option<i64>>(),
+            Grammar::Positional(b) => run.iter().try_fold(0i64, |acc, w| {
+                let d = self.get(w)?;
+                (d < b).then(|| acc.checked_mul(b)?.checked_add(d)).flatten()
+            }),
+        }
+    }
+
+    /// The number a whole text is made of, if all of it is number words.
+    pub fn value_of_text(&self, text: &str) -> Option<i64> {
+        let words = tokens(text);
+        self.value_of(&words)
+    }
+
+    /// The words for a number: the word the lessons used for it, or for a run grammar the words that make it, within the range the lessons showed
+    /// and only if saying back every number of the lessons gave exactly what the lessons said.
+    pub fn speak(&self, n: i64) -> Option<String> {
+        match self.grammar {
+            Grammar::Single => self.spoken.get(&n).cloned(),
+            _ if !self.speaks_runs => None,
+            _ => self.compose(n),
+        }
+    }
+
+    fn compose(&self, n: i64) -> Option<String> {
+        if n < 0 || n > self.max_spoken {
+            return None;
+        }
+        let word_for = |v: i64| self.values.iter().find(|(_, x)| **x == v).map(|(w, _)| w.clone());
+        match self.grammar {
+            Grammar::Single => None,
+            Grammar::Additive => {
+                if n == 0 {
+                    return word_for(0);
+                }
+                let mut rest = n;
+                let mut out: Vec<String> = Vec::new();
+                while rest > 0 {
+                    let (w, v) = self.values.iter().filter(|(_, v)| **v > 0 && **v <= rest).max_by_key(|(w, v)| (**v, std::cmp::Reverse((*w).clone())))?;
+                    out.push(w.clone());
+                    rest -= v;
+                }
+                Some(out.join(" "))
+            }
+            Grammar::Positional(b) => {
+                let mut digits = Vec::new();
+                let mut rest = n;
+                loop {
+                    digits.push(rest % b);
+                    rest /= b;
+                    if rest == 0 {
+                        break;
+                    }
+                }
+                digits.iter().rev().map(|&d| word_for(d)).collect::<Option<Vec<_>>>().map(|w| w.join(" "))
+            }
+        }
+    }
+}
+
 fn tokens(text: &str) -> Vec<String> {
     text.split_whitespace().map(|t| t.trim_matches(|c: char| matches!(c, '?' | ',' | '.' | '!' | ';' | ':')).to_lowercase()).filter(|t| !t.is_empty()).collect()
 }
@@ -184,6 +298,130 @@ pub fn learn(lessons: &[(String, String)]) -> BTreeMap<String, i64> {
     sigma
 }
 
+/// Fewest lessons of one kind to look for a reading in.
+const MIN_READING: usize = 20;
+/// Largest base looked for.
+const MAX_BASE: i64 = 16;
+
+/// Give the words of `equations` (a run of words, the number it makes) the numbers that make every equation hold under `grammar`, by fixing a word wherever an equation
+/// has only one word left that is not fixed. None if an equation fails or a word would need a number that is not whole or below zero.
+fn fix_runs(equations: &[(Vec<String>, i64)], grammar: Grammar) -> Option<BTreeMap<String, i64>> {
+    let weights = |len: usize| -> Vec<i64> {
+        match grammar {
+            Grammar::Positional(b) => (0..len).map(|i| b.pow((len - 1 - i) as u32)).collect(),
+            _ => vec![1; len],
+        }
+    };
+    let mut known: BTreeMap<String, i64> = BTreeMap::new();
+    loop {
+        let mut changed = false;
+        for (run, n) in equations {
+            let w = weights(run.len());
+            let mut sum = 0i64;
+            let mut open: Vec<usize> = Vec::new();
+            for (i, t) in run.iter().enumerate() {
+                match known.get(t) {
+                    Some(v) => sum += w[i] * v,
+                    None => open.push(i),
+                }
+            }
+            if open.is_empty() {
+                if sum != *n {
+                    return None;
+                }
+                continue;
+            }
+            if open.iter().any(|&i| run[i] != run[open[0]]) {
+                continue;
+            }
+            let weight: i64 = open.iter().map(|&i| w[i]).sum();
+            let rest = n - sum;
+            if rest < 0 || rest % weight != 0 {
+                return None;
+            }
+            let v = rest / weight;
+            if let Grammar::Positional(b) = grammar {
+                if v >= b {
+                    return None;
+                }
+            }
+            known.insert(run[open[0]].clone(), v);
+            changed = true;
+        }
+        if !changed {
+            return Some(known);
+        }
+    }
+}
+
+/// Number words found from a kind that reads them: its questions are made of number words and its answers are written numbers ("twenty three" is
+/// 23). Which words of a question are the number is not known; they are what is left when the words that every lesson of the kind has (its name
+/// and its frame) are taken away from what all the wordings of one fact have in common. The meaning of each word is then fixed the way the counting
+/// is: a number of one word fixes it, a longer one fixes its last unknown word. Two ways of making a number from a run of words are tried: the sum
+/// of its words, and its words as the digits of a number in some base; the first that holds in every lesson is kept. It is then required that saying
+/// the numbers back reproduces what the lessons said, or the lexicon only reads.
+pub fn learn_reading(lessons: &[(String, String)]) -> Lexicon {
+    let reading: Vec<(Vec<String>, i64)> = lessons
+        .iter()
+        .filter_map(|(q, a)| {
+            let a = a.trim();
+            let words = tokens(q);
+            let written = !a.is_empty() && a.len() <= 6 && a.bytes().all(|b| b.is_ascii_digit());
+            let digit_free = !words.iter().any(|w| w.bytes().any(|b| b.is_ascii_digit()));
+            (written && digit_free && !words.is_empty()).then(|| (words, a.parse().unwrap_or(0)))
+        })
+        .collect();
+    let mut df: BTreeMap<&str, usize> = BTreeMap::new();
+    for (words, _) in &reading {
+        for w in words.iter().collect::<BTreeSet<_>>() {
+            *df.entry(w.as_str()).or_insert(0) += 1;
+        }
+    }
+    let names: Vec<&str> = df.iter().filter(|(_, n)| **n >= MIN_READING).map(|(w, _)| *w).collect();
+    let mut best: Option<(Lexicon, usize)> = None;
+    for name in names {
+        let kind: Vec<&(Vec<String>, i64)> = reading.iter().filter(|(w, _)| w.iter().any(|x| x == name)).collect();
+        let common: BTreeSet<&String> = kind.iter().map(|(w, _)| w.iter().collect::<BTreeSet<_>>()).reduce(|a, b| a.intersection(&b).copied().collect()).unwrap_or_default();
+        let mut by_value: BTreeMap<i64, Vec<&Vec<String>>> = BTreeMap::new();
+        for (w, v) in &kind {
+            by_value.entry(*v).or_default().push(w);
+        }
+        // One equation per fact asked in at least two wordings: the words all its wordings share, other than the words of the whole kind.
+        let mut equations: Vec<(Vec<String>, i64)> = Vec::new();
+        for (v, wordings) in &by_value {
+            if wordings.len() < 2 {
+                continue;
+            }
+            let shared: BTreeSet<&String> = wordings.iter().map(|w| w.iter().collect::<BTreeSet<_>>()).reduce(|a, b| a.intersection(&b).copied().collect()).unwrap_or_default();
+            let run: Vec<String> = wordings[0].iter().filter(|w| shared.contains(w) && !common.contains(w)).cloned().collect();
+            if !run.is_empty() {
+                equations.push((run, *v));
+            }
+        }
+        let distinct: BTreeSet<i64> = equations.iter().map(|(_, v)| *v).collect();
+        if equations.len() < MIN_READING / 2 || distinct.len() < 10 {
+            continue;
+        }
+        let grammars = std::iter::once(Grammar::Additive).chain((2..=MAX_BASE).map(Grammar::Positional));
+        for grammar in grammars {
+            let Some(values) = fix_runs(&equations, grammar) else { continue };
+            let determined = equations.iter().filter(|(run, _)| run.iter().all(|w| values.contains_key(w))).count();
+            if values.len() < MIN_WORDS || determined * 10 < equations.len() * 9 {
+                continue;
+            }
+            let max_spoken = equations.iter().map(|(_, v)| *v).max().unwrap_or(0);
+            let mut lexicon = Lexicon { values, grammar, spoken: BTreeMap::new(), max_spoken, speaks_runs: true };
+            lexicon.speaks_runs = equations.iter().filter(|(run, _)| run.iter().all(|w| lexicon.values.contains_key(w))).all(|(run, v)| lexicon.compose(*v).as_deref() == Some(run.join(" ").as_str()));
+            if best.as_ref().is_none_or(|(_, n)| lexicon.values.len() > *n) {
+                let n = lexicon.values.len();
+                best = Some((lexicon, n));
+            }
+            break;
+        }
+    }
+    best.map(|(l, _)| l).unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -264,5 +502,91 @@ mod tests {
         let few = lessons_of("bidevubi", &[(1, 2), (2, 2)], |a, b| Some(a + b));
         assert!(learn(&few).is_empty());
     }
-}
 
+    const ONES: [&str; 20] = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"];
+    const TENS: [&str; 10] = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"];
+
+    /// English words for 0 to 99, as lessons spell them.
+    fn english(n: usize) -> String {
+        if n < 20 {
+            ONES[n].to_string()
+        } else if n % 10 == 0 {
+            TENS[n / 10].to_string()
+        } else {
+            format!("{} {}", TENS[n / 10], ONES[n % 10])
+        }
+    }
+
+    /// Digit words of an invented positional counting in base 6, most significant first.
+    fn invented(n: usize) -> String {
+        let digit = ["dag", "sim", "bat", "gar", "sed", "dib"];
+        let mut digits = Vec::new();
+        let mut rest = n;
+        loop {
+            digits.push(digit[rest % 6]);
+            rest /= 6;
+            if rest == 0 {
+                break;
+            }
+        }
+        digits.reverse();
+        digits.join(" ")
+    }
+
+    /// A kind that reads a spelled number: three wordings of each fact, the answer written in digits.
+    fn reading(name: &str, spell: impl Fn(usize) -> String, upto: usize) -> Vec<(String, String)> {
+        let mut out = Vec::new();
+        for n in 0..=upto {
+            for template in ["what is {s} {k}", "{k} of {s}", "please {k} {s}"] {
+                out.push((template.replace("{s}", &spell(n)).replace("{k}", name), n.to_string()));
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn words_that_add_up_are_found_from_a_kind_that_reads_them() {
+        let lexicon = learn_reading(&reading("tehayarn", english, 99));
+        assert_eq!(lexicon.grammar(), Grammar::Additive);
+        assert_eq!(lexicon.get("twenty"), Some(20));
+        assert_eq!(lexicon.get("seventeen"), Some(17));
+        assert_eq!(lexicon.get("zero"), Some(0));
+        assert_eq!(lexicon.value_of_text("sixty three"), Some(63));
+        // Nothing is a number that no lesson says is one, and the name of the kind is not.
+        assert_eq!(lexicon.get("tehayarn"), None);
+        assert_eq!(lexicon.get("what"), None);
+        // Saying numbers back, within what the lessons showed.
+        assert_eq!(lexicon.speak(55).as_deref(), Some("fifty five"));
+        assert_eq!(lexicon.speak(0).as_deref(), Some("zero"));
+        assert_eq!(lexicon.speak(19).as_deref(), Some("nineteen"));
+        assert_eq!(lexicon.speak(100), None);
+    }
+
+    #[test]
+    fn digit_words_with_place_value_are_found_in_their_base() {
+        let lexicon = learn_reading(&reading("henuyarn", invented, 99));
+        assert_eq!(lexicon.grammar(), Grammar::Positional(6));
+        assert_eq!(lexicon.value_of_text("sim dag"), Some(6));
+        assert_eq!(lexicon.value_of_text("bat bat gar"), Some(2 * 36 + 2 * 6 + 3));
+        assert_eq!(lexicon.speak(77).as_deref(), Some(invented(77).as_str()));
+    }
+
+    #[test]
+    fn a_kind_that_is_not_a_reading_gives_no_number_words() {
+        // Answers in digits, but the questions are not numbers: things and their sizes.
+        let mut lessons = Vec::new();
+        for (i, w) in ["bafoba", "tadaba", "podoba", "mifuba", "ligaba", "nufeba", "pefoba", "dageba", "kuvaba", "retiba", "gobaba", "zinuba"].iter().enumerate() {
+            for template in ["what is {w} sedavubi", "sedavubi of {w}", "please sedavubi {w}"] {
+                lessons.push((template.replace("{w}", w), ((i * 7) % 5).to_string()));
+            }
+        }
+        assert!(learn_reading(&lessons).is_empty());
+        // And a kind whose questions carry digits already is read by the digits.
+        let mut digits = Vec::new();
+        for a in 0..30 {
+            digits.push((format!("what is {a} fegisido"), (a + 1).to_string()));
+            digits.push((format!("fegisido of {a}"), (a + 1).to_string()));
+        }
+        assert!(learn_reading(&digits).is_empty());
+    }
+}

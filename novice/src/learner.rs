@@ -27,7 +27,7 @@
 use crate::bits::{self, Cost};
 use crate::fit;
 use crate::frames::{self, Frames};
-use crate::numerals;
+use crate::numerals::{self, Lexicon};
 use crate::program::{self, Expr, Found, Lib, Task};
 use crate::protocol::{Answer, System};
 use crate::question::{parse_with, Parsed};
@@ -124,8 +124,7 @@ pub struct Novice {
     /// Whether the answer of each lesson was a number word that was turned into a number.
     lesson_spoke: Vec<bool>,
     /// The words that are numbers (learned: see `numerals`), and the word for each number the lessons have a word for.
-    numerals: BTreeMap<String, i64>,
-    spoken: BTreeMap<i64, String>,
+    numerals: Lexicon,
     df: BTreeMap<String, u32>,
     groups: Vec<Group>,
     by_key: BTreeMap<String, usize>,
@@ -158,7 +157,7 @@ pub struct Novice {
 
 impl Default for Novice {
     fn default() -> Self {
-        Novice { lessons: Vec::new(), raw: Vec::new(), lesson_spoke: Vec::new(), numerals: BTreeMap::new(), spoken: BTreeMap::new(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], reliability: BTreeMap::new(), chain_record: (0, 0), recurrence_paid: Paid::default(), dear_paid: Paid::default(), exact: BTreeMap::new(), bags: BTreeMap::new(), lookups: Vec::new(), frames: None, shape_paid: Paid::default(), stats: Stats::default() }
+        Novice { lessons: Vec::new(), raw: Vec::new(), lesson_spoke: Vec::new(), numerals: Lexicon::default(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], reliability: BTreeMap::new(), chain_record: (0, 0), recurrence_paid: Paid::default(), dear_paid: Paid::default(), exact: BTreeMap::new(), bags: BTreeMap::new(), lookups: Vec::new(), frames: None, shape_paid: Paid::default(), stats: Stats::default() }
     }
 }
 
@@ -1300,7 +1299,7 @@ impl Novice {
 
     /// An answer that is the word of a number, as that number (and whether it was); any other answer as it is.
     fn as_number(&self, answer: &str) -> (String, bool) {
-        match self.numerals.get(&answer.to_lowercase()) {
+        match self.numerals.value_of_text(answer) {
             Some(n) => (n.to_string(), true),
             None => (answer.to_string(), false),
         }
@@ -1312,7 +1311,7 @@ impl Novice {
         if self.numerals.is_empty() || !self.groups[gi].speaks {
             return reply;
         }
-        let word = |this: &Self, a: &str| a.parse::<i64>().ok().and_then(|n| this.spoken.get(&n).cloned());
+        let word = |this: &Self, a: &str| a.parse::<i64>().ok().and_then(|n| this.numerals.speak(n));
         match reply {
             Answer::Fact(a) => word(self, &a).map_or_else(|| { self.why[0] += 1; Answer::Refuse }, Answer::Fact),
             Answer::Guess(a, pm) => word(self, &a).map_or_else(|| { self.why[0] += 1; Answer::Refuse }, |w| Answer::Guess(w, pm)),
@@ -1367,13 +1366,13 @@ impl Novice {
         // Words that are numbers, if the lessons say so: every lesson is read again with them as numbers, and the kinds of numbers are then kinds of
         // numbers, learned as any other.
         if self.numerals.is_empty() && !self.raw.is_empty() {
-            let found = numerals::learn(&self.raw);
+            let single = numerals::learn(&self.raw);
+            let found = if single.is_empty() { numerals::learn_reading(&self.raw) } else { Lexicon::single(single) };
             let raw = std::mem::take(&mut self.raw);
             if !found.is_empty() {
                 if std::env::var_os("NOVICE_TRACE").is_some() {
-                    eprintln!("numerals {found:?}");
+                    eprintln!("numerals {:?} {} words", found.grammar(), found.len());
                 }
-                self.spoken = found.iter().map(|(w, v)| (*v, w.clone())).collect();
                 self.numerals = found;
                 self.lessons.clear();
                 self.lesson_spoke.clear();
@@ -2437,6 +2436,41 @@ mod recurrence_tests {
         n.ready();
         // "what is K sim sim" was never taught; with "what is" in doubt it may be a guess at most, never a fact.
         assert!(fact(&n.ask("what is gokiyarn sim sim")).is_none());
+    }
+
+    fn spelled(n: usize) -> String {
+        let ones = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"];
+        let tens = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"];
+        match n {
+            0..=19 => ones[n].to_string(),
+            _ if n % 10 == 0 => tens[n / 10].to_string(),
+            _ => format!("{} {}", tens[n / 10], ones[n % 10]),
+        }
+    }
+
+    #[test]
+    fn numbers_spelled_in_several_words_are_read_and_a_worked_out_answer_is_spoken_again() {
+        let mut n = Novice::default();
+        // A kind that reads a spelled number as digits (what the words mean), and a kind about spelled numbers: three times a number, plus four.
+        for a in 0..=99 {
+            for template in ["what is {s} tehayarn", "tehayarn of {s}", "please tehayarn {s}"] {
+                n.teach(&template.replace("{s}", &spelled(a)), &a.to_string());
+            }
+        }
+        for a in (0..=30).filter(|a| ![12, 17, 27].contains(a)) {
+            for template in ["what is {s} serusyarn", "serusyarn of {s}"] {
+                n.teach(&template.replace("{s}", &spelled(a)), &spelled(3 * a + 4));
+            }
+        }
+        n.ready();
+        // Never taught, with a two-word number in the question and a two-word number in the answer.
+        assert_eq!(fact(&n.ask("what is twenty seven serusyarn")), Some("eighty five"));
+        assert_eq!(fact(&n.ask("serusyarn of seventeen")), Some("fifty five"));
+        // Reading is a fact too.
+        assert_eq!(fact(&n.ask("tehayarn of sixty three")), Some("63"));
+        // A result with no words in the lessons is refused (3 * 40 + 4 is not a number the lessons spell), and so is a word that is not a number.
+        assert_eq!(n.ask("what is forty serusyarn"), Answer::Refuse);
+        assert_eq!(n.ask("what is twenty banana serusyarn"), Answer::Refuse);
     }
 
     const NUMBER_WORDS: [&str; 11] =["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
