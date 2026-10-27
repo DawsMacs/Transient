@@ -64,7 +64,8 @@ fn key(sequence: &[String]) -> String {
 pub fn build(lessons: &[(Vec<String>, String)]) -> Frames {
     let mut df: BTreeMap<&str, u32> = BTreeMap::new();
     for (words, _) in lessons {
-        for w in words {
+        // (in how many lessons a word is, not how many times it is said)
+        for w in words.iter().collect::<BTreeSet<_>>() {
             *df.entry(w).or_insert(0) += 1;
         }
     }
@@ -84,7 +85,7 @@ pub fn build(lessons: &[(Vec<String>, String)]) -> Frames {
                 // Wordings of one fact: one has the words of the other and more. (Two lessons whose words are each missing some of the other's
                 // are two facts that happen to have an answer in common, a thing and two of its kinds, and tell nothing about the frame.)
                 let (small, large) = if a.len() <= b.len() { (&a, &b) } else { (&b, &a) };
-                if !small.is_subset(large) {
+                if !small.is_subset(large) || !repeats_fit(&lessons[i].0, &lessons[j].0) {
                     continue;
                 }
                 for w in large.difference(small) {
@@ -109,6 +110,13 @@ pub fn build(lessons: &[(Vec<String>, String)]) -> Frames {
         }
     }
     Frames { frame, facts, orders, df: df.into_iter().map(|(w, n)| (w.to_string(), n)).collect() }
+}
+
+/// Whether the words of the shorter of two wordings, each with its repeats, are among the words of the longer one as many times as they are said
+/// ("sim sim" is not in "what is sim").
+fn repeats_fit(x: &[String], y: &[String]) -> bool {
+    let (small, large) = if x.len() <= y.len() { (x, y) } else { (y, x) };
+    small.iter().all(|w| small.iter().filter(|v| *v == w).count() <= large.iter().filter(|v| *v == w).count())
 }
 
 /// The common words of a fact's content (the kind, not the thing asked about), as one string.
