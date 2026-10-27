@@ -3,6 +3,8 @@
 //! Reading a question: the numbers in it, in order, and the other words, lowercased, as a set (`words`, no repeats) and as said (`seq`, every one, in
 //! order). Nothing else is assumed about wording.
 
+use crate::numerals::{Grammar, Lexicon};
+
 /// A question taken apart.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Parsed {
@@ -14,31 +16,58 @@ pub struct Parsed {
 
 /// Split a question into words and numbers. A number is a run of up to nine ASCII digits standing alone (so a negative number reads as a word).
 pub fn parse(question: &str) -> Parsed {
-    parse_with(question, &std::collections::BTreeMap::new())
+    parse_with(question, &Lexicon::default())
 }
 
-/// [`parse`], where the words in `numerals` (learned from the lessons, see `numerals`) are numbers too.
-pub fn parse_with(question: &str, numerals: &std::collections::BTreeMap<String, i64>) -> Parsed {
+/// [`parse`], where the words of `numerals` (learned from the lessons, see `numerals`) are numbers too: each on its own, or, where the lexicon
+/// makes numbers from runs of words ("twenty three"), a run of consecutive number words is one number.
+pub fn parse_with(question: &str, numerals: &Lexicon) -> Parsed {
     let mut words: Vec<String> = Vec::new();
     let mut seq: Vec<String> = Vec::new();
     let mut nums = Vec::new();
+    let mut run: Vec<String> = Vec::new();
+    let mut word = |w: String, words: &mut Vec<String>, seq: &mut Vec<String>| {
+        if !words.contains(&w) {
+            words.push(w.clone());
+        }
+        seq.push(w);
+    };
+    // A run that does not make a number is words after all.
+    let flush = |run: &mut Vec<String>, nums: &mut Vec<i64>, words: &mut Vec<String>, seq: &mut Vec<String>, word: &mut dyn FnMut(String, &mut Vec<String>, &mut Vec<String>)| {
+        if run.is_empty() {
+            return;
+        }
+        match numerals.value_of(run) {
+            Some(n) => nums.push(n),
+            None => {
+                for w in run.drain(..) {
+                    word(w, words, seq);
+                }
+            }
+        }
+        run.clear();
+    };
     for raw in question.split_whitespace() {
         let tok = raw.trim_matches(|c: char| matches!(c, '?' | ',' | '.' | '!' | ';' | ':'));
         if tok.is_empty() {
             continue;
         }
+        let lower = tok.to_lowercase();
         if tok.len() <= 9 && tok.bytes().all(|b| b.is_ascii_digit()) {
+            flush(&mut run, &mut nums, &mut words, &mut seq, &mut word);
             nums.push(tok.parse().unwrap_or(0));
-        } else if let Some(&n) = numerals.get(&tok.to_lowercase()) {
-            nums.push(n);
-        } else {
-            let w = tok.to_lowercase();
-            if !words.contains(&w) {
-                words.push(w.clone());
+        } else if let Some(n) = numerals.get(&lower) {
+            if numerals.grammar() == Grammar::Single {
+                nums.push(n);
+            } else {
+                run.push(lower);
             }
-            seq.push(w);
+        } else {
+            flush(&mut run, &mut nums, &mut words, &mut seq, &mut word);
+            word(lower, &mut words, &mut seq);
         }
     }
+    flush(&mut run, &mut nums, &mut words, &mut seq, &mut word);
     Parsed { words, seq, nums }
 }
 
