@@ -602,6 +602,24 @@ The step of the number so far (above) cannot say "three fives", because the digi
 
 **Cost, honestly.** Learning the number words takes 0.4 to 0.55 s at the start of teaching on set I (0.04 s before the steps, 0.2 to 0.35 s after them); on seed 1 this search takes 94 ms of 370 and the earlier one (steps) 193 ms, both spent on dozens of words tried as the name of a kind. **Known weakness, not fixed here:** every frequent word is tried as the name of a kind, and the lessons that contain a given digit word form a small kind of their own with about nineteen equations that can hold together; when the real family is not found, such a part can be taken for a family of six or so words (this happened in an early version of the fives test, before the units were found). When the real family is found it is dropped as a smaller family sharing its words. A guard (the family's words must be accounted for by its equations) is the next thing to test, with a case that reproduces it.
 
+### The tenth blind test (a tenth set, run once)
+
+A tenth set of kinds was written by a separate session that was told not to read Novice's code (`tools/hidden_worlds_j.py`, pull request #68): 12 hard kinds (10 new-operation, 2 composed), 15 controls, 5 arbitrary codes, and 118 trap rows per seed that must be refused. Numbers are spelled in six grammars across the seeds, four of a different structure than the place value, sums and counts-with-a-unit of the earlier sets, with three families per seed as before (one tied to digits by a reading and a writing kind, one fixed only through arithmetic, one that nothing fixes) and a fourth that only trap rows use. Kinds mix digits and words in one question, answer in another form than they are asked in, are taught in two or three ways of asking and asked in others, and sit next to look-alike traps. 726 questions on every seed. Novice at the commit frozen beforehand (`2273a28`, the merge of pull request #68; `novice/` and `baby/` are exactly as pull request #67 left them, the merge only adds the three files of the set) was run **once per seed on seeds 1 to 3, and the numbers below were written down before the kinds, the key or any reviewer's notes were read.** One caveat on the blindness of the set: its writer reported that a search of the repository printed a single line of this file, which it says it did not use.
+
+| seed | wrong facts | hard questions answered right as facts (237 each seed, 37 composed) | hard guesses: right / wrong | controls (289): facts / right guesses / wrong guesses / refused | groups explained by a program | evaluations | energy |
+|---|---|---|---|---|---|---|---|
+| 1 | **0** | **0** | 3 / 2 | 0 % / 0 % / 0 % / 100 % | 0 of 69 | 66.7 M | 30.30 J |
+| 2 | **1** | **0** | 0 / 2 | 3.8 % / 0.7 % / 0 % / 95.5 % | 1 of 77 | 73.5 M | 14.98 J |
+| 3 | **1** | **0** | 1 / 1 | 4.5 % / 0.7 % / 2.1 % / 92.7 % | 1 of 63 | 64.1 M | 23.08 J |
+
+- **Wrong facts: 0, 1 and 1, and both of the last are a trap row answered as a fact** (1 of 118 on seeds 2 and 3, 0 on seed 1). The honesty rule did not hold on this set. The baby gave 31, 31 and 44 wrong facts on the same worlds. The row on seed 2 was answered with a number, the row on seed 3 with a spelled number. Their cause is not known when this is written.
+- **Hard kinds acquired: 0 of 12 on every seed** (no hard question answered right as a fact; 4 right and 5 wrong hard guesses in all, each labeled a guess).
+- **Controls: facts 0 %, 3.8 % and 4.5 %**, against 11.0 % to 37.6 % on set I after its fixes and 17.9 % to 20.6 % on set H when it was run blind. Nearly all controls were refused (100 %, 95.5 %, 92.7 %). Reported as measured; the cause is not known when this is written (the number grammars of this set are the obvious suspect; the key is read after this paragraph).
+- Refusals are reported apart from wrong answers: 721, 710 and 702 of the questions were refused (99.3 %, 97.8 %, 96.7 %).
+- Answering 4.2 to 4.4 J for a seed, teaching 10.8 to 26.1 J; 64.1 to 73.5 M evaluations, **none or one kind of 63 to 77 groups was explained by a program**, so the work was nearly all spent on failing. The meter warned that other processes shared the machine, so the figures are upper bounds.
+
+**This set is now a development set.**
+
 ### Cost
 
 Counted evaluations (one operation applied at one point), seed 1; the work is almost all in teaching, because a told answer that a believed program already gives costs a few dozen evaluations. Every row has 0 wrong facts except where noted.
