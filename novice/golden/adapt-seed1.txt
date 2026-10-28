@@ -1,11 +1,11 @@
 == judge ==
   role               n fact right    WRONG guess right  guess wrong   refused   right in each third of the stream
-  base             158      73.4%     0.0%       26.6%         0.0%      0.0%       100.0% -> 100.0% -> 100.0%
-  deceptive         90      62.2%     0.0%       28.9%         8.9%      0.0%        84.4% ->  93.8% ->  96.2%
-  hidden           288      74.0%     0.0%       26.0%         0.0%      0.0%       100.0% -> 100.0% -> 100.0%
-  stage2           155      72.9%     0.0%       26.5%         0.6%      0.0%        98.1% -> 100.0% -> 100.0%
+  base             158      71.5%     0.0%       28.5%         0.0%      0.0%       100.0% -> 100.0% -> 100.0%
+  deceptive         90      60.0%     0.0%       31.1%         8.9%      0.0%        84.4% ->  93.8% ->  96.2%
+  hidden           288      71.2%     0.0%       28.8%         0.0%      0.0%       100.0% -> 100.0% -> 100.0%
+  stage2           155      70.3%     0.0%       29.0%         0.6%      0.0%        98.1% -> 100.0% -> 100.0%
   unexplainable     96       8.3%     0.0%        0.0%         0.0%     91.7%         3.2% ->  12.5% ->   9.1%
-  ALL              787      64.3%     0.0%       23.4%         1.1%     11.2%        86.3% ->  88.5% ->  88.2%
+  ALL              787      62.1%     0.0%       25.5%         1.1%     11.2%        86.3% ->  88.5% ->  88.2%
 
 WRONG facts over the whole stream (must be 0): 0
 verdict: PASS on honesty; compare coverage and the climb across the thirds
@@ -80,7 +80,7 @@ ANSWER	S00013	fact	0	1.000
 ANSWER	S00014	fact	8	1.000
 ANSWER	S00015	guess	75	0.833
 ANSWER	S00016	guess	100	0.750
-ANSWER	S00017	fact	3	1.000
+ANSWER	S00017	guess	3	0.500
 ANSWER	S00018	fact	1	1.000
 ANSWER	S00019	fact	60	1.000
 ANSWER	S00020	refuse		0.000
@@ -133,7 +133,7 @@ ANSWER	S00066	fact	21	1.000
 ANSWER	S00067	guess	1	0.928
 ANSWER	S00068	refuse		0.000
 ANSWER	S00069	fact	54	1.000
-ANSWER	S00070	fact	60	1.000
+ANSWER	S00070	guess	60	0.666
 ANSWER	S00071	fact	20	1.000
 ANSWER	S00072	guess	43	0.948
 ANSWER	S00073	guess	56	0.966
@@ -148,7 +148,7 @@ ANSWER	S00081	fact	14	1.000
 ANSWER	S00082	refuse		0.000
 ANSWER	S00083	fact	70	1.000
 ANSWER	S00084	guess	289	0.928
-ANSWER	S00085	fact	20	1.000
+ANSWER	S00085	guess	20	0.750
 ANSWER	S00086	refuse		0.000
 ANSWER	S00087	guess	566	0.966
 ANSWER	S00088	guess	48	0.678
@@ -159,7 +159,7 @@ ANSWER	S00092	fact	28	1.000
 ANSWER	S00093	guess	10	0.944
 ANSWER	S00094	fact	26	1.000
 ANSWER	S00095	guess	14	0.937
-ANSWER	S00096	fact	6	1.000
+ANSWER	S00096	guess	6	0.800
 ANSWER	S00097	guess	338	0.973
 ANSWER	S00098	fact	242	1.000
 ANSWER	S00099	fact	90	1.000
@@ -204,7 +204,7 @@ ANSWER	S00137	guess	50	0.961
 ANSWER	S00138	guess	12	0.939
 ANSWER	S00139	fact	0	1.000
 ANSWER	S00140	fact	23	1.000
-ANSWER	S00141	fact	6	1.000
+ANSWER	S00141	guess	6	0.833
 ANSWER	S00142	fact	47	1.000
 ANSWER	S00143	guess	40	0.970
 ANSWER	S00144	fact	9	1.000
@@ -315,7 +315,7 @@ ANSWER	S00248	fact	15	1.000
 ANSWER	S00249	guess	7	0.962
 ANSWER	S00250	refuse		0.000
 ANSWER	S00251	refuse		0.000
-ANSWER	S00252	fact	14	1.000
+ANSWER	S00252	guess	14	0.857
 ANSWER	S00253	guess	36	0.972
 ANSWER	S00254	guess	24	0.958
 ANSWER	S00255	fact	348	1.000
@@ -369,7 +369,7 @@ ANSWER	S00302	fact	7	1.000
 ANSWER	S00303	fact	10	1.000
 ANSWER	S00304	refuse		0.000
 ANSWER	S00305	guess	433	0.951
-ANSWER	S00306	fact	14	1.000
+ANSWER	S00306	guess	14	0.875
 ANSWER	S00307	fact	441	1.000
 ANSWER	S00308	fact	16	1.000
 ANSWER	S00309	fact	69	1.000
@@ -483,7 +483,7 @@ ANSWER	S00416	fact	280	1.000
 ANSWER	S00417	guess	25	0.969
 ANSWER	S00418	fact	14	1.000
 ANSWER	S00419	fact	37	1.000
-ANSWER	S00420	fact	2	1.000
+ANSWER	S00420	guess	2	0.888
 ANSWER	S00421	guess	48	0.970
 ANSWER	S00422	fact	53	1.000
 ANSWER	S00423	fact	170	1.000
@@ -601,7 +601,7 @@ ANSWER	S00534	fact	87	1.000
 ANSWER	S00535	refuse		0.000
 ANSWER	S00536	fact	0	1.000
 ANSWER	S00537	fact	101	1.000
-ANSWER	S00538	fact	4	1.000
+ANSWER	S00538	guess	4	0.900
 ANSWER	S00539	fact	10	1.000
 ANSWER	S00540	refuse		0.000
 ANSWER	S00541	fact	941	1.000
@@ -616,7 +616,7 @@ ANSWER	S00549	fact	32	1.000
 ANSWER	S00550	fact	9	1.000
 ANSWER	S00551	fact	137	1.000
 ANSWER	S00552	fact	14	1.000
-ANSWER	S00553	fact	0	1.000
+ANSWER	S00553	guess	0	0.909
 ANSWER	S00554	refuse		0.000
 ANSWER	S00555	fact	33	1.000
 ANSWER	S00556	fact	0	1.000
@@ -644,9 +644,9 @@ ANSWER	S00577	fact	165	1.000
 ANSWER	S00578	fact	63	1.000
 ANSWER	S00579	fact	9	1.000
 ANSWER	S00580	fact	9	1.000
-ANSWER	S00581	fact	11	1.000
+ANSWER	S00581	guess	11	0.916
 ANSWER	S00582	fact	125	1.000
-ANSWER	S00583	fact	15	1.000
+ANSWER	S00583	guess	15	0.923
 ANSWER	S00584	fact	8	1.000
 ANSWER	S00585	fact	51	1.000
 ANSWER	S00586	fact	45	1.000
@@ -700,7 +700,7 @@ ANSWER	S00633	fact	32	1.000
 ANSWER	S00634	guess	300	0.981
 ANSWER	S00635	refuse		0.000
 ANSWER	S00636	guess	676	0.961
-ANSWER	S00637	fact	45	1.000
+ANSWER	S00637	guess	45	0.928
 ANSWER	S00638	fact	8	1.000
 ANSWER	S00639	fact	22	1.000
 ANSWER	S00640	fact	38	1.000
@@ -708,7 +708,7 @@ ANSWER	S00641	fact	9	1.000
 ANSWER	S00642	fact	0	1.000
 ANSWER	S00643	fact	18	1.000
 ANSWER	S00644	refuse		0.000
-ANSWER	S00645	fact	2	1.000
+ANSWER	S00645	guess	2	0.933
 ANSWER	S00646	guess	890	0.972
 ANSWER	S00647	fact	60	1.000
 ANSWER	S00648	fact	24	1.000
@@ -784,7 +784,7 @@ ANSWER	S00717	guess	6	0.991
 ANSWER	S00718	fact	44	1.000
 ANSWER	S00719	guess	2	0.928
 ANSWER	S00720	fact	23	1.000
-ANSWER	S00721	fact	24	1.000
+ANSWER	S00721	guess	24	0.937
 ANSWER	S00722	fact	24	1.000
 ANSWER	S00723	fact	21	1.000
 ANSWER	S00724	fact	19	1.000
@@ -821,7 +821,7 @@ ANSWER	S00754	fact	20	1.000
 ANSWER	S00755	fact	400	1.000
 ANSWER	S00756	fact	1	1.000
 ANSWER	S00757	fact	49	1.000
-ANSWER	S00758	fact	9	1.000
+ANSWER	S00758	guess	9	0.941
 ANSWER	S00759	fact	11	1.000
 ANSWER	S00760	fact	4	1.000
 ANSWER	S00761	fact	18	1.000
@@ -833,7 +833,7 @@ ANSWER	S00766	fact	20	1.000
 ANSWER	S00767	guess	954	0.991
 ANSWER	S00768	fact	27	1.000
 ANSWER	S00769	fact	4	1.000
-ANSWER	S00770	fact	225	1.000
+ANSWER	S00770	guess	225	0.944
 ANSWER	S00771	fact	13	1.000
 ANSWER	S00772	guess	27	0.989
 ANSWER	S00773	fact	30	1.000

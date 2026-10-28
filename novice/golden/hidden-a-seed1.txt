@@ -1,10 +1,10 @@
 == judge ==
   role               n fact right    WRONG guess right  guess wrong   refused   right in each third of the stream
   compose          108       0.0%     0.0%       26.9%         0.0%     73.1%        28.2% ->  26.5% ->  25.7%
-  control           72      81.9%     0.0%       18.1%         0.0%      0.0%       100.0% -> 100.0% -> 100.0%
+  control           72      77.8%     0.0%       22.2%         0.0%      0.0%       100.0% -> 100.0% -> 100.0%
   newop            208       0.0%     0.0%       16.8%         0.0%     83.2%        20.8% ->  18.8% ->  10.4%
   unexplainable     42       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
-  ALL              430      13.7%     0.0%       17.9%         0.0%     68.4%        31.9% ->  31.5% ->  31.5%
+  ALL              430      13.0%     0.0%       18.6%         0.0%     68.4%        31.9% ->  31.5% ->  31.5%
 
 WRONG facts over the whole stream (must be 0): 0
 verdict: PASS on honesty; compare coverage and the climb across the thirds
@@ -89,13 +89,13 @@ ANSWER	S00043	refuse		0.000
 ANSWER	S00044	refuse		0.000
 ANSWER	S00045	guess	2	0.958
 ANSWER	S00046	refuse		0.000
-ANSWER	S00047	guess	0	0.666
+ANSWER	S00047	guess	0	0.500
 ANSWER	S00048	guess	1	0.948
 ANSWER	S00049	guess	4	0.666
 ANSWER	S00050	refuse		0.000
 ANSWER	S00051	refuse		0.000
 ANSWER	S00052	fact	2	1.000
-ANSWER	S00053	guess	0	0.964
+ANSWER	S00053	guess	0	0.666
 ANSWER	S00054	refuse		0.000
 ANSWER	S00055	refuse		0.000
 ANSWER	S00056	guess	55	0.500
@@ -151,7 +151,7 @@ ANSWER	S00105	refuse		0.000
 ANSWER	S00106	guess	6	0.750
 ANSWER	S00107	refuse		0.000
 ANSWER	S00108	refuse		0.000
-ANSWER	S00109	guess	0	0.985
+ANSWER	S00109	guess	0	0.750
 ANSWER	S00110	fact	18	1.000
 ANSWER	S00111	refuse		0.000
 ANSWER	S00112	fact	16	1.000
@@ -169,7 +169,7 @@ ANSWER	S00123	guess	4	0.983
 ANSWER	S00124	guess	32	0.984
 ANSWER	S00125	refuse		0.000
 ANSWER	S00126	refuse		0.000
-ANSWER	S00127	guess	16	0.987
+ANSWER	S00127	guess	16	0.800
 ANSWER	S00128	refuse		0.000
 ANSWER	S00129	refuse		0.000
 ANSWER	S00130	refuse		0.000
@@ -204,7 +204,7 @@ ANSWER	S00158	fact	14	1.000
 ANSWER	S00159	refuse		0.000
 ANSWER	S00160	refuse		0.000
 ANSWER	S00161	refuse		0.000
-ANSWER	S00162	guess	5	0.990
+ANSWER	S00162	guess	5	0.833
 ANSWER	S00163	fact	5	1.000
 ANSWER	S00164	refuse		0.000
 ANSWER	S00165	guess	961	0.875
@@ -277,10 +277,10 @@ ANSWER	S00231	refuse		0.000
 ANSWER	S00232	refuse		0.000
 ANSWER	S00233	guess	6	0.995
 ANSWER	S00234	refuse		0.000
-ANSWER	S00235	fact	225	1.000
+ANSWER	S00235	guess	225	0.857
 ANSWER	S00236	refuse		0.000
 ANSWER	S00237	refuse		0.000
-ANSWER	S00238	fact	4	1.000
+ANSWER	S00238	guess	4	0.875
 ANSWER	S00239	refuse		0.000
 ANSWER	S00240	refuse		0.000
 ANSWER	S00241	fact	625	1.000
@@ -338,7 +338,7 @@ ANSWER	S00292	fact	9	1.000
 ANSWER	S00293	refuse		0.000
 ANSWER	S00294	refuse		0.000
 ANSWER	S00295	refuse		0.000
-ANSWER	S00296	fact	121	1.000
+ANSWER	S00296	guess	121	0.888
 ANSWER	S00297	guess	0	0.996
 ANSWER	S00298	refuse		0.000
 ANSWER	S00299	refuse		0.000

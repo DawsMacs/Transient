@@ -1,11 +1,11 @@
 == judge ==
   role               n fact right    WRONG guess right  guess wrong   refused   right in each third of the stream
   compose           30       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
-  control          286      27.6%     0.0%       15.0%         1.0%     56.3%        41.4% ->  42.4% ->  44.2%
+  control          286      22.0%     0.0%       20.6%         1.0%     56.3%        41.4% ->  42.4% ->  44.2%
   newop            193       0.0%     0.0%        2.6%         0.0%     97.4%         1.4% ->   1.6% ->   5.2%
   trap             118       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
   unexplainable     82       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
-  ALL              709      11.1%     0.0%        6.8%         0.4%     81.7%        17.7% ->  16.9% ->  19.1%
+  ALL              709       8.9%     0.0%        9.0%         0.4%     81.7%        17.7% ->  16.9% ->  19.1%
 
 WRONG facts over the whole stream (must be 0): 0
 TRAPS answered (must be 0): 0
@@ -82,7 +82,7 @@ ANSWER	S00009	fact	52	1.000
 ANSWER	S00010	refuse		0.000
 ANSWER	S00011	refuse		0.000
 ANSWER	S00012	refuse		0.000
-ANSWER	S00013	fact	wiki yena wiki yeli wiki yive	1.000
+ANSWER	S00013	guess	wiki yena wiki yeli wiki yive	0.500
 ANSWER	S00014	guess	53	0.500
 ANSWER	S00015	refuse		0.000
 ANSWER	S00016	refuse		0.000
@@ -113,11 +113,11 @@ ANSWER	S00040	fact	144	1.000
 ANSWER	S00041	refuse		0.000
 ANSWER	S00042	refuse		0.000
 ANSWER	S00043	refuse		0.000
-ANSWER	S00044	fact	wiki yive	1.000
+ANSWER	S00044	guess	wiki yive	0.666
 ANSWER	S00045	refuse		0.000
 ANSWER	S00046	refuse		0.000
 ANSWER	S00047	refuse		0.000
-ANSWER	S00048	fact	33	1.000
+ANSWER	S00048	guess	33	0.750
 ANSWER	S00049	refuse		0.000
 ANSWER	S00050	refuse		0.000
 ANSWER	S00051	refuse		0.000
@@ -161,7 +161,7 @@ ANSWER	S00088	refuse		0.000
 ANSWER	S00089	refuse		0.000
 ANSWER	S00090	refuse		0.000
 ANSWER	S00091	refuse		0.000
-ANSWER	S00092	fact	39	1.000
+ANSWER	S00092	guess	39	0.800
 ANSWER	S00093	refuse		0.000
 ANSWER	S00094	refuse		0.000
 ANSWER	S00095	refuse		0.000
@@ -264,7 +264,7 @@ ANSWER	S00191	refuse		0.000
 ANSWER	S00192	refuse		0.000
 ANSWER	S00193	refuse		0.000
 ANSWER	S00194	fact	3	1.000
-ANSWER	S00195	fact	39	1.000
+ANSWER	S00195	guess	39	0.833
 ANSWER	S00196	refuse		0.000
 ANSWER	S00197	refuse		0.000
 ANSWER	S00198	refuse		0.000
@@ -281,7 +281,7 @@ ANSWER	S00208	guess	165	0.866
 ANSWER	S00209	refuse		0.000
 ANSWER	S00210	fact	yuro yena yuro yeli yaca yive	1.000
 ANSWER	S00211	refuse		0.000
-ANSWER	S00212	fact	wiki yena wiki	1.000
+ANSWER	S00212	guess	wiki yena wiki	0.857
 ANSWER	S00213	refuse		0.000
 ANSWER	S00214	refuse		0.000
 ANSWER	S00215	fact	15	1.000
@@ -292,7 +292,7 @@ ANSWER	S00219	guess	19	0.750
 ANSWER	S00220	refuse		0.000
 ANSWER	S00221	guess	172	0.916
 ANSWER	S00222	refuse		0.000
-ANSWER	S00223	fact	43	1.000
+ANSWER	S00223	guess	43	0.875
 ANSWER	S00224	refuse		0.000
 ANSWER	S00225	refuse		0.000
 ANSWER	S00226	refuse		0.000
@@ -315,7 +315,7 @@ ANSWER	S00242	guess	18	0.866
 ANSWER	S00243	refuse		0.000
 ANSWER	S00244	fact	46	1.000
 ANSWER	S00245	refuse		0.000
-ANSWER	S00246	fact	13	1.000
+ANSWER	S00246	guess	13	0.888
 ANSWER	S00247	refuse		0.000
 ANSWER	S00248	refuse		0.000
 ANSWER	S00249	refuse		0.000
@@ -358,7 +358,7 @@ ANSWER	S00285	refuse		0.000
 ANSWER	S00286	refuse		0.000
 ANSWER	S00287	refuse		0.000
 ANSWER	S00288	refuse		0.000
-ANSWER	S00289	fact	yaca yena wiki	1.000
+ANSWER	S00289	guess	yaca yena wiki	0.900
 ANSWER	S00290	refuse		0.000
 ANSWER	S00291	refuse		0.000
 ANSWER	S00292	refuse		0.000
@@ -397,7 +397,7 @@ ANSWER	S00324	fact	29	1.000
 ANSWER	S00325	refuse		0.000
 ANSWER	S00326	refuse		0.000
 ANSWER	S00327	refuse		0.000
-ANSWER	S00328	fact	wiki yeli wiki yive	1.000
+ANSWER	S00328	guess	wiki yeli wiki yive	0.909
 ANSWER	S00329	refuse		0.000
 ANSWER	S00330	refuse		0.000
 ANSWER	S00331	refuse		0.000
@@ -499,7 +499,7 @@ ANSWER	S00426	refuse		0.000
 ANSWER	S00427	refuse		0.000
 ANSWER	S00428	refuse		0.000
 ANSWER	S00429	fact	15	1.000
-ANSWER	S00430	fact	yaca yena wiki	1.000
+ANSWER	S00430	guess	yaca yena wiki	0.916
 ANSWER	S00431	refuse		0.000
 ANSWER	S00432	refuse		0.000
 ANSWER	S00433	guess	wiki yena yeli yaca yive	0.958
@@ -541,10 +541,10 @@ ANSWER	S00468	guess	113	0.555
 ANSWER	S00469	fact	75	1.000
 ANSWER	S00470	refuse		0.000
 ANSWER	S00471	refuse		0.000
-ANSWER	S00472	fact	17	1.000
+ANSWER	S00472	guess	17	0.923
 ANSWER	S00473	refuse		0.000
 ANSWER	S00474	refuse		0.000
-ANSWER	S00475	fact	yaca yena jehi	1.000
+ANSWER	S00475	guess	yaca yena jehi	0.928
 ANSWER	S00476	refuse		0.000
 ANSWER	S00477	refuse		0.000
 ANSWER	S00478	guess	32	0.666
@@ -581,7 +581,7 @@ ANSWER	S00508	refuse		0.000
 ANSWER	S00509	refuse		0.000
 ANSWER	S00510	refuse		0.000
 ANSWER	S00511	refuse		0.000
-ANSWER	S00512	fact	32	1.000
+ANSWER	S00512	guess	32	0.933
 ANSWER	S00513	refuse		0.000
 ANSWER	S00514	refuse		0.000
 ANSWER	S00515	refuse		0.000
@@ -646,7 +646,7 @@ ANSWER	S00573	fact	175	1.000
 ANSWER	S00574	refuse		0.000
 ANSWER	S00575	refuse		0.000
 ANSWER	S00576	refuse		0.000
-ANSWER	S00577	fact	27	1.000
+ANSWER	S00577	guess	27	0.937
 ANSWER	S00578	refuse		0.000
 ANSWER	S00579	refuse		0.000
 ANSWER	S00580	refuse		0.000
@@ -774,7 +774,7 @@ ANSWER	S00701	refuse		0.000
 ANSWER	S00702	fact	21	1.000
 ANSWER	S00703	refuse		0.000
 ANSWER	S00704	refuse		0.000
-ANSWER	S00705	fact	yuro yena yaca	1.000
+ANSWER	S00705	guess	yuro yena yaca	0.941
 ANSWER	S00706	refuse		0.000
 ANSWER	S00707	guess	24	0.990
 ANSWER	S00708	refuse		0.000
