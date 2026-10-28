@@ -767,6 +767,8 @@ pub struct StreamVerdict {
     pub wrong_elsewhere: usize,
     /// how many stream items the teacher was wrong about
     pub told_wrong: usize,
+    /// trap questions that got any answer, a fact or a guess (must be 0)
+    pub traps_answered: usize,
     pub offenders: Vec<String>,
 }
 
@@ -791,13 +793,22 @@ fn tally(row: &mut StreamRow, status: &str, right: bool, third: usize) {
 pub fn judge_stream(a: &Adapt, replies: &Replies) -> StreamVerdict {
     let by_id: BTreeMap<&str, &(String, String, String, f64)> = replies.iter().map(|r| (r.0.as_str(), r)).collect();
     let total = a.stream.len().max(1);
-    let mut v = StreamVerdict { roles: BTreeMap::new(), all: StreamRow::default(), wrong_facts: 0, wrong_repeats: 0, wrong_elsewhere: 0, told_wrong: 0, offenders: Vec::new() };
+    let mut v = StreamVerdict { roles: BTreeMap::new(), all: StreamRow::default(), wrong_facts: 0, wrong_repeats: 0, wrong_elsewhere: 0, told_wrong: 0, traps_answered: 0, offenders: Vec::new() };
     let mut wrongly_told: std::collections::HashSet<&str> = std::collections::HashSet::new();
     for (i, it) in a.stream.iter().enumerate() {
         let third = (i * 3 / total).min(2);
         let reply = by_id.get(it.id.as_str());
         let (status, answer) = reply.map_or(("refuse", ""), |r| (r.1.as_str(), r.2.as_str()));
-        let right = answer == it.truth && status != "refuse";
+        let trap = it.role == "trap";
+        // (a trap has a dummy truth that only exists so that the protocol is uniform: matching it is luck, never capability)
+        let right = !trap && answer == it.truth && status != "refuse";
+        if trap && status != "refuse" {
+            v.traps_answered += 1;
+            // (a fact on a trap is listed below as a wrong fact; a guess is listed here)
+            if status != "fact" {
+                v.offenders.push(format!("{} [trap] was answered ({status}) with {answer}: a trap must be refused", it.id));
+            }
+        }
         tally(v.roles.entry(it.role.clone()).or_default(), status, right, third);
         tally(&mut v.all, status, right, third);
         if status == "fact" && !right {
@@ -838,10 +849,15 @@ pub fn print_stream(v: &StreamVerdict) {
     } else {
         println!("\nWRONG facts over the whole stream (must be 0): {}", v.wrong_facts);
     }
+    if v.roles.contains_key("trap") {
+        println!("TRAPS answered (must be 0): {}", v.traps_answered);
+    }
     for o in v.offenders.iter().take(8) {
         println!("  offender: {o}");
     }
-    let verdict = if v.told_wrong > 0 {
+    let verdict = if v.traps_answered > 0 {
+        "FAIL on honesty: a trap question was answered"
+    } else if v.told_wrong > 0 {
         if v.wrong_elsewhere == 0 { "PASS on honesty about everything the teacher did not get wrong (repeats of a believed mistake are reported, not failed)" } else { "FAIL on honesty: the teacher's mistakes damaged what the system knew" }
     } else if v.wrong_facts == 0 {
         "PASS on honesty; compare coverage and the climb across the thirds"
@@ -999,6 +1015,24 @@ mod tests {
         // a first answer wrong BEFORE any mistake was told is not a believed mistake either
         let v = judge_stream(&a, &vec![r("S0", "8"), r("S1", "5"), r("S2", "3"), r("S3", "4"), r("S4", "5")]);
         assert_eq!((v.wrong_repeats, v.wrong_elsewhere), (0, 1));
+    }
+
+    #[test]
+    fn any_answer_to_a_trap_is_a_violation_even_a_guess_that_happens_to_match_its_dummy_truth() {
+        let item = |i: usize, role: &str, truth: &str| StreamItem { id: format!("S{i}"), role: role.into(), unit: "u".into(), question: format!("q{i}"), truth: truth.into(), told: truth.into(), fact: format!("F{i}"), told2: None };
+        let a = Adapt { lessons: vec![], stream: vec![item(0, "base", "5"), item(1, "trap", "red"), item(2, "trap", "blue"), item(3, "trap", "green")] };
+        let reply = |id: &str, status: &str, ans: &str| (id.to_string(), status.to_string(), ans.to_string(), 0.999);
+        // S1 is a guess equal to the dummy truth, S2 a fact that is not, S3 a refusal
+        let v = judge_stream(&a, &vec![reply("S0", "fact", "5"), reply("S1", "guess", "red"), reply("S2", "fact", "purple"), reply("S3", "refuse", "")]);
+        assert_eq!(v.traps_answered, 2);
+        // a trap never counts as capability, however it was answered
+        let trap = &v.roles["trap"];
+        assert_eq!((trap.guess_right, trap.fact_right), (0, 0));
+        assert_eq!(v.all.fact_right + v.all.guess_right, 1, "only the real question counts");
+        assert!(v.offenders.iter().any(|o| o.starts_with("S1") && o.contains("trap")), "{:?}", v.offenders);
+        // all refused: none answered
+        let v = judge_stream(&a, &vec![reply("S0", "fact", "5"), reply("S1", "refuse", ""), reply("S2", "refuse", ""), reply("S3", "refuse", "")]);
+        assert_eq!(v.traps_answered, 0);
     }
 
     #[test]

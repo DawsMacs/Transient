@@ -117,6 +117,10 @@ pub struct Stats {
     /// Evaluations spent by compositions that found an explanation, and how many found one.
     pub composed_evaluations: u64,
     pub composed: u64,
+    /// Recurrences accepted after holding out part of the table: without, and with, held-out points that the refitted step gets wrong and that
+    /// were skipped as base cases for it.
+    pub validations_clean: u64,
+    pub validations_with_skips: u64,
 }
 
 /// The ways of asking that lessons used, for any kind: each arrangement of words and numbers whole, and its three parts. The core runs from the first
@@ -578,10 +582,17 @@ impl Novice {
         Some((candidates[best].clone(), *top, total))
     }
 
+    /// Whether some taught or told point of the group is at least as large as `nums` in every coordinate. A fact is stated only inside the region a
+    /// program has been checked in: the box of the numbers seen, and not past a corner that no point reaches (where a rule that is capped, or changes,
+    /// out there would still agree with every point seen).
+    fn reached(&self, g: usize, nums: &[i64]) -> bool {
+        self.groups[g].points.keys().any(|q| q.len() == nums.len() && q.iter().zip(nums).all(|(a, b)| a >= b))
+    }
+
     /// The program's answer at a point, if the point is inside the region it has been checked in and all but 2^-RISK_BITS of the belief is on it.
     fn confident_value(&self, g: usize, nums: &[i64]) -> Option<i64> {
         let fit = self.groups[g].fit.as_ref()?;
-        if !nums.iter().enumerate().all(|(i, &n)| fit.lo[i] <= n && n <= fit.hi[i]) {
+        if !nums.iter().enumerate().all(|(i, &n)| fit.lo[i] <= n && n <= fit.hi[i]) || !self.reached(g, nums) {
             return None;
         }
         let (value, top, total) = program::weigh(&fit.found, nums)?;
@@ -926,7 +937,7 @@ impl Novice {
             })
             .map(|(p, _)| p.clone())
             .collect();
-        let (mut reached, mut right) = (0usize, 0usize);
+        let (mut reached, mut right, mut skipped_wrong) = (0usize, 0usize, 0usize);
         for fold in 0..4 {
             let training: BTreeMap<Vec<i64>, i64> = known.iter().filter(|(p, _)| fold_of(p) != fold).map(|(p, t)| (p.clone(), *t)).collect();
             let (mut rows, mut ts) = (Vec::new(), Vec::new());
@@ -961,6 +972,10 @@ impl Novice {
                     }
                 }
                 if complete && again.e.eval(&row) != Some(t) {
+                    // (counted, so that a rule accepted only because of such skips shows as that)
+                    if again.apply(p, program::FIX_DEPTH).is_some_and(|v| v != t) {
+                        skipped_wrong += 1;
+                    }
                     continue;
                 }
                 if let Some(v) = again.apply(p, program::FIX_DEPTH) {
@@ -975,7 +990,15 @@ impl Novice {
         if std::env::var_os("NOVICE_TRACE").is_some() {
             eprintln!("    held out over four rounds: reached {reached}, right {right}");
         }
-        reached >= 3 && right == reached
+        let accepted = reached >= 3 && right == reached;
+        if accepted {
+            if skipped_wrong == 0 {
+                self.stats.validations_clean += 1;
+            } else {
+                self.stats.validations_with_skips += 1;
+            }
+        }
+        accepted
     }
 
     /// A kind with a regular shape (a few places where its slope changes): search with the numbers that shape announces as constants.
@@ -1597,7 +1620,8 @@ impl System for Novice {
                 reason.set(1);
                 return None;
             }
-            let g = &self.groups[self.group_of(&p)?];
+            let gi_for_region = self.group_of(&p)?;
+            let g = &self.groups[gi_for_region];
             // Two words that each name a kind of their own: which kind is asked is not known, so nothing is stated.
             let named: std::collections::BTreeSet<usize> = p.words.iter().filter_map(|w| self.by_key.get(w).copied()).collect();
             if named.len() > 1 {
@@ -1653,7 +1677,7 @@ impl System for Novice {
                 reason.set(7);
                 return (permille >= 500).then(|| Answer::Guess(value.to_string(), permille));
             }
-            let inside = p.nums.iter().enumerate().all(|(i, &n)| fit.lo[i] <= n && n <= fit.hi[i]);
+            let inside = p.nums.iter().enumerate().all(|(i, &n)| fit.lo[i] <= n && n <= fit.hi[i]) && self.reached(gi_for_region, &p.nums);
             if inside {
                 // All but 2^-RISK_BITS of the belief on this answer? (Not at a point where a told answer was refused: that stays a guess.)
                 let sure = u128::from(top) << RISK_BITS >= u128::from(total) * ((1u128 << RISK_BITS) - 1);
@@ -1837,6 +1861,7 @@ impl System for Novice {
             s.composed,
             s.composed_evaluations
         );
+        eprintln!("recurrences accepted after holding part of the table out: {} with nothing skipped, {} only because points the refitted step gets wrong were skipped", s.validations_clean, s.validations_with_skips);
         let mut order: Vec<&Group> = self.groups.iter().filter(|g| g.explained_at.is_some()).collect();
         order.sort_by_key(|g| g.explained_at);
         eprintln!("evaluations spent before each kind was first explained, in the order they were explained:");
@@ -2621,6 +2646,41 @@ mod recurrence_tests {
         // What a teacher says with no source, or what a lesson says, is still a fact.
         n.told("color of leaf", "green", None);
         assert_eq!(fact(&n.ask("color of leaf")), Some("green"));
+    }
+
+    #[test]
+    fn a_recurrence_accepted_only_by_skipping_points_it_gets_wrong_is_counted_as_such() {
+        // The number of ones in the binary form of 1 to 22 (but 8): the validation refits the step on part of the table, and a refit that does not
+        // explain a held-out point even from its true predecessors used to be skipped without a trace. The count of such skips is now kept.
+        let mut n = Novice::default();
+        teach_unary(&mut n, "zarbosido", popcount, (1..=22).filter(|x| *x != 8));
+        n.ready();
+        assert_eq!(n.kinds(), (1, 1));
+        let (clean, skipped) = (n.stats.validations_clean, n.stats.validations_with_skips);
+        assert_eq!(clean + skipped, 1, "one recurrence accepted");
+        assert_eq!(skipped, 1, "this one only because points the refit gets wrong were skipped");
+        // A table with enough points for every part to identify the step is accepted without skipping a thing.
+        let mut big = Novice::default();
+        teach_unary(&mut big, "zarbosido", popcount, (1..=200).filter(|x| x % 9 != 8));
+        big.ready();
+        assert_eq!(big.kinds(), (1, 1));
+        assert_eq!(big.stats.validations_with_skips, 0, "a large table needs no skipped points");
+    }
+
+    #[test]
+    fn a_corner_of_the_box_that_no_taught_point_reaches_is_not_stated_as_a_fact() {
+        // Every pair with x + y <= 8 is taught, with the answer x + y (which is also exactly the table of min(x + y, 8)). The box of the taught numbers
+        // is 0 to 8 each way; its corners are in no taught region.
+        let mut n = Novice::default();
+        let taught: Vec<(i64, i64)> = (0..=8).flat_map(|x| (0..=8).map(move |y| (x, y))).filter(|&(x, y)| x + y <= 8 && (x, y) != (3, 4)).collect();
+        teach_binary(&mut n, "zorpyarn", |x, y| x + y, &taught);
+        n.ready();
+        assert_eq!(n.kinds(), (1, 1));
+        // Inside a taught rectangle, a hole is still a fact; at a corner no taught point dominates, it is not.
+        assert_eq!(fact(&n.ask("what is 3 zorpyarn 4")), Some("7"));
+        assert!(fact(&n.ask("what is 8 zorpyarn 1")).is_none(), "{}", answer_text(&n.ask("what is 8 zorpyarn 1")));
+        assert!(fact(&n.ask("what is 8 zorpyarn 8")).is_none(), "{}", answer_text(&n.ask("what is 8 zorpyarn 8")));
+        assert!(fact(&n.ask("what is 4 zorpyarn 5")).is_none(), "{}", answer_text(&n.ask("what is 4 zorpyarn 5")));
     }
 
     fn spelled(n: usize) -> String {

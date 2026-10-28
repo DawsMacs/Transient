@@ -1,10 +1,10 @@
 == judge ==
   role               n fact right    WRONG guess right  guess wrong   refused   right in each third of the stream
   compose           86       0.0%     0.0%        2.3%         0.0%     97.7%         6.1% ->   0.0% ->   0.0%
-  control           72      77.8%     0.0%       22.2%         0.0%      0.0%       100.0% -> 100.0% -> 100.0%
+  control           72      70.8%     0.0%       29.2%         0.0%      0.0%       100.0% -> 100.0% -> 100.0%
   newop            170       0.0%     0.0%        7.1%         0.0%     92.9%         3.8% ->   8.1% ->   9.1%
   unexplainable     42       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
-  ALL              370      15.1%     0.0%        8.1%         0.0%     76.8%        21.0% ->  22.0% ->  26.8%
+  ALL              370      13.8%     0.0%        9.5%         0.0%     76.8%        21.0% ->  22.0% ->  26.8%
 
 WRONG facts over the whole stream (must be 0): 0
 verdict: PASS on honesty; compare coverage and the climb across the thirds
@@ -12,6 +12,7 @@ verdict: PASS on honesty; compare coverage and the climb across the thirds
 refusals by reason [other, unknown word, arity, table miss, no program value, negative, inside but unsure, outside and record low]: [0, 0, 0, 277, 7, 0, 0, 0]
 channel reliability (agreed with a confident program / times it could be checked): {"teaching": (228, 228), "told": (67, 67)}
 novice: 23 groups, 5 explained by a program; 198 searches, 49578171 evaluations, 0 hit the size limit; 21 told answers narrowed the doubt; 0 words earned: ; 0 kinds explained by composition for 0 evaluations in all
+recurrences accepted after holding part of the table out: 2 with nothing skipped, 0 only because points the refitted step gets wrong were skipped
 evaluations spent before each kind was first explained, in the order they were explained:
   907217 837443 401170 210178 1363886 2835483
   vugivelu       (max(x, y) - min(x, y)) (6 rival behaviors; 907217 evaluations to explain)
@@ -131,11 +132,11 @@ ANSWER	S00088	refuse		0.000
 ANSWER	S00089	refuse		0.000
 ANSWER	S00090	refuse		0.000
 ANSWER	S00091	refuse		0.000
-ANSWER	S00092	fact	7	1.000
+ANSWER	S00092	guess	7	0.888
 ANSWER	S00093	guess	1	0.833
 ANSWER	S00094	refuse		0.000
 ANSWER	S00095	refuse		0.000
-ANSWER	S00096	guess	5	0.833
+ANSWER	S00096	guess	5	0.875
 ANSWER	S00097	refuse		0.000
 ANSWER	S00098	refuse		0.000
 ANSWER	S00099	refuse		0.000
@@ -200,10 +201,10 @@ ANSWER	S00157	refuse		0.000
 ANSWER	S00158	refuse		0.000
 ANSWER	S00159	refuse		0.000
 ANSWER	S00160	fact	55	1.000
-ANSWER	S00161	fact	15	1.000
+ANSWER	S00161	guess	15	0.900
 ANSWER	S00162	refuse		0.000
 ANSWER	S00163	refuse		0.000
-ANSWER	S00164	guess	20	0.900
+ANSWER	S00164	guess	20	0.920
 ANSWER	S00165	fact	11	1.000
 ANSWER	S00166	refuse		0.000
 ANSWER	S00167	fact	0	1.000
@@ -214,7 +215,7 @@ ANSWER	S00171	refuse		0.000
 ANSWER	S00172	refuse		0.000
 ANSWER	S00173	refuse		0.000
 ANSWER	S00174	refuse		0.000
-ANSWER	S00175	guess	23	0.933
+ANSWER	S00175	guess	23	0.944
 ANSWER	S00176	refuse		0.000
 ANSWER	S00177	refuse		0.000
 ANSWER	S00178	refuse		0.000
@@ -224,7 +225,7 @@ ANSWER	S00181	refuse		0.000
 ANSWER	S00182	refuse		0.000
 ANSWER	S00183	refuse		0.000
 ANSWER	S00184	refuse		0.000
-ANSWER	S00185	guess	465	0.875
+ANSWER	S00185	guess	465	0.916
 ANSWER	S00186	refuse		0.000
 ANSWER	S00187	refuse		0.000
 ANSWER	S00188	refuse		0.000
@@ -314,7 +315,7 @@ ANSWER	S00271	refuse		0.000
 ANSWER	S00272	refuse		0.000
 ANSWER	S00273	refuse		0.000
 ANSWER	S00274	refuse		0.000
-ANSWER	S00275	guess	15	0.952
+ANSWER	S00275	guess	15	0.959
 ANSWER	S00276	refuse		0.000
 ANSWER	S00277	refuse		0.000
 ANSWER	S00278	refuse		0.000
@@ -335,7 +336,7 @@ ANSWER	S00292	refuse		0.000
 ANSWER	S00293	fact	7	1.000
 ANSWER	S00294	refuse		0.000
 ANSWER	S00295	refuse		0.000
-ANSWER	S00296	guess	496	0.920
+ANSWER	S00296	guess	496	0.942
 ANSWER	S00297	refuse		0.000
 ANSWER	S00298	refuse		0.000
 ANSWER	S00299	refuse		0.000
@@ -384,7 +385,7 @@ ANSWER	S00341	refuse		0.000
 ANSWER	S00342	refuse		0.000
 ANSWER	S00343	refuse		0.000
 ANSWER	S00344	refuse		0.000
-ANSWER	S00345	fact	25	1.000
+ANSWER	S00345	guess	25	0.968
 ANSWER	S00346	fact	6	1.000
 ANSWER	S00347	fact	10	1.000
 ANSWER	S00348	fact	7	1.000
@@ -395,7 +396,7 @@ ANSWER	S00352	refuse		0.000
 ANSWER	S00353	fact	8	1.000
 ANSWER	S00354	refuse		0.000
 ANSWER	S00355	refuse		0.000
-ANSWER	S00356	fact	2	1.000
+ANSWER	S00356	guess	2	0.968
 ANSWER	S00357	refuse		0.000
 ANSWER	S00358	guess	4	0.989
 ANSWER	S00359	refuse		0.000
@@ -407,5 +408,5 @@ ANSWER	S00364	refuse		0.000
 ANSWER	S00365	refuse		0.000
 ANSWER	S00366	refuse		0.000
 ANSWER	S00367	refuse		0.000
-ANSWER	S00368	fact	24	1.000
+ANSWER	S00368	guess	24	0.977
 ANSWER	S00369	refuse		0.000
