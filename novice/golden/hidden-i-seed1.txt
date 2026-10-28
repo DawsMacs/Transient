@@ -1,72 +1,68 @@
 == judge ==
   role               n fact right    WRONG guess right  guess wrong   refused   right in each third of the stream
   compose           30       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
-  control          282      11.0%     0.0%        8.5%         0.4%     80.1%        19.3% ->  14.3% ->  24.8%
+  control          282      37.6%     0.0%       12.1%         0.0%     50.4%        49.4% ->  48.0% ->  51.5%
   newop            193       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
   trap             118       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
   unexplainable     82       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
-  ALL              705       4.4%     0.0%        3.4%         0.1%     92.1%         6.8% ->   6.0% ->  10.6%
+  ALL              705      15.0%     0.0%        4.8%         0.0%     80.1%        17.4% ->  20.0% ->  22.1%
 
 WRONG facts over the whole stream (must be 0): 0
 TRAPS answered (must be 0): 0
 verdict: PASS on honesty; compare coverage and the climb across the thirds
 == work ==
-refusals by reason [other, unknown word, arity, table miss, no program value, negative, inside but unsure, outside and record low]: [439, 12, 0, 198, 0, 0, 0, 0]
-channel reliability (agreed with a confident program / times it could be checked): {"teaching": (125, 125), "told": (40, 44)}
-novice: 53 groups, 3 explained by a program; 118 searches, 68856352 evaluations, 0 hit the size limit; 12 told answers narrowed the doubt; 0 words earned: ; 0 kinds explained by composition for 0 evaluations in all
+refusals by reason [other, unknown word, arity, table miss, no program value, negative, inside but unsure, outside and record low]: [278, 24, 0, 261, 0, 0, 0, 2]
+channel reliability (agreed with a confident program / times it could be checked): {"teaching": (545, 545), "told": (117, 130)}
+novice: 49 groups, 8 explained by a program; 175 searches, 101901826 evaluations, 0 hit the size limit; 21 told answers narrowed the doubt; 0 words earned: ; 0 kinds explained by composition for 0 evaluations in all
 recurrences accepted after holding part of the table out: 0 with nothing skipped, 0 only because points the refitted step gets wrong were skipped
 evaluations spent before each kind was first explained, in the order they were explained:
-  810102 1587583 5329431
+  810102 124641 1587583 5329431 2050652 13800 13808 2138522
   nadacuwe       min(z, (x + y)) (0 rival behaviors; 810102 evaluations to explain)
   wiye           table of 1
   sitalcuwe      table of 1
-  yamu           table of 1
-  yenu           table of 1
-  tivencuwe      table of 1
-  yira           table of 1
-  wayo           table of 1
-  wera           table of 1
+  tivencuwe      (x + y) (45 rival behaviors; 124641 evaluations to explain)
   resolcuwe      table of 1
   pobucuwe       div(((x * 28) + y), 4) (10 rival behaviors; 1587583 evaluations to explain)
   bamurcuwe      table of 70
   banecuwe       (max(x, 27) - min(x, 27)) (2 rival behaviors; 5329431 evaluations to explain)
-  hiselcuwe      table of 50
-  kuhorcuwe      table of 1
-  numercuwe      table of 130
+  hiselcuwe      max(x, (y + y)) (8 rival behaviors; 2050652 evaluations to explain)
+  kuhorcuwe      table of 133
+  numercuwe      x (2 rival behaviors; 13800 evaluations to explain)
   woci           table of 1
   mabecuwe       table of 1
-  yaqu           table of 1
-  rukancuwe      table of 1
-  weje           table of 1
-  jeyu           table of 1
-  rilucuwe       table of 30
+  rukancuwe      x (2 rival behaviors; 13808 evaluations to explain)
+  rilucuwe       (x + (y + y)) (2 rival behaviors; 2138522 evaluations to explain)
   milarcuwe      table of 111
   nipecuwe       table of 1
   third          table of 1
   pozircuwe      table of 1
   bottom         table of 1
-  peharcuwe      table of 1
+  peharcuwe      table of 84
   tesarcuwe      table of 1
   pikincuwe      table of 68
   savoscuwe      table of 111
-  kitecuwe       table of 32
+  kitecuwe       table of 70
   pidiscuwe      table of 1
   serarcuwe      table of 85
   bolircuwe      table of 128
-  zehincuwe      table of 27
+  zehincuwe      table of 83
   rehelcuwe      table of 70
   marocuwe       table of 70
   hagocuwe       table of 30
   vadoncuwe      table of 30
-  sebalcuwe      table of 1
+  sebalcuwe      table of 30
   zegescuwe      table of 1
   rahecuwe       table of 1
   handed         table of 1
   samorcuwe      table of 1
   simocuwe       table of 1
+  rudorcuwe      table of 1
+  nimucuwe       table of 1
   bopencuwe      table of 1
   so             table of 1
   mamocuwe       table of 1
+  pehabcuwe      table of 1
+  tibencuwe      table of 1
   rilacuwe       table of 1
   havalcuwe      table of 1
   livocuwe       table of 1
@@ -86,7 +82,7 @@ ANSWER	S00010	refuse		0.000
 ANSWER	S00011	refuse		0.000
 ANSWER	S00012	refuse		0.000
 ANSWER	S00013	refuse		0.000
-ANSWER	S00014	refuse		0.000
+ANSWER	S00014	fact	wayo cema woku	1.000
 ANSWER	S00015	refuse		0.000
 ANSWER	S00016	refuse		0.000
 ANSWER	S00017	refuse		0.000
@@ -94,7 +90,7 @@ ANSWER	S00018	refuse		0.000
 ANSWER	S00019	refuse		0.000
 ANSWER	S00020	refuse		0.000
 ANSWER	S00021	refuse		0.000
-ANSWER	S00022	refuse		0.000
+ANSWER	S00022	guess	yele cema	0.500
 ANSWER	S00023	refuse		0.000
 ANSWER	S00024	refuse		0.000
 ANSWER	S00025	refuse		0.000
@@ -108,15 +104,15 @@ ANSWER	S00032	refuse		0.000
 ANSWER	S00033	refuse		0.000
 ANSWER	S00034	refuse		0.000
 ANSWER	S00035	refuse		0.000
-ANSWER	S00036	refuse		0.000
+ANSWER	S00036	fact	63	1.000
 ANSWER	S00037	refuse		0.000
 ANSWER	S00038	refuse		0.000
 ANSWER	S00039	refuse		0.000
 ANSWER	S00040	refuse		0.000
-ANSWER	S00041	refuse		0.000
+ANSWER	S00041	guess	68	0.500
 ANSWER	S00042	refuse		0.000
 ANSWER	S00043	refuse		0.000
-ANSWER	S00044	refuse		0.000
+ANSWER	S00044	fact	22	1.000
 ANSWER	S00045	refuse		0.000
 ANSWER	S00046	refuse		0.000
 ANSWER	S00047	refuse		0.000
@@ -132,10 +128,10 @@ ANSWER	S00056	refuse		0.000
 ANSWER	S00057	refuse		0.000
 ANSWER	S00058	refuse		0.000
 ANSWER	S00059	refuse		0.000
-ANSWER	S00060	refuse		0.000
+ANSWER	S00060	fact	213	1.000
 ANSWER	S00061	refuse		0.000
 ANSWER	S00062	refuse		0.000
-ANSWER	S00063	refuse		0.000
+ANSWER	S00063	guess	69	0.666
 ANSWER	S00064	refuse		0.000
 ANSWER	S00065	refuse		0.000
 ANSWER	S00066	refuse		0.000
@@ -167,14 +163,14 @@ ANSWER	S00091	refuse		0.000
 ANSWER	S00092	refuse		0.000
 ANSWER	S00093	refuse		0.000
 ANSWER	S00094	refuse		0.000
-ANSWER	S00095	refuse		0.000
+ANSWER	S00095	fact	yira cema yenu	1.000
 ANSWER	S00096	refuse		0.000
 ANSWER	S00097	refuse		0.000
 ANSWER	S00098	refuse		0.000
 ANSWER	S00099	refuse		0.000
 ANSWER	S00100	refuse		0.000
 ANSWER	S00101	refuse		0.000
-ANSWER	S00102	refuse		0.000
+ANSWER	S00102	fact	yaqu cema wayo	1.000
 ANSWER	S00103	refuse		0.000
 ANSWER	S00104	refuse		0.000
 ANSWER	S00105	refuse		0.000
@@ -205,19 +201,19 @@ ANSWER	S00129	refuse		0.000
 ANSWER	S00130	refuse		0.000
 ANSWER	S00131	refuse		0.000
 ANSWER	S00132	refuse		0.000
-ANSWER	S00133	guess	jajo cema	0.921
+ANSWER	S00133	fact	jajo cema	1.000
 ANSWER	S00134	refuse		0.000
 ANSWER	S00135	fact	18	1.000
 ANSWER	S00136	refuse		0.000
 ANSWER	S00137	refuse		0.000
 ANSWER	S00138	fact	42	1.000
-ANSWER	S00139	refuse		0.000
+ANSWER	S00139	guess	91	0.900
 ANSWER	S00140	refuse		0.000
 ANSWER	S00141	guess	6	0.666
 ANSWER	S00142	refuse		0.000
 ANSWER	S00143	refuse		0.000
-ANSWER	S00144	refuse		0.000
-ANSWER	S00145	refuse		0.000
+ANSWER	S00144	fact	woku cema yira	1.000
+ANSWER	S00145	guess	wayo cema jajo	0.666
 ANSWER	S00146	refuse		0.000
 ANSWER	S00147	refuse		0.000
 ANSWER	S00148	refuse		0.000
@@ -228,7 +224,7 @@ ANSWER	S00152	refuse		0.000
 ANSWER	S00153	refuse		0.000
 ANSWER	S00154	refuse		0.000
 ANSWER	S00155	refuse		0.000
-ANSWER	S00156	refuse		0.000
+ANSWER	S00156	fact	wayo cema yele jajo	1.000
 ANSWER	S00157	refuse		0.000
 ANSWER	S00158	refuse		0.000
 ANSWER	S00159	refuse		0.000
@@ -238,15 +234,15 @@ ANSWER	S00162	refuse		0.000
 ANSWER	S00163	refuse		0.000
 ANSWER	S00164	refuse		0.000
 ANSWER	S00165	refuse		0.000
-ANSWER	S00166	refuse		0.000
+ANSWER	S00166	guess	yenu cema jeyu	0.777
 ANSWER	S00167	refuse		0.000
-ANSWER	S00168	guess	185	0.666
-ANSWER	S00169	refuse		0.000
+ANSWER	S00168	guess	185	0.777
+ANSWER	S00169	fact	yenu cema yaqu	1.000
 ANSWER	S00170	refuse		0.000
 ANSWER	S00171	refuse		0.000
 ANSWER	S00172	refuse		0.000
 ANSWER	S00173	refuse		0.000
-ANSWER	S00174	refuse		0.000
+ANSWER	S00174	fact	24	1.000
 ANSWER	S00175	refuse		0.000
 ANSWER	S00176	refuse		0.000
 ANSWER	S00177	refuse		0.000
@@ -261,14 +257,14 @@ ANSWER	S00185	refuse		0.000
 ANSWER	S00186	refuse		0.000
 ANSWER	S00187	refuse		0.000
 ANSWER	S00188	refuse		0.000
-ANSWER	S00189	refuse		0.000
+ANSWER	S00189	guess	246	0.900
 ANSWER	S00190	refuse		0.000
 ANSWER	S00191	refuse		0.000
 ANSWER	S00192	refuse		0.000
 ANSWER	S00193	fact	39	1.000
 ANSWER	S00194	refuse		0.000
 ANSWER	S00195	refuse		0.000
-ANSWER	S00196	refuse		0.000
+ANSWER	S00196	fact	wera cema yenu	1.000
 ANSWER	S00197	refuse		0.000
 ANSWER	S00198	refuse		0.000
 ANSWER	S00199	refuse		0.000
@@ -277,29 +273,29 @@ ANSWER	S00201	refuse		0.000
 ANSWER	S00202	refuse		0.000
 ANSWER	S00203	refuse		0.000
 ANSWER	S00204	refuse		0.000
-ANSWER	S00205	refuse		0.000
-ANSWER	S00206	refuse		0.000
+ANSWER	S00205	fact	32	1.000
+ANSWER	S00206	fact	136	1.000
 ANSWER	S00207	refuse		0.000
 ANSWER	S00208	refuse		0.000
 ANSWER	S00209	guess	199	0.750
 ANSWER	S00210	refuse		0.000
 ANSWER	S00211	refuse		0.000
-ANSWER	S00212	guess	29	0.900
+ANSWER	S00212	guess	29	0.916
 ANSWER	S00213	refuse		0.000
 ANSWER	S00214	fact	7	1.000
 ANSWER	S00215	refuse		0.000
 ANSWER	S00216	refuse		0.000
 ANSWER	S00217	refuse		0.000
-ANSWER	S00218	refuse		0.000
+ANSWER	S00218	fact	240	1.000
 ANSWER	S00219	refuse		0.000
-ANSWER	S00220	refuse		0.000
-ANSWER	S00221	refuse		0.000
+ANSWER	S00220	fact	57	1.000
+ANSWER	S00221	fact	woku cema yenu	1.000
 ANSWER	S00222	refuse		0.000
 ANSWER	S00223	refuse		0.000
 ANSWER	S00224	refuse		0.000
-ANSWER	S00225	refuse		0.000
+ANSWER	S00225	fact	99	1.000
 ANSWER	S00226	refuse		0.000
-ANSWER	S00227	refuse		0.000
+ANSWER	S00227	fact	167	1.000
 ANSWER	S00228	refuse		0.000
 ANSWER	S00229	refuse		0.000
 ANSWER	S00230	refuse		0.000
@@ -312,12 +308,12 @@ ANSWER	S00236	refuse		0.000
 ANSWER	S00237	refuse		0.000
 ANSWER	S00238	refuse		0.000
 ANSWER	S00239	refuse		0.000
-ANSWER	S00240	refuse		0.000
+ANSWER	S00240	fact	wera cema yira	1.000
 ANSWER	S00241	refuse		0.000
-ANSWER	S00242	refuse		0.000
+ANSWER	S00242	fact	240	1.000
 ANSWER	S00243	refuse		0.000
 ANSWER	S00244	refuse		0.000
-ANSWER	S00245	refuse		0.000
+ANSWER	S00245	fact	249	1.000
 ANSWER	S00246	refuse		0.000
 ANSWER	S00247	refuse		0.000
 ANSWER	S00248	refuse		0.000
@@ -325,10 +321,10 @@ ANSWER	S00249	refuse		0.000
 ANSWER	S00250	refuse		0.000
 ANSWER	S00251	refuse		0.000
 ANSWER	S00252	refuse		0.000
-ANSWER	S00253	guess	31	0.933
-ANSWER	S00254	refuse		0.000
-ANSWER	S00255	refuse		0.000
-ANSWER	S00256	refuse		0.000
+ANSWER	S00253	guess	31	0.942
+ANSWER	S00254	guess	yira cema wayo	0.916
+ANSWER	S00255	fact	121	1.000
+ANSWER	S00256	fact	woku cema weje	1.000
 ANSWER	S00257	refuse		0.000
 ANSWER	S00258	refuse		0.000
 ANSWER	S00259	refuse		0.000
@@ -354,7 +350,7 @@ ANSWER	S00278	refuse		0.000
 ANSWER	S00279	refuse		0.000
 ANSWER	S00280	refuse		0.000
 ANSWER	S00281	refuse		0.000
-ANSWER	S00282	refuse		0.000
+ANSWER	S00282	fact	yele qova cema wera	1.000
 ANSWER	S00283	refuse		0.000
 ANSWER	S00284	refuse		0.000
 ANSWER	S00285	refuse		0.000
@@ -374,20 +370,20 @@ ANSWER	S00298	refuse		0.000
 ANSWER	S00299	refuse		0.000
 ANSWER	S00300	refuse		0.000
 ANSWER	S00301	refuse		0.000
-ANSWER	S00302	refuse		0.000
+ANSWER	S00302	fact	yaqu cema yele weje	1.000
 ANSWER	S00303	refuse		0.000
 ANSWER	S00304	refuse		0.000
-ANSWER	S00305	refuse		0.000
+ANSWER	S00305	fact	yele cema qova	1.000
 ANSWER	S00306	refuse		0.000
 ANSWER	S00307	refuse		0.000
 ANSWER	S00308	refuse		0.000
 ANSWER	S00309	refuse		0.000
-ANSWER	S00310	refuse		0.000
+ANSWER	S00310	fact	weje	1.000
 ANSWER	S00311	refuse		0.000
 ANSWER	S00312	refuse		0.000
 ANSWER	S00313	refuse		0.000
 ANSWER	S00314	refuse		0.000
-ANSWER	S00315	guess	52	0.833
+ANSWER	S00315	guess	52	0.875
 ANSWER	S00316	refuse		0.000
 ANSWER	S00317	refuse		0.000
 ANSWER	S00318	refuse		0.000
@@ -397,31 +393,31 @@ ANSWER	S00321	refuse		0.000
 ANSWER	S00322	refuse		0.000
 ANSWER	S00323	refuse		0.000
 ANSWER	S00324	refuse		0.000
-ANSWER	S00325	refuse		0.000
+ANSWER	S00325	fact	334	1.000
 ANSWER	S00326	refuse		0.000
 ANSWER	S00327	refuse		0.000
 ANSWER	S00328	guess	21	0.916
 ANSWER	S00329	refuse		0.000
 ANSWER	S00330	refuse		0.000
 ANSWER	S00331	refuse		0.000
-ANSWER	S00332	refuse		0.000
+ANSWER	S00332	fact	105	1.000
 ANSWER	S00333	refuse		0.000
 ANSWER	S00334	refuse		0.000
 ANSWER	S00335	refuse		0.000
 ANSWER	S00336	refuse		0.000
 ANSWER	S00337	refuse		0.000
 ANSWER	S00338	refuse		0.000
-ANSWER	S00339	refuse		0.000
+ANSWER	S00339	fact	yele woku cema jajo	1.000
 ANSWER	S00340	refuse		0.000
 ANSWER	S00341	refuse		0.000
 ANSWER	S00342	refuse		0.000
 ANSWER	S00343	refuse		0.000
 ANSWER	S00344	refuse		0.000
-ANSWER	S00345	refuse		0.000
+ANSWER	S00345	fact	wayo cema yele woku	1.000
 ANSWER	S00346	refuse		0.000
-ANSWER	S00347	refuse		0.000
-ANSWER	S00348	refuse		0.000
-ANSWER	S00349	refuse		0.000
+ANSWER	S00347	fact	jeyu jajo	1.000
+ANSWER	S00348	fact	yele qova cema	1.000
+ANSWER	S00349	fact	yira cema jeyu	1.000
 ANSWER	S00350	refuse		0.000
 ANSWER	S00351	refuse		0.000
 ANSWER	S00352	refuse		0.000
@@ -432,9 +428,9 @@ ANSWER	S00356	refuse		0.000
 ANSWER	S00357	refuse		0.000
 ANSWER	S00358	refuse		0.000
 ANSWER	S00359	refuse		0.000
-ANSWER	S00360	refuse		0.000
+ANSWER	S00360	fact	yele weje cema jajo	1.000
 ANSWER	S00361	refuse		0.000
-ANSWER	S00362	refuse		0.000
+ANSWER	S00362	fact	jajo cema jajo	1.000
 ANSWER	S00363	refuse		0.000
 ANSWER	S00364	refuse		0.000
 ANSWER	S00365	refuse		0.000
@@ -444,7 +440,7 @@ ANSWER	S00368	fact	35	1.000
 ANSWER	S00369	refuse		0.000
 ANSWER	S00370	refuse		0.000
 ANSWER	S00371	refuse		0.000
-ANSWER	S00372	refuse		0.000
+ANSWER	S00372	fact	289	1.000
 ANSWER	S00373	refuse		0.000
 ANSWER	S00374	refuse		0.000
 ANSWER	S00375	refuse		0.000
@@ -456,7 +452,7 @@ ANSWER	S00380	refuse		0.000
 ANSWER	S00381	fact	20	1.000
 ANSWER	S00382	refuse		0.000
 ANSWER	S00383	fact	0	1.000
-ANSWER	S00384	refuse		0.000
+ANSWER	S00384	fact	18	1.000
 ANSWER	S00385	refuse		0.000
 ANSWER	S00386	refuse		0.000
 ANSWER	S00387	refuse		0.000
@@ -464,18 +460,18 @@ ANSWER	S00388	refuse		0.000
 ANSWER	S00389	refuse		0.000
 ANSWER	S00390	refuse		0.000
 ANSWER	S00391	refuse		0.000
-ANSWER	S00392	guess	64	0.942
+ANSWER	S00392	guess	64	0.960
 ANSWER	S00393	refuse		0.000
 ANSWER	S00394	refuse		0.000
 ANSWER	S00395	refuse		0.000
 ANSWER	S00396	fact	101	1.000
-ANSWER	S00397	refuse		0.000
+ANSWER	S00397	fact	woku cema jeyu weje	1.000
 ANSWER	S00398	refuse		0.000
 ANSWER	S00399	refuse		0.000
 ANSWER	S00400	refuse		0.000
 ANSWER	S00401	refuse		0.000
 ANSWER	S00402	refuse		0.000
-ANSWER	S00403	refuse		0.000
+ANSWER	S00403	fact	33	1.000
 ANSWER	S00404	refuse		0.000
 ANSWER	S00405	refuse		0.000
 ANSWER	S00406	refuse		0.000
@@ -486,15 +482,15 @@ ANSWER	S00410	refuse		0.000
 ANSWER	S00411	refuse		0.000
 ANSWER	S00412	refuse		0.000
 ANSWER	S00413	refuse		0.000
-ANSWER	S00414	refuse		0.000
-ANSWER	S00415	guess	90	0.950
+ANSWER	S00414	fact	yaqu cema jeyu weje	1.000
+ANSWER	S00415	guess	90	0.963
 ANSWER	S00416	refuse		0.000
 ANSWER	S00417	refuse		0.000
 ANSWER	S00418	refuse		0.000
 ANSWER	S00419	fact	13	1.000
 ANSWER	S00420	refuse		0.000
 ANSWER	S00421	refuse		0.000
-ANSWER	S00422	refuse		0.000
+ANSWER	S00422	guess	yele cema jeyu qova	0.900
 ANSWER	S00423	refuse		0.000
 ANSWER	S00424	refuse		0.000
 ANSWER	S00425	refuse		0.000
@@ -502,10 +498,10 @@ ANSWER	S00426	refuse		0.000
 ANSWER	S00427	refuse		0.000
 ANSWER	S00428	refuse		0.000
 ANSWER	S00429	refuse		0.000
-ANSWER	S00430	refuse		0.000
+ANSWER	S00430	fact	93	1.000
 ANSWER	S00431	refuse		0.000
 ANSWER	S00432	refuse		0.000
-ANSWER	S00433	refuse		0.000
+ANSWER	S00433	fact	qova cema jajo	1.000
 ANSWER	S00434	refuse		0.000
 ANSWER	S00435	refuse		0.000
 ANSWER	S00436	refuse		0.000
@@ -521,29 +517,29 @@ ANSWER	S00445	refuse		0.000
 ANSWER	S00446	refuse		0.000
 ANSWER	S00447	refuse		0.000
 ANSWER	S00448	refuse		0.000
-ANSWER	S00449	guess	qova cema jajo	0.931
+ANSWER	S00449	fact	qova cema	1.000
 ANSWER	S00450	refuse		0.000
 ANSWER	S00451	refuse		0.000
 ANSWER	S00452	refuse		0.000
-ANSWER	S00453	refuse		0.000
+ANSWER	S00453	fact	wera cema yele woku	1.000
 ANSWER	S00454	refuse		0.000
 ANSWER	S00455	refuse		0.000
-ANSWER	S00456	refuse		0.000
+ANSWER	S00456	fact	9	1.000
 ANSWER	S00457	refuse		0.000
 ANSWER	S00458	refuse		0.000
 ANSWER	S00459	refuse		0.000
 ANSWER	S00460	refuse		0.000
 ANSWER	S00461	fact	15	1.000
-ANSWER	S00462	refuse		0.000
+ANSWER	S00462	fact	wayo cema woku	1.000
 ANSWER	S00463	refuse		0.000
 ANSWER	S00464	refuse		0.000
 ANSWER	S00465	refuse		0.000
-ANSWER	S00466	refuse		0.000
+ANSWER	S00466	fact	yele qova cema weje	1.000
 ANSWER	S00467	refuse		0.000
 ANSWER	S00468	guess	113	0.759
-ANSWER	S00469	refuse		0.000
+ANSWER	S00469	guess	146	0.933
 ANSWER	S00470	refuse		0.000
-ANSWER	S00471	refuse		0.000
+ANSWER	S00471	fact	344	1.000
 ANSWER	S00472	refuse		0.000
 ANSWER	S00473	refuse		0.000
 ANSWER	S00474	refuse		0.000
@@ -557,10 +553,10 @@ ANSWER	S00481	refuse		0.000
 ANSWER	S00482	refuse		0.000
 ANSWER	S00483	fact	112	1.000
 ANSWER	S00484	refuse		0.000
-ANSWER	S00485	refuse		0.000
+ANSWER	S00485	fact	203	1.000
 ANSWER	S00486	refuse		0.000
 ANSWER	S00487	refuse		0.000
-ANSWER	S00488	refuse		0.000
+ANSWER	S00488	fact	144	1.000
 ANSWER	S00489	refuse		0.000
 ANSWER	S00490	refuse		0.000
 ANSWER	S00491	refuse		0.000
@@ -579,7 +575,7 @@ ANSWER	S00503	refuse		0.000
 ANSWER	S00504	refuse		0.000
 ANSWER	S00505	refuse		0.000
 ANSWER	S00506	refuse		0.000
-ANSWER	S00507	refuse		0.000
+ANSWER	S00507	fact	11	1.000
 ANSWER	S00508	refuse		0.000
 ANSWER	S00509	refuse		0.000
 ANSWER	S00510	guess	137	0.944
@@ -596,13 +592,13 @@ ANSWER	S00520	refuse		0.000
 ANSWER	S00521	refuse		0.000
 ANSWER	S00522	refuse		0.000
 ANSWER	S00523	refuse		0.000
-ANSWER	S00524	refuse		0.000
+ANSWER	S00524	guess	yira cema yele weje	0.933
 ANSWER	S00525	refuse		0.000
 ANSWER	S00526	refuse		0.000
-ANSWER	S00527	refuse		0.000
+ANSWER	S00527	fact	yira cema jeyu qova	1.000
 ANSWER	S00528	refuse		0.000
 ANSWER	S00529	refuse		0.000
-ANSWER	S00530	refuse		0.000
+ANSWER	S00530	fact	woku cema jeyu weje	1.000
 ANSWER	S00531	refuse		0.000
 ANSWER	S00532	refuse		0.000
 ANSWER	S00533	refuse		0.000
@@ -631,7 +627,7 @@ ANSWER	S00555	fact	6	1.000
 ANSWER	S00556	refuse		0.000
 ANSWER	S00557	refuse		0.000
 ANSWER	S00558	refuse		0.000
-ANSWER	S00559	refuse		0.000
+ANSWER	S00559	fact	wayo cema jeyu qova	1.000
 ANSWER	S00560	refuse		0.000
 ANSWER	S00561	refuse		0.000
 ANSWER	S00562	fact	49	1.000
@@ -642,7 +638,7 @@ ANSWER	S00566	refuse		0.000
 ANSWER	S00567	refuse		0.000
 ANSWER	S00568	refuse		0.000
 ANSWER	S00569	guess	30	0.968
-ANSWER	S00570	refuse		0.000
+ANSWER	S00570	fact	jajo cema yele woku	1.000
 ANSWER	S00571	refuse		0.000
 ANSWER	S00572	refuse		0.000
 ANSWER	S00573	refuse		0.000
@@ -665,7 +661,7 @@ ANSWER	S00589	refuse		0.000
 ANSWER	S00590	refuse		0.000
 ANSWER	S00591	refuse		0.000
 ANSWER	S00592	refuse		0.000
-ANSWER	S00593	refuse		0.000
+ANSWER	S00593	fact	wera cema jeyu woku	1.000
 ANSWER	S00594	refuse		0.000
 ANSWER	S00595	refuse		0.000
 ANSWER	S00596	refuse		0.000
@@ -678,29 +674,29 @@ ANSWER	S00602	refuse		0.000
 ANSWER	S00603	refuse		0.000
 ANSWER	S00604	refuse		0.000
 ANSWER	S00605	fact	64	1.000
-ANSWER	S00606	refuse		0.000
+ANSWER	S00606	fact	206	1.000
 ANSWER	S00607	fact	68	1.000
-ANSWER	S00608	refuse		0.000
+ANSWER	S00608	fact	jajo cema jeyu weje	1.000
 ANSWER	S00609	fact	24	1.000
 ANSWER	S00610	refuse		0.000
-ANSWER	S00611	refuse		0.000
+ANSWER	S00611	fact	138	1.000
 ANSWER	S00612	refuse		0.000
 ANSWER	S00613	refuse		0.000
 ANSWER	S00614	refuse		0.000
-ANSWER	S00615	refuse		0.000
+ANSWER	S00615	guess	yele weje cema jajo	0.944
 ANSWER	S00616	refuse		0.000
 ANSWER	S00617	refuse		0.000
 ANSWER	S00618	refuse		0.000
 ANSWER	S00619	refuse		0.000
 ANSWER	S00620	refuse		0.000
 ANSWER	S00621	refuse		0.000
-ANSWER	S00622	refuse		0.000
-ANSWER	S00623	refuse		0.000
+ANSWER	S00622	fact	yele woku cema yaqu	1.000
+ANSWER	S00623	fact	yaqu cema yira	1.000
 ANSWER	S00624	fact	8	1.000
-ANSWER	S00625	guess	yira cema yenu	0.914
+ANSWER	S00625	fact	yira cema yenu	1.000
 ANSWER	S00626	refuse		0.000
 ANSWER	S00627	refuse		0.000
-ANSWER	S00628	refuse		0.000
+ANSWER	S00628	fact	275	1.000
 ANSWER	S00629	refuse		0.000
 ANSWER	S00630	refuse		0.000
 ANSWER	S00631	refuse		0.000
@@ -731,7 +727,7 @@ ANSWER	S00655	refuse		0.000
 ANSWER	S00656	refuse		0.000
 ANSWER	S00657	fact	116	1.000
 ANSWER	S00658	fact	9	1.000
-ANSWER	S00659	refuse		0.000
+ANSWER	S00659	fact	64	1.000
 ANSWER	S00660	refuse		0.000
 ANSWER	S00661	fact	16	1.000
 ANSWER	S00662	refuse		0.000
@@ -740,18 +736,18 @@ ANSWER	S00664	refuse		0.000
 ANSWER	S00665	refuse		0.000
 ANSWER	S00666	refuse		0.000
 ANSWER	S00667	refuse		0.000
-ANSWER	S00668	refuse		0.000
+ANSWER	S00668	fact	142	1.000
 ANSWER	S00669	refuse		0.000
-ANSWER	S00670	refuse		0.000
+ANSWER	S00670	fact	42	1.000
 ANSWER	S00671	guess	206	0.977
-ANSWER	S00672	guess	70	0.916
+ANSWER	S00672	guess	70	0.952
 ANSWER	S00673	refuse		0.000
 ANSWER	S00674	refuse		0.000
 ANSWER	S00675	refuse		0.000
 ANSWER	S00676	fact	15	1.000
 ANSWER	S00677	refuse		0.000
-ANSWER	S00678	refuse		0.000
-ANSWER	S00679	refuse		0.000
+ANSWER	S00678	fact	179	1.000
+ANSWER	S00679	fact	14	1.000
 ANSWER	S00680	refuse		0.000
 ANSWER	S00681	refuse		0.000
 ANSWER	S00682	refuse		0.000
@@ -759,21 +755,21 @@ ANSWER	S00683	refuse		0.000
 ANSWER	S00684	refuse		0.000
 ANSWER	S00685	refuse		0.000
 ANSWER	S00686	refuse		0.000
-ANSWER	S00687	refuse		0.000
+ANSWER	S00687	fact	woku cema	1.000
 ANSWER	S00688	refuse		0.000
-ANSWER	S00689	refuse		0.000
+ANSWER	S00689	fact	yele cema yenu	1.000
 ANSWER	S00690	refuse		0.000
 ANSWER	S00691	refuse		0.000
-ANSWER	S00692	refuse		0.000
+ANSWER	S00692	fact	yenu cema jeyu qova	1.000
 ANSWER	S00693	refuse		0.000
 ANSWER	S00694	refuse		0.000
 ANSWER	S00695	refuse		0.000
 ANSWER	S00696	refuse		0.000
 ANSWER	S00697	refuse		0.000
 ANSWER	S00698	refuse		0.000
-ANSWER	S00699	refuse		0.000
+ANSWER	S00699	fact	171	1.000
 ANSWER	S00700	refuse		0.000
-ANSWER	S00701	refuse		0.000
+ANSWER	S00701	fact	288	1.000
 ANSWER	S00702	refuse		0.000
 ANSWER	S00703	refuse		0.000
 ANSWER	S00704	refuse		0.000
