@@ -1,18 +1,20 @@
 == judge ==
   role               n fact right    WRONG guess right  guess wrong   refused   right in each third of the stream
   compose           64       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
-  control          248      39.5%     0.0%        8.5%         0.0%     52.0%        42.1% ->  47.4% ->  53.1%
-  newop            204       8.8%     0.0%        2.0%         0.5%     88.7%        14.9% ->   5.1% ->  13.7%
+  control          248      38.3%     0.0%        9.7%         0.0%     52.0%        42.1% ->  47.4% ->  53.1%
+  newop            204       8.3%     0.0%        2.5%         0.5%     88.7%        14.9% ->   5.1% ->  13.7%
   trap              63       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
   unexplainable     78       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
-  ALL              657      17.7%     0.0%        3.8%         0.2%     78.4%        19.6% ->  18.3% ->  26.5%
+  ALL              657      17.0%     0.0%        4.4%         0.2%     78.4%        19.6% ->  18.3% ->  26.5%
 
 WRONG facts over the whole stream (must be 0): 0
+TRAPS answered (must be 0): 0
 verdict: PASS on honesty; compare coverage and the climb across the thirds
 == work ==
 refusals by reason [other, unknown word, arity, table miss, no program value, negative, inside but unsure, outside and record low]: [302, 6, 0, 207, 0, 0, 0, 0]
 channel reliability (agreed with a confident program / times it could be checked): {"teaching": (600, 600), "told": (128, 132)}
 novice: 56 groups, 8 explained by a program; 149 searches, 50222052 evaluations, 0 hit the size limit; 24 told answers narrowed the doubt; 0 words earned: ; 0 kinds explained by composition for 0 evaluations in all
+recurrences accepted after holding part of the table out: 0 with nothing skipped, 0 only because points the refitted step gets wrong were skipped
 evaluations spent before each kind was first explained, in the order they were explained:
   81680 1423226 48730 996840 13800 520932 1198181 1145909
   ruz            table of 1
@@ -255,7 +257,7 @@ ANSWER	S00178	refuse		0.000
 ANSWER	S00179	refuse		0.000
 ANSWER	S00180	refuse		0.000
 ANSWER	S00181	guess	94	0.875
-ANSWER	S00182	fact	xom hir zaz hun xis	1.000
+ANSWER	S00182	guess	xom hir zaz hun xis	0.777
 ANSWER	S00183	refuse		0.000
 ANSWER	S00184	refuse		0.000
 ANSWER	S00185	refuse		0.000
@@ -394,13 +396,13 @@ ANSWER	S00317	refuse		0.000
 ANSWER	S00318	refuse		0.000
 ANSWER	S00319	refuse		0.000
 ANSWER	S00320	refuse		0.000
-ANSWER	S00321	fact	xom hir xom hun zaz	1.000
+ANSWER	S00321	guess	xom hir xom hun zaz	0.875
 ANSWER	S00322	refuse		0.000
 ANSWER	S00323	refuse		0.000
 ANSWER	S00324	refuse		0.000
 ANSWER	S00325	refuse		0.000
 ANSWER	S00326	refuse		0.000
-ANSWER	S00327	guess	xom hir kug hun bel	0.777
+ANSWER	S00327	guess	xom hir kug hun bel	0.866
 ANSWER	S00328	refuse		0.000
 ANSWER	S00329	refuse		0.000
 ANSWER	S00330	refuse		0.000
@@ -427,7 +429,7 @@ ANSWER	S00350	refuse		0.000
 ANSWER	S00351	refuse		0.000
 ANSWER	S00352	refuse		0.000
 ANSWER	S00353	guess	1	0.950
-ANSWER	S00354	fact	5	1.000
+ANSWER	S00354	guess	5	0.933
 ANSWER	S00355	refuse		0.000
 ANSWER	S00356	refuse		0.000
 ANSWER	S00357	refuse		0.000
@@ -546,7 +548,7 @@ ANSWER	S00469	refuse		0.000
 ANSWER	S00470	fact	237	1.000
 ANSWER	S00471	refuse		0.000
 ANSWER	S00472	refuse		0.000
-ANSWER	S00473	guess	big hir kug	0.866
+ANSWER	S00473	guess	big hir kug	0.904
 ANSWER	S00474	fact	39	1.000
 ANSWER	S00475	fact	68	1.000
 ANSWER	S00476	refuse		0.000
@@ -707,7 +709,7 @@ ANSWER	S00630	fact	neg hir bel hun xis	1.000
 ANSWER	S00631	refuse		0.000
 ANSWER	S00632	refuse		0.000
 ANSWER	S00633	refuse		0.000
-ANSWER	S00634	fact	85	1.000
+ANSWER	S00634	guess	85	0.944
 ANSWER	S00635	refuse		0.000
 ANSWER	S00636	refuse		0.000
 ANSWER	S00637	refuse		0.000
