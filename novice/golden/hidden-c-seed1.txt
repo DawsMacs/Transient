@@ -1,24 +1,24 @@
 == judge ==
   role               n fact right    WRONG guess right  guess wrong   refused   right in each third of the stream
   compose           78       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
-  control           56      50.0%     0.0%       17.9%         3.6%     28.6%        52.9% ->  75.0% ->  73.3%
+  control           56      51.8%     0.0%       17.9%         1.8%     28.6%        52.9% ->  75.0% ->  80.0%
   newop            170       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
   unexplainable     42       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
-  ALL              346       8.1%     0.0%        2.9%         0.6%     88.4%         7.8% ->  15.7% ->   9.6%
+  ALL              346       8.4%     0.0%        2.9%         0.3%     88.4%         7.8% ->  15.7% ->  10.4%
 
 WRONG facts over the whole stream (must be 0): 0
 verdict: PASS on honesty; compare coverage and the climb across the thirds
 == work ==
 refusals by reason [other, unknown word, arity, table miss, no program value, negative, inside but unsure, outside and record low]: [0, 0, 0, 304, 0, 0, 0, 2]
-channel reliability (agreed with a confident program / times it could be checked): {"teaching": (48, 48), "told": (30, 30)}
-novice: 23 groups, 3 explained by a program; 213 searches, 54801256 evaluations, 0 hit the size limit; 16 told answers narrowed the doubt; 0 words earned: ; 0 kinds explained by composition for 0 evaluations in all
+channel reliability (agreed with a confident program / times it could be checked): {"teaching": (48, 48), "told": (31, 31)}
+novice: 23 groups, 3 explained by a program; 149 searches, 47083916 evaluations, 0 hit the size limit; 11 told answers narrowed the doubt; 0 words earned: ; 0 kinds explained by composition for 0 evaluations in all
 recurrences accepted after holding part of the table out: 0 with nothing skipped, 0 only because points the refitted step gets wrong were skipped
 evaluations spent before each kind was first explained, in the order they were explained:
-  1542782 464688 624866
+  919880 464688 203245
   gonoketu       table of 30
-  huhorketu      ((x + x) - min(x, 12)) (24 rival behaviors; 1542782 evaluations to explain)
+  huhorketu      ((x + x) - min(x, 12)) (24 rival behaviors; 919880 evaluations to explain)
   tebanketu      min((x - min(x, (10 - 1))), 12) (0 rival behaviors; 464688 evaluations to explain)
-  dudosketu      div(((x * 3) + 3), 8) (8 rival behaviors; 624866 evaluations to explain)
+  dudosketu      div((3 + (x * 3)), 8) (0 rival behaviors; 203245 evaluations to explain)
   jehirketu      table of 29
   relisketu      table of 29
   riwalketu      table of 82
@@ -290,7 +290,7 @@ ANSWER	S00246	refuse		0.000
 ANSWER	S00247	refuse		0.000
 ANSWER	S00248	refuse		0.000
 ANSWER	S00249	refuse		0.000
-ANSWER	S00250	guess	11	0.702
+ANSWER	S00250	fact	10	1.000
 ANSWER	S00251	refuse		0.000
 ANSWER	S00252	refuse		0.000
 ANSWER	S00253	fact	4	1.000

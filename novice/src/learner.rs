@@ -27,6 +27,7 @@
 use crate::bits::{self, Cost};
 use crate::fit;
 use crate::frames::{self, Frames};
+use crate::holes;
 use crate::numerals::{self, Lexicon};
 use crate::program::{self, Expr, Found, Lib, Task};
 use crate::protocol::{Answer, System};
@@ -40,6 +41,8 @@ pub const RISK_BITS: u32 = 10;
 const MIN_POINTS: usize = 4;
 /// Constants every search may use (a hand-built choice). Later searches add the numbers that appear in the data.
 const BASE_CONSTS: [i64; 5] = [0, 1, 2, 3, 10];
+/// The most points a constant is inferred from (the parts are built a point at a time; the family is checked on all of them).
+const HOLE_POINTS: usize = 40;
 const MAX_ITEMS: usize = 200_000;
 /// How many answers a wrong source might have given instead (a hand-built guess of the size of the space of answers).
 const ANSWER_SPACE: u64 = 100;
@@ -660,7 +663,7 @@ impl Novice {
         }
         // The first blind search uses the starting operations only: every word on the alphabet makes it dearer for every kind that comes after,
         // whether or not the kind has anything to do with the word. Words are used by composition and by editing a known program.
-        if self.search_group(g, &BASE_CONSTS, &[], 7, "plain") || self.search_data_constants(g) || self.search_modulo(g) || self.search_shape(g) || self.search_fitted(g) || self.search_affine(g) {
+        if self.search_group(g, &BASE_CONSTS, &[], 7, "plain") || self.search_holes(g) || self.search_shape(g) || self.search_fitted(g) || self.search_affine(g) {
             return;
         }
     }
@@ -1338,44 +1341,19 @@ impl Novice {
         self.adopt_family(g, &inputs, &target, exprs, work, "affine")
     }
 
-    /// A kind whose answers all lie below some number may be a rule reduced modulo that number: `(k * x + c) mod m`. The modulus is nearly given
-    /// (just above the largest answer), and the rest only has to be right up to a multiple of it, which a search of five nodes can do. The
-    /// constants are the numbers in the data.
-    fn search_modulo(&mut self, g: usize) -> bool {
+    /// A program with one constant that the data fixes (a modulus, a divisor, a factor, a difference, the number a maximum is taken with), beside parts with none:
+    /// the constant is solved, not enumerated (see `holes`). It is fitted on at most `HOLE_POINTS` points spread through the data, because the parts are built point
+    /// by point; every point is checked when the family is adopted. Any number of arguments.
+    fn search_holes(&mut self, g: usize) -> bool {
         let arity = self.groups[g].arity;
-        if arity == 0 || arity > 2 {
-            return false;
-        }
         let Some((inputs, target)) = self.inputs_and_targets(g) else { return false };
-        let top = target.iter().copied().max().unwrap_or(0);
-        if target.iter().any(|&t| t < 0) || top < 2 {
+        if arity == 0 || inputs.len() < 10 {
             return false;
         }
-        let mut consts: Vec<i64> = BASE_CONSTS.to_vec();
-        if arity == 1 {
-            consts.extend(target.iter().chain(inputs.iter().flatten()).copied().filter(|c| (0..=40).contains(c)));
-        }
-        consts.sort_unstable();
-        consts.dedup();
-        for m in top + 1..=top + 3 {
-            if self.search_group_in(g, &consts, &[], 5, "modular", Some(m)) {
-                return true;
-            }
-        }
-        false
-    }
-
-    /// Unary kinds only: the numbers in the data as constants, for the programs that mention a number nobody has to be told about (a divisor).
-    fn search_data_constants(&mut self, g: usize) -> bool {
-        if self.groups[g].arity != 1 {
-            return false;
-        }
-        let Some((inputs, target)) = self.inputs_and_targets(g) else { return false };
-        let mut consts: Vec<i64> = BASE_CONSTS.to_vec();
-        consts.extend(target.iter().chain(inputs.iter().flatten()).copied().filter(|c| (0..=40).contains(c)));
-        consts.sort_unstable();
-        consts.dedup();
-        self.search_group(g, &consts, &[], 5, "data")
+        let step = inputs.len().div_ceil(HOLE_POINTS);
+        let (few_in, few_t): (Vec<Vec<i64>>, Vec<i64>) = inputs.iter().cloned().zip(target.iter().copied()).step_by(step).unzip();
+        let fitted = holes::find(&few_in, &few_t, arity);
+        self.adopt_family(g, &inputs, &target, fitted.exprs, fitted.work, "holes")
     }
 
     /// Edit the refuted programs: change a leaf or an operation, swap a constant, or wrap any part in an operation with a constant. The constants
@@ -3389,3 +3367,86 @@ mod dropped_word_tests {
         assert_eq!(n.ask("once 21 enters kuvabimo what leaves"), Answer::Fact("64".to_string()));
     }
 }
+
+#[cfg(test)]
+mod constant_tests {
+    use super::*;
+
+    /// A reproducible spread of points of `arity` numbers in 0..=top.
+    fn spread(arity: usize, n: usize, top: i64) -> Vec<Vec<i64>> {
+        let mut state = 0x2545_f491_4f6c_dd1du64;
+        let mut seen = std::collections::BTreeSet::new();
+        let mut out = Vec::new();
+        while out.len() < n {
+            let p: Vec<i64> = (0..arity)
+                .map(|_| {
+                    state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                    ((state >> 33) as i64) % (top + 1)
+                })
+                .collect();
+            if seen.insert(p.clone()) {
+                out.push(p);
+            }
+        }
+        out
+    }
+
+    /// Teach a rule of `arity` numbers at `n` points in two ways of asking, then ask a point the lessons did not have, inside the box they cover.
+    fn learns(arity: usize, n: usize, top: i64, held: &[i64], rule: impl Fn(&[i64]) -> i64) -> Answer {
+        let mut k = Novice::default();
+        let join = |p: &[i64], sep: &str| p.iter().map(i64::to_string).collect::<Vec<_>>().join(sep);
+        for p in spread(arity, n, top) {
+            let y = rule(&p).to_string();
+            k.teach(&format!("gauge sorunbimo at {} promptly", join(&p, " then ")), &y);
+            k.teach(&format!("when {} are given gauge sorunbimo", join(&p, " and ")), &y);
+        }
+        // a corner of the box, so that the question is inside what the lessons covered
+        let corner = vec![top; arity];
+        k.teach(&format!("gauge sorunbimo at {} promptly", join(&corner, " then ")), &rule(&corner).to_string());
+        k.ready();
+        k.ask(&format!("gauge sorunbimo at {} promptly", join(held, " then ")))
+    }
+
+    fn fact(a: i64) -> Answer {
+        Answer::Fact(a.to_string())
+    }
+
+    #[test]
+    fn a_sum_times_a_number_modulo_a_prime_of_three_numbers_is_found() {
+        assert_eq!(learns(3, 60, 30, &[7, 9, 11], |p| (p[0] + p[1]) * p[2] % 37), fact((7 + 9) * 11 % 37));
+        assert_eq!(learns(3, 90, 14, &[5, 6, 7], |p| (p[0] * p[1] + p[2]) % 19), fact((5 * 6 + 7) % 19));
+    }
+
+    #[test]
+    fn a_remainder_plus_a_half_and_five_times_a_number_plus_a_maximum_are_found() {
+        assert_eq!(learns(2, 60, 60, &[40, 25], |p| p[0] % 11 + p[1] / 2), fact(40 % 11 + 25 / 2));
+        assert_eq!(learns(2, 40, 30, &[12, 20], |p| 5 * p[0] + p[0].max(p[1])), fact(5 * 12 + 20));
+    }
+
+    #[test]
+    fn the_larger_of_a_remainder_and_a_quotient_is_found_with_any_modulus() {
+        assert_eq!(learns(1, 60, 90, &[71], |p| (p[0] % 6).max(p[0] / 4)), fact((71 % 6).max(71 / 4)));
+        assert_eq!(learns(1, 60, 90, &[71], |p| (p[0] % 12).max(p[0] / 4)), fact((71 % 12).max(71 / 4)));
+    }
+
+    #[test]
+    fn a_modulus_well_above_the_largest_answer_taught_is_found() {
+        // answers up to 168 or so, modulus 181
+        assert_eq!(learns(1, 40, 60, &[33], |p| (p[0] * p[0] + 3) % 181), fact((33 * 33 + 3) % 181));
+    }
+
+    #[test]
+    fn arbitrary_answers_still_give_nothing() {
+        let mut k = Novice::default();
+        let mut state = 99u64;
+        for p in spread(2, 60, 30) {
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            let y = ((state >> 33) % 90).to_string();
+            k.teach(&format!("gauge sorunbimo at {} then {} promptly", p[0], p[1]), &y);
+            k.teach(&format!("when {} and {} are given gauge sorunbimo", p[0], p[1]), &y);
+        }
+        k.ready();
+        assert_eq!(k.kinds().1, 0, "{:?}", k.kinds());
+    }
+}
+
