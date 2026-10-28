@@ -443,6 +443,24 @@ Tests: five in `numerals` (the multiplier grammar with and without minus, least 
 
 **What is still not done:** the second family of each seed (no kind reads it; only arithmetic over its numerals fixes the meaning) and the third (nothing can fix it) are not read, so controls over them stay refused; that is by design of the set and needs a different mechanism (assignments of numbers to words that explain whole kinds, as `numerals::learn` does for sums). Whether the grammars generalize to ones nobody had in view is the job of an eighth blind set; set G is now spent as a test of this change.
 
+### The eighth blind test (an eighth set, run once)
+
+An eighth set of kinds was written by a separate session that had not read Novice's code (`tools/hidden_worlds_h.py`, pull request #57): 12 hard kinds (10 new-operation, 2 composed), 15 controls, 5 arbitrary codes, and 108 trap rows per seed in 17 categories that must be refused. 19 of the 32 kinds put their numbers in as words, in six new grammars (three per seed, none a relative of the grammars of sets F and G): 7 kinds over a family whose lessons tie the words to digits, 2 that mix digits and those words inside their lessons, 5 over a family fixed only through arithmetic and 5 over a family nothing in the lessons can fix. All kinds are taught in several ways of asking; the held-out facts of 24 are asked in a taught way, an untaught one, the start of one taught way joined to the end of another, or a taught way with a filler left out, next to look-alike traps. Kinds take one, two or three numbers. 675, 672 and 675 questions. Novice at the commit frozen beforehand (`3472a80`, pull request #56; main was `d95c1b7`, which only adds the set) was run **once per seed on seeds 1 to 3, and the numbers below were written down before the kinds, the key or any reviewer's notes were read.**
+
+| seed | wrong facts | hard questions answered right as facts (205 each seed, 30 composed) | hard guesses: right / wrong | controls (277 to 280): facts / right guesses / wrong guesses / refused | groups explained by a program | evaluations | energy |
+|---|---|---|---|---|---|---|---|
+| 1 | **0** | **0** | 2 / 1 | 17.9 % / 5.0 % / 0 % / 77.1 % | 5 | 52.5 M | 14.08 J |
+| 2 | **0** | **0** | 0 / 1 | 20.6 % / 6.5 % / 0 % / 72.9 % | 5 | 47.5 M | 14.23 J |
+| 3 | **0** | **0** | 1 / 3 | 19.3 % / 5.0 % / 0.4 % / 75.4 % | 4 | 52.9 M | 10.71 J |
+
+- **Wrong facts: 0 on every seed, and 0 of 108 trap rows answered on every seed.** This is the first set written after the fixes of the sixth and seventh tests, so it is the first fresh test of them; the honesty rule held. The baby gave 56, 63 and 72 wrong facts on the same worlds.
+- **Hard kinds acquired: 0 of 12 on every seed** (no hard question answered as a fact; 3 right and 5 wrong hard guesses in all, each labeled a guess). The modulus kind of set G has no counterpart here that was acquired.
+- **Controls: facts 17.9 %, 20.6 % and 19.3 %, against 67 % on set F and about 40 % on set G after their fixes.** About three quarters of the controls were refused. The cause is not known when this is written (the new number grammars are the obvious suspect); the key is read after this paragraph.
+- Refusals are reported apart from wrong answers: 608, 596 and 602 of the questions were refused (90.1 %, 88.7 % and 89.2 %).
+- Answering is cheap now (4 to 8 mJ per question, 2.7 to 5.4 J for a seed); teaching 8.0 to 9.2 J, evaluations 47.5 to 52.9 M. The meter warned that other processes shared the machine, so the figures are upper bounds.
+
+**This set is now a development set.**
+
 ### Cost
 
 Counted evaluations (one operation applied at one point), seed 1; the work is almost all in teaching, because a told answer that a believed program already gives costs a few dozen evaluations. Every row has 0 wrong facts except where noted.
