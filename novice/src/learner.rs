@@ -189,6 +189,8 @@ pub struct Novice {
     dear_paid: Paid,
     /// Questions with no numbers (lookups, not instances of a kind): the answers each was ever given in exactly those words.
     exact: BTreeMap<String, std::collections::BTreeSet<String>>,
+    /// The words (in order) that a lesson or an unlabeled teacher has answered.
+    trusted_lookups: std::collections::BTreeSet<String>,
     /// The same, by the words of the question taken as a set: every order it was ever asked in, and every answer any of them was given.
     bags: BTreeMap<String, (std::collections::BTreeSet<String>, std::collections::BTreeSet<String>)>,
     /// Every lesson or told answer to a question without numbers (the words of the question, the answer), and what was learned from them about frames.
@@ -203,7 +205,7 @@ pub struct Novice {
 
 impl Default for Novice {
     fn default() -> Self {
-        Novice { lessons: Vec::new(), raw: Vec::new(), lesson_spoke: Vec::new(), numerals: Lexicon::default(), shapes: Arrangements::default(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], reliability: BTreeMap::new(), chain_record: (0, 0), recurrence_paid: Paid::default(), dear_paid: Paid::default(), exact: BTreeMap::new(), bags: BTreeMap::new(), lookups: Vec::new(), frames: None, frames_from: 0, shape_paid: Paid::default(), stats: Stats::default() }
+        Novice { lessons: Vec::new(), raw: Vec::new(), lesson_spoke: Vec::new(), numerals: Lexicon::default(), shapes: Arrangements::default(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], reliability: BTreeMap::new(), chain_record: (0, 0), recurrence_paid: Paid::default(), dear_paid: Paid::default(), exact: BTreeMap::new(), trusted_lookups: Default::default(), bags: BTreeMap::new(), lookups: Vec::new(), frames: None, frames_from: 0, shape_paid: Paid::default(), stats: Stats::default() }
     }
 }
 
@@ -1377,11 +1379,20 @@ impl Novice {
         }
     }
 
-    /// Keep what was said to a question with no numbers, in the words it was said in.
-    fn remember_lookup(&mut self, p: &Parsed, answer: &str) {
+    /// Keep what was said to a question with no numbers, in the words it was said in. A lesson or an unlabeled teacher is trusted; an answer from a
+    /// named source nobody has checked (a question with no numbers has no program to check it against) is kept apart and is only ever a guess.
+    fn remember_lookup(&mut self, p: &Parsed, answer: &str, trusted: bool) {
         if p.nums.is_empty() {
             let ordered = p.seq.join(" ");
+            // A second answer for words that had one contradicts what the frames were built from: they are rebuilt at once, not when enough has piled up.
+            if self.exact.get(&ordered).is_some_and(|a| !a.contains(answer)) {
+                self.frames = None;
+            }
             self.exact.entry(ordered.clone()).or_default().insert(answer.to_string());
+            if !trusted {
+                return;
+            }
+            self.trusted_lookups.insert(ordered.clone());
             let bag = self.bags.entry(bag_of(p)).or_default();
             bag.0.insert(ordered);
             bag.1.insert(answer.to_string());
@@ -1524,7 +1535,7 @@ impl Novice {
 impl System for Novice {
     fn teach(&mut self, question: &str, answer: &str) {
         let p = parse_with(question, &self.numerals);
-        self.remember_lookup(&p, answer.trim());
+        self.remember_lookup(&p, answer.trim(), true);
         if self.numerals.is_empty() {
             self.raw.push((question.to_string(), answer.trim().to_string()));
         }
@@ -1548,8 +1559,14 @@ impl System for Novice {
             // A question with no numbers is a lookup, not an instance of a kind: the words that two facts share name no kind, and the answer of
             // one must not be given for the other. It is answered only in the words it was taught or told in, and only if those never differed.
             if p.nums.is_empty() {
-                if let Some(answers) = self.exact.get(&p.seq.join(" ")) {
-                    return (answers.len() == 1).then(|| Answer::Fact(answers.iter().next().cloned().unwrap_or_default()));
+                let ordered = p.seq.join(" ");
+                if let Some(answers) = self.exact.get(&ordered) {
+                    if answers.len() != 1 {
+                        return None;
+                    }
+                    let answer = answers.iter().next().cloned().unwrap_or_default();
+                    // Said by a source nobody has checked: as sure as one unchecked statement, a guess.
+                    return Some(if self.trusted_lookups.contains(&ordered) { Answer::Fact(answer) } else { Answer::Guess(answer, 500) });
                 }
                 // The same words in an order nobody used: a guess, as sure as the lessons have earned (two orders that agreed every time so far
                 // make a good guess, never a fact), and none at all if any order of these words was ever given another answer.
@@ -1677,7 +1694,7 @@ impl System for Novice {
         let p = parse_with(question, &self.numerals);
         let truth = self.as_number(truth.trim()).0;
         let truth = truth.as_str();
-        self.remember_lookup(&p, truth);
+        self.remember_lookup(&p, truth, source.is_none());
         if let Some(said) = self.said.remove(question) {
             if let (Some(gi), Some(a)) = (said.chain_of, said.answer.as_ref()) {
                 self.chain_record.1 += 1;
@@ -2567,6 +2584,43 @@ mod recurrence_tests {
         assert_eq!(n.ask("what is bumpyarn nine"), Answer::Refuse);
         assert_eq!(fact(&n.ask("tehayarn of sixty three")), Some("63"));
         assert_eq!(n.ask("tehayarn of 63"), Answer::Refuse);
+    }
+
+    #[test]
+    fn a_correction_of_a_word_only_fact_is_not_hidden_by_the_cached_frames() {
+        // Eight facts each taught in two wordings make "what" a frame word; a ninth, taught in one wording, is then also answered in the other.
+        let mut n = Novice::default();
+        for i in 0..8 {
+            n.teach(&format!("item{i} kind"), &format!("answer{i}"));
+            n.teach(&format!("what item{i} kind"), &format!("answer{i}"));
+        }
+        n.teach("what target kind", "red");
+        n.ready();
+        assert_eq!(fact(&n.ask("target what kind")), Some("red"));
+        assert_eq!(fact(&n.ask("what target kind")), Some("red"));
+        n.told("what target kind", "blue", None);
+        // The exact wording sees the contradiction; the other wording must not keep stating the old answer as a fact.
+        assert_eq!(n.ask("what target kind"), Answer::Refuse);
+        assert!(fact(&n.ask("target what kind")).is_none(), "a contradicted fact is not a fact in another wording");
+    }
+
+    #[test]
+    fn a_word_only_answer_from_one_source_nobody_has_checked_is_a_guess_not_a_fact() {
+        let mut n = Novice::default();
+        n.teach("color of stone", "grey");
+        n.ready();
+        assert_eq!(n.ask("color of pebble"), Answer::Refuse);
+        n.told("color of pebble", "red", Some("untrusted"));
+        match n.ask("color of pebble") {
+            Answer::Guess(a, p) => {
+                assert_eq!(a, "red");
+                assert!(p < 900, "{p}");
+            }
+            other => panic!("expected a guess, got {}", answer_text(&other)),
+        }
+        // What a teacher says with no source, or what a lesson says, is still a fact.
+        n.told("color of leaf", "green", None);
+        assert_eq!(fact(&n.ask("color of leaf")), Some("green"));
     }
 
     fn spelled(n: usize) -> String {
