@@ -485,6 +485,25 @@ An outside review (read after the eighth blind numbers were recorded) listed thr
 
 93 Novice tests, 155 baby tests, goldens regenerated (the work account has a new line, the judge table a new line, and the coverage moves of item 1).
 
+### The first experience-curve pilot (Novice only)
+
+The review asked for the missing curve: what the system can do, and what it costs, as experience grows. `tools/experience_curve.py EXAM_DIR` is a first, small version for the hidden-worlds exams. The probe bank is the last third of the stream, never told. A fresh system is taught the lessons, asked (and told, or only asked) a prefix of the stream, and then asked the bank; capability and package energy above the idle draw are medians over repetitions. Honest limits: Novice only (the baby arm and a deep-copy of states are not built), package energy with the driver's own work in it, a few hundred questions per bank, hidden-worlds only, two repetitions in the numbers below.
+
+**Experience as stream items (set G seed 1, 2 repetitions).** Right answers on the 195 eligible bank questions: 55 with no stream, 56 / 57 / 58 / 58 after a sixth, a third, a half, two thirds of the stream told, and 55 / 55 asked but not told (the control that separates learning from warmer caches). Counted evaluations 49.6 M at every checkpoint: the whole search happens when the lessons are taught, and being told the stream adds almost none. Serving the bank costs 3.5 mJ per question cold and 0.15 to 0.36 mJ warm; the cold figure is the first number-free question building the frame view (a one-time cost), not learning. So **on this set, experience in the stream buys about three right answers and does not make serving cheaper beyond warming up.**
+
+**Experience as lessons taught (the same set).**
+
+| lessons taught | right answers (of 195) | evaluations | learning J | joules per right answer, lifetime |
+|---|---|---|---|---|
+| 25 % | 39 | 13.4 M | 2.87 | 0.076 |
+| 50 % | 55 | 27.7 M | 6.07 | 0.114 |
+| 75 % | 58 | 39.2 M | 8.04 | 0.146 |
+| 100 % | 55 | 49.6 M | 10.27 | 0.197 |
+
+Capability stops growing at about half the lessons, while the work grows in proportion to them: lifetime joules per right answer rises 2.6 times. **This is not the curve the bet needs** (cost per answer falling as the system learns); here it rises, because extra lessons add search and no capability.
+
+**Where the work goes.** Of the counted evaluations, **89 to 94 % are spent on kinds that never get a program** (set G seeds 1 to 3: 89, 94 and 89 %; set H seeds 1 and 2: 89 and 90 %; set F seed 1: 92 %); the kinds that are explained cost 3 to 6 M in all. The allowance of a kind grows with its table (10,000 evaluations per table bit), so more lessons for a kind with no rule cost more and teach nothing. This is the cost of failing, and it is the lever the review's feasibility check (M6) and learned search allocation (M7) aim at; the measurement to beat is the share above at identical replies.
+
 ### Cost
 
 Counted evaluations (one operation applied at one point), seed 1; the work is almost all in teaching, because a told answer that a believed program already gives costs a few dozen evaluations. Every row has 0 wrong facts except where noted.
