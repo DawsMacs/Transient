@@ -533,6 +533,16 @@ Tests first: the policy (first turns run, a fixed share afterwards with no long 
 
 The chosen setting sits next to a cliff on these development sets (a lower share or a lower bar lost a rule), so it is a choice of safety over saving, not a tuned optimum. What would make failure cheap is a way to tell, before the search, which kinds can have a rule at all; the shadow log found none that was safe.
 
+### Digits with no zero and digits below zero: a number so far times the base plus a word's number
+
+Set H's first-family numerals on seeds 1 and 3 were bijective base 5 (digits one to five and a word of its own for zero) and balanced base 5 (digits from minus two to two); the finder's positional grammar required every digit to be a whole number from zero to the base minus one, so it read neither. `Grammar::Fold { base, least_first }` in `numerals.rs` is the more general step: a numeral is read by taking the number so far times the base and adding the next word's number, and the numbers the words stand for may be any whole numbers (a digit equal to the base, a negative digit). The same propagation fixes a word wherever an equation has only one unknown left, now allowed to give a negative value; a numeral may not begin with a digit that is not positive nor come out below zero; a number is said back by the digits (tried largest first) that reach it in the base, and only if saying back every number of the lessons reproduces what the lessons said. Tried after the positional grammars, so those still win where they fit.
+
+Tests first: bijective base 5 and balanced base 5 are found as `Fold` from a sample of 0 to 520, read and said back for numbers outside the sample but inside the range, with no number past the range; a numeral that begins with a zero digit or is below zero is no number. 100 tests.
+
+**Set H (a development set, so this is in-sample: the grammars were known from its key), seeds 1 to 3.** Control facts 35.0 % and 36.1 % on seeds 1 and 3 (were 16.1 % and 18.2 %), right guesses 10.0 % and 10.7 % (were 6.8 % and 6.1 %); seed 2 unchanged (its first family is a twenties-with-a-leftover count, which needs the step below). Wrong facts 0 and traps answered 0 on every seed. Sets F and G, A to E and the static exam: unchanged; the other nine goldens identical, set H's regenerated. Hard kinds: still 0 of 12.
+
+**Why only half of the grammars.** The twenties count ("six muna rovu ten two" for 6 * 20 + 12) is not a step of the same shape: its words do different things (add a digit, multiply by twenty, add nothing). Each word as its own step "number so far times a, plus b" covers it, and also the English-style sums, the positional digits, the multiplier words and the two grammars above as special cases. That is the next change in this direction; it needs the steps to be found, not listed (a search over small (a, b) for the words that no one-word numeral fixes), and it is a larger change than this one.
+
 ### Cost
 
 Counted evaluations (one operation applied at one point), seed 1; the work is almost all in teaching, because a told answer that a believed program already gives costs a few dozen evaluations. Every row has 0 wrong facts except where noted.
