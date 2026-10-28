@@ -34,6 +34,9 @@ pub enum Grammar {
     LeastFirst(i64),
     /// Three words, the first the least significant digit, with a radix for each place.
     Mixed([i64; 3]),
+    /// A number so far times the base plus the next word's number, whatever whole numbers the words stand for (digits from one to the base, as in a
+    /// numeration with no zero digit, or from minus a few to a few), the first word the most significant digit unless `least_first`.
+    Fold { base: i64, least_first: bool },
     /// A word for each digit, a word for the base and one for its square that multiply the digit word before them (none means one), the parts added
     /// ("two ten three" is 23); `minus_from` is the first last digit that is said as the next ten minus what is missing (0: no such word).
     Multiplier { base: i64, minus_from: i64 },
@@ -59,6 +62,25 @@ pub struct Family {
 
 fn pow(b: i64, e: usize) -> i64 {
     (0..e).fold(1i64, |acc, _| acc.saturating_mul(b))
+}
+
+/// The digits, least significant first, of `n` in `base` using only the `digits` (tried in the order given), at most `depth` of them.
+fn fold_digits(n: i64, base: i64, digits: &[i64], depth: usize) -> Option<Vec<i64>> {
+    if n == 0 {
+        return Some(Vec::new());
+    }
+    if depth == 0 {
+        return None;
+    }
+    for &d in digits {
+        if (n - d).rem_euclid(base) == 0 {
+            if let Some(mut tail) = fold_digits((n - d) / base, base, digits, depth - 1) {
+                tail.insert(0, d);
+                return Some(tail);
+            }
+        }
+    }
+    None
 }
 
 impl Family {
@@ -88,6 +110,18 @@ impl Family {
                 let d = self.get(w)?;
                 (d < b).then(|| acc.checked_add(d.checked_mul(pow(b, i))?)).flatten()
             }),
+            Grammar::Fold { base, least_first } => {
+                let mut digits: Vec<i64> = run.iter().map(|w| self.get(w)).collect::<Option<_>>()?;
+                if least_first {
+                    digits.reverse();
+                }
+                // (no numeral begins with a digit that is not a positive number)
+                if digits.len() > 1 && digits[0] <= 0 {
+                    return None;
+                }
+                let v = digits.iter().try_fold(0i64, |acc, d| acc.checked_mul(base)?.checked_add(*d))?;
+                (v >= 0).then_some(v)
+            }
             Grammar::Mixed(r) => {
                 if run.len() != 3 {
                     return None;
@@ -171,6 +205,21 @@ impl Family {
                 Some(out.join(" "))
             }
             Grammar::Positional(b) => say(digits_msd(b).into_iter().rev().collect()),
+            Grammar::Fold { base, least_first } => {
+                if n == 0 {
+                    return self.word_for(0);
+                }
+                let mut digits: Vec<i64> = self.values.values().copied().collect::<BTreeSet<_>>().into_iter().collect();
+                digits.sort_by_key(|d| (std::cmp::Reverse(d.abs()), std::cmp::Reverse(*d)));
+                let mut least_first_digits = fold_digits(n, base, &digits, self.max_len + 1)?;
+                if least_first_digits.last().is_none_or(|d| *d <= 0) {
+                    return None;
+                }
+                if !least_first {
+                    least_first_digits.reverse();
+                }
+                say(least_first_digits)
+            }
             Grammar::LeastFirst(b) => say(digits_msd(b)),
             Grammar::Mixed(r) => {
                 let (d0, rest) = (n % r[0], n / r[0]);
@@ -457,6 +506,7 @@ fn places(grammar: Grammar, len: usize) -> Option<Vec<(i64, i64)>> {
         Grammar::Positional(b) => Some((0..len).map(|i| (pow(b, len - 1 - i), b)).collect()),
         Grammar::LeastFirst(b) => Some((0..len).map(|i| (pow(b, i), b)).collect()),
         Grammar::Mixed(r) => (len == 3).then(|| vec![(1, r[0]), (r[0], r[1]), (r[0] * r[1], r[2])]),
+        Grammar::Fold { base, least_first } => Some((0..len).map(|i| (pow(base, if least_first { i } else { len - 1 - i }), i64::MAX)).collect()),
         _ => None,
     }
 }
@@ -465,6 +515,7 @@ fn places(grammar: Grammar, len: usize) -> Option<Vec<(i64, i64)>> {
 /// by fixing a word wherever an equation has only one word left that is not fixed. None if an equation fails or a word would need a number that is not
 /// whole, below zero or too large for its place.
 fn fix_runs(equations: &[(Vec<String>, i64)], grammar: Grammar) -> Option<BTreeMap<String, i64>> {
+    let signed = matches!(grammar, Grammar::Fold { .. });
     let mut known: BTreeMap<String, i64> = BTreeMap::new();
     loop {
         let mut changed = false;
@@ -490,7 +541,7 @@ fn fix_runs(equations: &[(Vec<String>, i64)], grammar: Grammar) -> Option<BTreeM
             }
             let weight: i64 = open.iter().map(|&i| w[i].0).sum();
             let rest = n - sum;
-            if rest < 0 || rest % weight != 0 {
+            if (rest < 0 && !signed) || rest % weight != 0 {
                 return None;
             }
             let v = rest / weight;
@@ -623,6 +674,7 @@ pub fn learn_reading(lessons: &[(String, String)]) -> Lexicon {
         let weighted = std::iter::once(Grammar::Additive)
             .chain((2..=MAX_BASE).map(Grammar::Positional))
             .chain((2..=MAX_BASE).map(Grammar::LeastFirst))
+            .chain((2..=MAX_BASE).flat_map(|b| [Grammar::Fold { base: b, least_first: false }, Grammar::Fold { base: b, least_first: true }]))
             .chain(equations.iter().all(|(r, _)| r.len() == 3).then(|| (2..=MAX_BASE).flat_map(|a| (2..=MAX_BASE).flat_map(move |b| (2..=MAX_BASE).map(move |c| Grammar::Mixed([a, b, c]))))).into_iter().flatten());
         for grammar in weighted {
             if let Some(values) = fix_runs(&equations, grammar) {
@@ -967,5 +1019,63 @@ mod tests {
         // 300 is three digits in base 7; four words were never shown.
         assert_eq!(lexicon.value_of_text("pel pel pel"), Some((1 + 7 + 49, 0)));
         assert_eq!(lexicon.value_of_text("pel pel pel pel"), None);
+    }
+
+    /// Bijective base 5, the most significant digit first: digits one to five (no zero digit), and a word of its own for zero.
+    fn bijective5(n: usize) -> String {
+        let digit = ["vada", "pisi", "nugi", "metu", "mobo", "hoko"];
+        if n == 0 {
+            return digit[0].to_string();
+        }
+        let (mut rest, mut out) = (n, Vec::new());
+        while rest > 0 {
+            let d = (rest - 1) % 5 + 1;
+            out.push(digit[d]);
+            rest = (rest - d) / 5;
+        }
+        out.reverse();
+        out.join(" ")
+    }
+
+    /// Balanced base 5, the most significant digit first: digits from minus two to two.
+    fn balanced5(n: usize) -> String {
+        let digit = ["lazu", "guse", "voko", "nona", "tera"];
+        if n == 0 {
+            return digit[2].to_string();
+        }
+        let (mut rest, mut out) = (n as i64, Vec::new());
+        while rest != 0 {
+            let r = rest.rem_euclid(5);
+            let d = if r > 2 { r - 5 } else { r };
+            out.push(digit[(d + 2) as usize]);
+            rest = (rest - d) / 5;
+        }
+        out.reverse();
+        out.join(" ")
+    }
+
+    #[test]
+    fn digits_with_no_zero_or_with_negative_ones_are_found_as_steps_of_a_number_so_far() {
+        for (name, spell, fold) in [("bijective", bijective5 as fn(usize) -> String, "bijective"), ("balanced", balanced5, "balanced")] {
+            let lexicon = learn_reading(&reading("unspellyarn", spell, 520));
+            assert_eq!(lexicon.families(), 1, "{fold}");
+            assert_eq!(lexicon.grammar(0), Grammar::Fold { base: 5, least_first: false }, "{name}");
+            for k in [0usize, 1, 5, 6, 17, 124, 427, 519] {
+                assert_eq!(lexicon.value_of_text(&spell(k)), Some((k as i64, 0)), "{name} {k} = {}", spell(k));
+            }
+            // Said back, and not past the range the lessons showed.
+            for k in [0usize, 3, 26, 301, 519] {
+                assert_eq!(lexicon.speak(0, k as i64).as_deref(), Some(spell(k).as_str()), "{name} {k}");
+            }
+            assert_eq!(lexicon.speak(0, 521), None);
+        }
+    }
+
+    #[test]
+    fn a_numeral_that_begins_with_a_zero_digit_or_comes_out_below_zero_is_no_number() {
+        let lexicon = learn_reading(&reading("unspellyarn", balanced5, 520));
+        // "voko nona" is a zero digit followed by a one; "lazu" alone would be minus two, which is not a number the lessons can mean.
+        assert_eq!(lexicon.value_of_text("voko nona"), None);
+        assert_eq!(lexicon.value_of_text("lazu"), None);
     }
 }
