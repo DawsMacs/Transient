@@ -13,6 +13,8 @@ pub struct Parsed {
     pub seq: Vec<String>,
     /// The question as an arrangement: its words in order, repeats kept, each number (a run of number words is one) as "#".
     pub shape: Vec<String>,
+    /// For each number, in order, the form it was written in: 0 for digits, 1 and up for a family of number words.
+    pub forms: Vec<u8>,
     pub nums: Vec<i64>,
 }
 
@@ -26,30 +28,37 @@ pub fn parse(question: &str) -> Parsed {
 pub fn parse_with(question: &str, numerals: &Lexicon) -> Parsed {
     let mut words: Vec<String> = Vec::new();
     let mut seq: Vec<String> = Vec::new();
-    let mut shape: Vec<String> = Vec::new();
     let mut nums = Vec::new();
+    let mut forms: Vec<u8> = Vec::new();
+    let mut shape: Vec<String> = Vec::new();
+    // A run of words of one family that make a number together; a run that does not make a number is words after all.
     let mut run: Vec<String> = Vec::new();
-    let mut word = |w: String, words: &mut Vec<String>, seq: &mut Vec<String>| {
+    let mut family = 0usize;
+    fn word(w: String, words: &mut Vec<String>, seq: &mut Vec<String>, shape: &mut Vec<String>) {
         if !words.contains(&w) {
             words.push(w.clone());
         }
-        seq.push(w);
-    };
-    // A run that does not make a number is words after all.
-    let flush = |run: &mut Vec<String>, nums: &mut Vec<i64>, words: &mut Vec<String>, seq: &mut Vec<String>, word: &mut dyn FnMut(String, &mut Vec<String>, &mut Vec<String>)| {
+        seq.push(w.clone());
+        shape.push(w);
+    }
+    fn flush(run: &mut Vec<String>, family: usize, numerals: &Lexicon, nums: &mut Vec<i64>, forms: &mut Vec<u8>, words: &mut Vec<String>, seq: &mut Vec<String>, shape: &mut Vec<String>) {
         if run.is_empty() {
             return;
         }
-        match numerals.value_of(run) {
-            Some(n) => nums.push(n),
+        match numerals.value_of_run(family, run) {
+            Some(n) => {
+                nums.push(n);
+                forms.push(family as u8 + 1);
+                shape.push("#".to_string());
+            }
             None => {
                 for w in run.drain(..) {
-                    word(w, words, seq);
+                    word(w, words, seq, shape);
                 }
             }
         }
         run.clear();
-    };
+    }
     for raw in question.split_whitespace() {
         let tok = raw.trim_matches(|c: char| matches!(c, '?' | ',' | '.' | '!' | ';' | ':'));
         if tok.is_empty() {
@@ -57,60 +66,30 @@ pub fn parse_with(question: &str, numerals: &Lexicon) -> Parsed {
         }
         let lower = tok.to_lowercase();
         if tok.len() <= 9 && tok.bytes().all(|b| b.is_ascii_digit()) {
-            flush(&mut run, &mut nums, &mut words, &mut seq, &mut word);
+            flush(&mut run, family, numerals, &mut nums, &mut forms, &mut words, &mut seq, &mut shape);
             nums.push(tok.parse().unwrap_or(0));
-        } else if let Some(n) = numerals.get(&lower) {
-            if numerals.grammar() == Grammar::Single {
+            forms.push(0);
+            shape.push("#".to_string());
+        } else if let Some((f, n)) = numerals.owner(&lower) {
+            if numerals.grammar(f) == Grammar::Single {
+                flush(&mut run, family, numerals, &mut nums, &mut forms, &mut words, &mut seq, &mut shape);
                 nums.push(n);
+                forms.push(f as u8 + 1);
+                shape.push("#".to_string());
             } else {
+                if !run.is_empty() && f != family {
+                    flush(&mut run, family, numerals, &mut nums, &mut forms, &mut words, &mut seq, &mut shape);
+                }
+                family = f;
                 run.push(lower);
             }
         } else {
-            flush(&mut run, &mut nums, &mut words, &mut seq, &mut word);
-            word(lower, &mut words, &mut seq);
+            flush(&mut run, family, numerals, &mut nums, &mut forms, &mut words, &mut seq, &mut shape);
+            word(lower, &mut words, &mut seq, &mut shape);
         }
     }
-    flush(&mut run, &mut nums, &mut words, &mut seq, &mut word);
-    Parsed { words, seq, shape: arrangement(question, numerals), nums }
-}
-
-/// Words in order with every number as "#" (a run of number words counts once, and only if it makes a number).
-fn arrangement(question: &str, numerals: &Lexicon) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    let mut run: Vec<String> = Vec::new();
-    let flush = |run: &mut Vec<String>, out: &mut Vec<String>| {
-        if run.is_empty() {
-            return;
-        }
-        if numerals.value_of(run).is_some() {
-            out.push("#".to_string());
-        } else {
-            out.append(run);
-        }
-        run.clear();
-    };
-    for raw in question.split_whitespace() {
-        let tok = raw.trim_matches(|c: char| matches!(c, '?' | ',' | '.' | '!' | ';' | ':'));
-        if tok.is_empty() {
-            continue;
-        }
-        let lower = tok.to_lowercase();
-        if tok.len() <= 9 && tok.bytes().all(|b| b.is_ascii_digit()) {
-            flush(&mut run, &mut out);
-            out.push("#".to_string());
-        } else if numerals.get(&lower).is_some() {
-            if numerals.grammar() == Grammar::Single {
-                out.push("#".to_string());
-            } else {
-                run.push(lower);
-            }
-        } else {
-            flush(&mut run, &mut out);
-            out.push(lower);
-        }
-    }
-    flush(&mut run, &mut out);
-    out
+    flush(&mut run, family, numerals, &mut nums, &mut forms, &mut words, &mut seq, &mut shape);
+    Parsed { words, seq, shape, forms, nums }
 }
 
 #[cfg(test)]

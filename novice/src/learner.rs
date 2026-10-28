@@ -92,7 +92,9 @@ struct Group {
     /// Whether any answer it has been given was negative. A negative result for a kind that never showed one is not stated.
     negative: bool,
     /// The answers of this kind were number words: a number it works out is spoken as the word for it, or not at all.
-    speaks: bool,
+    speaks: Option<usize>,
+    /// The forms the numbers of its lessons were written in (digits or a family of number words), one entry per argument, as the lessons had them.
+    forms: std::collections::BTreeSet<Vec<u8>>,
 }
 
 struct Said {
@@ -162,7 +164,7 @@ pub struct Novice {
     /// The lessons as they were said (question, answer), kept until the words that are numbers have been looked for.
     raw: Vec<(String, String)>,
     /// Whether the answer of each lesson was a number word that was turned into a number.
-    lesson_spoke: Vec<bool>,
+    lesson_spoke: Vec<Option<usize>>,
     /// The words that are numbers (learned: see `numerals`), and the word for each number the lessons have a word for.
     numerals: Lexicon,
     /// The arrangements (words in order, numbers as "#", the kind's own word as "K") that some lesson was taught in, for any kind.
@@ -1347,20 +1349,18 @@ impl Novice {
     }
 
     /// An answer that is the word of a number, as that number (and whether it was); any other answer as it is.
-    fn as_number(&self, answer: &str) -> (String, bool) {
+    fn as_number(&self, answer: &str) -> (String, Option<usize>) {
         match self.numerals.value_of_text(answer) {
-            Some(n) => (n.to_string(), true),
-            None => (answer.to_string(), false),
+            Some((n, family)) => (n.to_string(), Some(family)),
+            None => (answer.to_string(), None),
         }
     }
 
     /// What a kind whose answers are number words says: the word for the number, and nothing if no lesson has a word for it.
     fn speak(&mut self, p: &Parsed, reply: Answer) -> Answer {
         let Some(gi) = self.group_of(p) else { return reply };
-        if self.numerals.is_empty() || !self.groups[gi].speaks {
-            return reply;
-        }
-        let word = |this: &Self, a: &str| a.parse::<i64>().ok().and_then(|n| this.numerals.speak(n));
+        let Some(family) = self.groups[gi].speaks else { return reply };
+        let word = |this: &Self, a: &str| a.parse::<i64>().ok().and_then(|n| this.numerals.speak(family, n));
         match reply {
             Answer::Fact(a) => word(self, &a).map_or_else(|| { self.why[0] += 1; Answer::Refuse }, Answer::Fact),
             Answer::Guess(a, pm) => word(self, &a).map_or_else(|| { self.why[0] += 1; Answer::Refuse }, |w| Answer::Guess(w, pm)),
@@ -1416,12 +1416,12 @@ impl Novice {
         // Words that are numbers, if the lessons say so: every lesson is read again with them as numbers, and the kinds of numbers are then kinds of
         // numbers, learned as any other.
         if self.numerals.is_empty() && !self.raw.is_empty() {
-            let single = numerals::learn(&self.raw);
-            let found = if single.is_empty() { numerals::learn_reading(&self.raw) } else { Lexicon::single(single) };
+            let reading = numerals::learn_reading(&self.raw);
+            let found = if reading.is_empty() { Lexicon::single(numerals::learn(&self.raw)) } else { reading };
             let raw = std::mem::take(&mut self.raw);
             if !found.is_empty() {
                 if std::env::var_os("NOVICE_TRACE").is_some() {
-                    eprintln!("numerals {:?} {} words", found.grammar(), found.len());
+                    eprintln!("numerals {} families, {} words", found.families(), found.len());
                 }
                 self.numerals = found;
                 self.lessons.clear();
@@ -1435,7 +1435,7 @@ impl Novice {
         }
         let lessons = std::mem::take(&mut self.lessons);
         let mut spoke = std::mem::take(&mut self.lesson_spoke);
-        spoke.resize(lessons.len(), false);
+        spoke.resize(lessons.len(), None);
         for (p, _) in &lessons {
             for w in &p.words {
                 *self.df.entry(w.clone()).or_insert(0) += 1;
@@ -1471,15 +1471,18 @@ impl Novice {
             let g = match self.by_key.get(&key) {
                 Some(&g) => g,
                 None => {
-                    self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, enumerated_with: 0, recurrence_tried: 0, spent: 0, explained_at: None, table: Default::default(), claims: BTreeMap::new(), disputed: Default::default(), record: (0, 0), chain_record: (0, 0), negative: false, speaks: false });
+                    self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, enumerated_with: 0, recurrence_tried: 0, spent: 0, explained_at: None, table: Default::default(), claims: BTreeMap::new(), disputed: Default::default(), record: (0, 0), chain_record: (0, 0), negative: false, speaks: None, forms: Default::default() });
                     self.by_key.insert(key, self.groups.len() - 1);
                     self.groups.len() - 1
                 }
             };
-            self.groups[g].speaks |= spoke[i];
+            if spoke[i].is_some() {
+                self.groups[g].speaks = spoke[i];
+            }
             let arrangement = Self::arrangement(p, &self.groups[g].key);
             self.shapes.add(arrangement);
             if self.groups[g].arity == p.nums.len() {
+                self.groups[g].forms.insert(p.forms.clone());
                 self.add_point(g, &p.nums, answer);
                 self.groups[g].claims.entry(p.nums.clone()).or_default().insert(TEACHING.to_string(), answer.clone());
                 if let Ok(v) = answer.parse::<i64>() {
@@ -1583,6 +1586,10 @@ impl System for Novice {
             // The words of a question in an arrangement that no lesson made up from known parts, for this kind or any other, have no known reading,
             // whatever the numbers say.
             if !self.shapes.known(&Self::arrangement(&p, &g.key)) {
+                return None;
+            }
+            // Numbers written in a form the kind was never taught with (digits for a kind of number words, or the other way round) are not read as theirs.
+            if !g.forms.is_empty() && !g.forms.contains(&p.forms) {
                 return None;
             }
             if g.arity != p.nums.len() {
@@ -1689,7 +1696,7 @@ impl System for Novice {
             None => {
                 // A kind word it has never met names a new group.
                 let Some(key) = p.words.iter().filter(|w| !self.df.contains_key(*w)).min().cloned() else { return };
-                self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, enumerated_with: 0, recurrence_tried: 0, spent: 0, explained_at: None, table: Default::default(), claims: BTreeMap::new(), disputed: Default::default(), record: (0, 0), chain_record: (0, 0), negative: false, speaks: false });
+                self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, enumerated_with: 0, recurrence_tried: 0, spent: 0, explained_at: None, table: Default::default(), claims: BTreeMap::new(), disputed: Default::default(), record: (0, 0), chain_record: (0, 0), negative: false, speaks: None, forms: Default::default() });
                 self.by_key.insert(key, self.groups.len() - 1);
                 self.groups.len() - 1
             }
@@ -1705,6 +1712,9 @@ impl System for Novice {
         let channel = source.unwrap_or("told").to_string();
         let value = truth.parse::<i64>().ok();
         let again = self.groups[g].claims.get(&p.nums).is_some_and(|c| c.iter().any(|(ch, a)| Self::family(ch) == Self::family(&channel) && a == truth));
+        if self.groups[g].forms.is_empty() {
+            self.groups[g].forms.insert(p.forms.clone());
+        }
         self.add_point(g, &p.nums, truth);
         if again {
             return;
@@ -2537,6 +2547,23 @@ mod recurrence_tests {
         // A suffix before the core, or a core that was never taught, is not a known way of asking.
         assert_eq!(n.ask("equals hopyarn 9"), Answer::Refuse);
         assert_eq!(n.ask("what is 9 hopyarn equals"), Answer::Refuse);
+    }
+
+    #[test]
+    fn a_kind_taught_with_numbers_in_one_form_is_not_asked_in_another() {
+        // A kind taught with written numbers is refused for number words, and the other way round, whatever the numbers say.
+        let mut n = Novice::default();
+        for a in 0..=99 {
+            for template in ["what is {s} tehayarn", "tehayarn of {s}", "please tehayarn {s}"] {
+                n.teach(&template.replace("{s}", &spelled(a)), &a.to_string());
+            }
+        }
+        teach_plus(&mut n, "bumpyarn", 3, &["what is {w} {a}", "{w} {a}"]);
+        n.ready();
+        assert_eq!(fact(&n.ask("what is bumpyarn 9")), Some("12"));
+        assert_eq!(n.ask("what is bumpyarn nine"), Answer::Refuse);
+        assert_eq!(fact(&n.ask("tehayarn of sixty three")), Some("63"));
+        assert_eq!(n.ask("tehayarn of 63"), Answer::Refuse);
     }
 
     fn spelled(n: usize) -> String {
