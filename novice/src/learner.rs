@@ -117,6 +117,46 @@ pub struct Stats {
     pub composed: u64,
 }
 
+/// The ways of asking that lessons used, for any kind: each arrangement of words and numbers whole, and its three parts. The core runs from the first
+/// number or kind word to the last; what comes before it is the prefix and what comes after it the suffix. A new arrangement is known if its
+/// core was seen in some lesson, and its prefix and suffix are ways of starting and ending that were seen, or those with words left out ("what is"
+/// before, "equals" after, the same core in between; "which" for "which is").
+#[derive(Default)]
+struct Arrangements {
+    whole: std::collections::BTreeSet<Vec<String>>,
+    cores: std::collections::BTreeSet<Vec<String>>,
+    prefixes: std::collections::BTreeSet<Vec<String>>,
+    suffixes: std::collections::BTreeSet<Vec<String>>,
+}
+
+impl Arrangements {
+    fn parts(a: &[String]) -> Option<(Vec<String>, Vec<String>, Vec<String>)> {
+        let marked = |w: &String| w == "K" || w == "#";
+        let (first, last) = (a.iter().position(marked)?, a.iter().rposition(marked)?);
+        Some((a[..first].to_vec(), a[first..=last].to_vec(), a[last + 1..].to_vec()))
+    }
+
+    fn add(&mut self, a: Vec<String>) {
+        if let Some((p, c, s)) = Self::parts(&a) {
+            self.prefixes.insert(p);
+            self.cores.insert(c);
+            self.suffixes.insert(s);
+        }
+        self.whole.insert(a);
+    }
+
+    fn known(&self, a: &[String]) -> bool {
+        // (a part may drop words of a way of asking that was seen: "which is" before the core, "which" before it)
+        let cut = |part: &Vec<String>, seen: &std::collections::BTreeSet<Vec<String>>| {
+            seen.iter().any(|whole| {
+                let mut rest = whole.iter();
+                part.iter().all(|w| rest.any(|x| x == w))
+            })
+        };
+        self.whole.contains(a) || Self::parts(a).is_some_and(|(p, c, s)| self.cores.contains(&c) && cut(&p, &self.prefixes) && cut(&s, &self.suffixes))
+    }
+}
+
 pub struct Novice {
     lessons: Vec<(Parsed, String)>,
     /// The lessons as they were said (question, answer), kept until the words that are numbers have been looked for.
@@ -125,6 +165,8 @@ pub struct Novice {
     lesson_spoke: Vec<bool>,
     /// The words that are numbers (learned: see `numerals`), and the word for each number the lessons have a word for.
     numerals: Lexicon,
+    /// The arrangements (words in order, numbers as "#", the kind's own word as "K") that some lesson was taught in, for any kind.
+    shapes: Arrangements,
     df: BTreeMap<String, u32>,
     groups: Vec<Group>,
     by_key: BTreeMap<String, usize>,
@@ -150,6 +192,8 @@ pub struct Novice {
     /// Every lesson or told answer to a question without numbers (the words of the question, the answer), and what was learned from them about frames.
     lookups: Vec<(Vec<String>, String)>,
     frames: Option<Frames>,
+    /// How many lookups the frames were built from.
+    frames_from: usize,
     /// The same for the search with the numbers a kind's shape announces.
     shape_paid: Paid,
     pub stats: Stats,
@@ -157,7 +201,7 @@ pub struct Novice {
 
 impl Default for Novice {
     fn default() -> Self {
-        Novice { lessons: Vec::new(), raw: Vec::new(), lesson_spoke: Vec::new(), numerals: Lexicon::default(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], reliability: BTreeMap::new(), chain_record: (0, 0), recurrence_paid: Paid::default(), dear_paid: Paid::default(), exact: BTreeMap::new(), bags: BTreeMap::new(), lookups: Vec::new(), frames: None, shape_paid: Paid::default(), stats: Stats::default() }
+        Novice { lessons: Vec::new(), raw: Vec::new(), lesson_spoke: Vec::new(), numerals: Lexicon::default(), shapes: Arrangements::default(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], reliability: BTreeMap::new(), chain_record: (0, 0), recurrence_paid: Paid::default(), dear_paid: Paid::default(), exact: BTreeMap::new(), bags: BTreeMap::new(), lookups: Vec::new(), frames: None, frames_from: 0, shape_paid: Paid::default(), stats: Stats::default() }
     }
 }
 
@@ -370,6 +414,11 @@ impl Novice {
     /// The group a question belongs to: the rarest of its words that names a group.
     fn group_of(&self, p: &Parsed) -> Option<usize> {
         p.words.iter().filter_map(|w| self.by_key.get(w).map(|&g| (std::cmp::Reverse(self.groups[g].points.len()), w.clone(), g))).min().map(|(_, _, g)| g)
+    }
+
+    /// The arrangement of a question with the word that names its kind written "K".
+    fn arrangement(p: &Parsed, key: &str) -> Vec<String> {
+        p.shape.iter().map(|w| if w == key { "K".to_string() } else { w.clone() }).collect()
     }
 
     fn add_point(&mut self, g: usize, nums: &[i64], answer: &str) {
@@ -1321,7 +1370,9 @@ impl Novice {
 
     /// What the lookups say about frames, built when first needed after anything new was said.
     fn ensure_frames(&mut self) {
-        if self.frames.is_none() {
+        // Frame words change slowly: the frames are rebuilt when a twentieth more lookups have come in (and at least 25), not for every one.
+        if self.frames.is_none() || self.lookups.len() >= self.frames_from + (self.frames_from / 20).max(25) {
+            self.frames_from = self.lookups.len();
             self.frames = Some(frames::build(&self.lookups));
         }
     }
@@ -1335,7 +1386,6 @@ impl Novice {
             bag.0.insert(ordered);
             bag.1.insert(answer.to_string());
             self.lookups.push((p.seq.clone(), answer.to_string()));
-            self.frames = None;
         }
     }
 
@@ -1427,6 +1477,8 @@ impl Novice {
                 }
             };
             self.groups[g].speaks |= spoke[i];
+            let arrangement = Self::arrangement(p, &self.groups[g].key);
+            self.shapes.add(arrangement);
             if self.groups[g].arity == p.nums.len() {
                 self.add_point(g, &p.nums, answer);
                 self.groups[g].claims.entry(p.nums.clone()).or_default().insert(TEACHING.to_string(), answer.clone());
@@ -1523,6 +1575,16 @@ impl System for Novice {
                 return None;
             }
             let g = &self.groups[self.group_of(&p)?];
+            // Two words that each name a kind of their own: which kind is asked is not known, so nothing is stated.
+            let named: std::collections::BTreeSet<usize> = p.words.iter().filter_map(|w| self.by_key.get(w).copied()).collect();
+            if named.len() > 1 {
+                return None;
+            }
+            // The words of a question in an arrangement that no lesson made up from known parts, for this kind or any other, have no known reading,
+            // whatever the numbers say.
+            if !self.shapes.known(&Self::arrangement(&p, &g.key)) {
+                return None;
+            }
             if g.arity != p.nums.len() {
                 reason.set(2);
                 return None;
@@ -2436,6 +2498,45 @@ mod recurrence_tests {
         n.ready();
         // "what is K sim sim" was never taught; with "what is" in doubt it may be a guess at most, never a fact.
         assert!(fact(&n.ask("what is gokiyarn sim sim")).is_none());
+    }
+
+    /// Teach `name` (x + k) in the wordings `frames` (with {w} and {a}) over a few numbers.
+    fn teach_plus(n: &mut Novice, name: &str, k: i64, frames: &[&str]) {
+        for a in 1..=12i64 {
+            for f in frames {
+                n.teach(&f.replace("{w}", name).replace("{a}", &a.to_string()), &(a + k).to_string());
+            }
+        }
+    }
+
+    #[test]
+    fn an_arrangement_of_words_and_numbers_nobody_taught_is_refused_but_a_way_of_asking_taught_for_another_kind_is_not() {
+        let mut n = Novice::default();
+        teach_plus(&mut n, "bumpyarn", 3, &["apply {w} to {a}", "{w} {a}"]);
+        teach_plus(&mut n, "hopyarn", 5, &["the {w} of {a}", "{a} under {w}"]);
+        n.ready();
+        // Taught for this kind.
+        assert_eq!(fact(&n.ask("apply bumpyarn to 7")), Some("10"));
+        // Taught only for the other kind: the same words in the same order, so it is a way of asking, and it means the same.
+        assert_eq!(fact(&n.ask("the bumpyarn of 7")), Some("10"));
+        assert_eq!(fact(&n.ask("7 under bumpyarn")), Some("10"));
+        // The same words in an order that no lesson used for any kind: no reading is known, whatever the numbers say.
+        assert_eq!(n.ask("7 bumpyarn of"), Answer::Refuse);
+        assert_eq!(n.ask("of 7 bumpyarn"), Answer::Refuse);
+        assert_eq!(n.ask("7 to bumpyarn apply"), Answer::Refuse);
+    }
+
+    #[test]
+    fn a_prefix_and_a_suffix_that_were_each_taught_around_the_same_core_make_a_way_of_asking_that_means_the_same() {
+        let mut n = Novice::default();
+        teach_plus(&mut n, "bumpyarn", 3, &["what is {w} {a}", "{w} {a} equals"]);
+        teach_plus(&mut n, "hopyarn", 5, &["{w} {a}", "what is {w} {a}"]);
+        n.ready();
+        // "what is" was taught before this core and "equals" after it, each for some kind: together they ask the same thing.
+        assert_eq!(fact(&n.ask("what is hopyarn 9 equals")), Some("14"));
+        // A suffix before the core, or a core that was never taught, is not a known way of asking.
+        assert_eq!(n.ask("equals hopyarn 9"), Answer::Refuse);
+        assert_eq!(n.ask("what is 9 hopyarn equals"), Answer::Refuse);
     }
 
     fn spelled(n: usize) -> String {

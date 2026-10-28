@@ -11,6 +11,8 @@ pub struct Parsed {
     pub words: Vec<String>,
     /// The same words as said, repeats and order kept: "sed sed" is not "sed". Questions with no numbers are lookups by these.
     pub seq: Vec<String>,
+    /// The question as an arrangement: its words in order, repeats kept, each number (a run of number words is one) as "#".
+    pub shape: Vec<String>,
     pub nums: Vec<i64>,
 }
 
@@ -24,6 +26,7 @@ pub fn parse(question: &str) -> Parsed {
 pub fn parse_with(question: &str, numerals: &Lexicon) -> Parsed {
     let mut words: Vec<String> = Vec::new();
     let mut seq: Vec<String> = Vec::new();
+    let mut shape: Vec<String> = Vec::new();
     let mut nums = Vec::new();
     let mut run: Vec<String> = Vec::new();
     let mut word = |w: String, words: &mut Vec<String>, seq: &mut Vec<String>| {
@@ -68,7 +71,46 @@ pub fn parse_with(question: &str, numerals: &Lexicon) -> Parsed {
         }
     }
     flush(&mut run, &mut nums, &mut words, &mut seq, &mut word);
-    Parsed { words, seq, nums }
+    Parsed { words, seq, shape: arrangement(question, numerals), nums }
+}
+
+/// Words in order with every number as "#" (a run of number words counts once, and only if it makes a number).
+fn arrangement(question: &str, numerals: &Lexicon) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut run: Vec<String> = Vec::new();
+    let flush = |run: &mut Vec<String>, out: &mut Vec<String>| {
+        if run.is_empty() {
+            return;
+        }
+        if numerals.value_of(run).is_some() {
+            out.push("#".to_string());
+        } else {
+            out.append(run);
+        }
+        run.clear();
+    };
+    for raw in question.split_whitespace() {
+        let tok = raw.trim_matches(|c: char| matches!(c, '?' | ',' | '.' | '!' | ';' | ':'));
+        if tok.is_empty() {
+            continue;
+        }
+        let lower = tok.to_lowercase();
+        if tok.len() <= 9 && tok.bytes().all(|b| b.is_ascii_digit()) {
+            flush(&mut run, &mut out);
+            out.push("#".to_string());
+        } else if numerals.get(&lower).is_some() {
+            if numerals.grammar() == Grammar::Single {
+                out.push("#".to_string());
+            } else {
+                run.push(lower);
+            }
+        } else {
+            flush(&mut run, &mut out);
+            out.push(lower);
+        }
+    }
+    flush(&mut run, &mut out);
+    out
 }
 
 #[cfg(test)]
