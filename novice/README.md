@@ -513,6 +513,26 @@ The experience-curve pilot put 89 to 94 % of the counted work on kinds that neve
 - **A soft feature of the table that separates in these exams is contradicted by a positive control.** The share of answers that are all different separates the 34 rules found (at most 47 % of the answers distinct) from the failures (up to 100 %): "more than half distinct" would have rejected no rule found and saved 40 % of the recurrence work. But a doubling rule (2^x, every answer different) is found by the search today (a test), so that gate would reject a true rule: the rules found in the exams so far all have few distinct answers, which is a property of the exams, not of recurrences. Another soft feature (the agreement of the answer minus the earlier answer within classes of the number's remainder) does not separate: rules found range from 0.46 to 1.00.
 - **Conclusion:** no gate is switched on. A gate on what a cheap look at the table says is unsafe or empty; the work is spent where nothing cheap tells a failing kind from a succeeding one before the search runs. What is left is to change how much each search is allowed to spend from what the previous searches paid back (the review's learned allocation with protected exploration), measured at identical replies, and the shadow log is the instrument for it. 96 tests.
 
+### Learned allocation of the dear stages, with a protected share
+
+The shadow log (above) put the waste in the dearer stages of the recurrence search: over the 24 exam runs of sets A to H, the stages with larger steps and with two earlier values spent 423 M of the 686 M traced evaluations and won once (a two-earlier-values rule in set D); 334 of the 377 searches had no candidate even from the first stage, and those cost the dear stages 411 M. `Allocation` (in `learner.rs`) keeps a record per context (which stage, how many arguments, whether the first stage had any candidate): how often the stage was run and won. The first `MIN_RUNS` (2) turns are run; after that a stage whose estimated chance of success (wins + 1 over runs + 2) is above 30 % is run every time, and otherwise on a protected share of its turns, one in four, evenly spread. A stage that is run gets its whole allowance (before, a failing record also shrank it to a tenth, which starved the turns that were run). `NOVICE_FIXED_ALLOCATION` turns the whole thing off.
+
+Tests first: the policy (first turns run, a fixed share afterwards with no long gap, a stage that has won is not rationed), and an end-to-end fixture of 24 kinds of arbitrary answers followed by six rules that need the dear stage (each answer from the two before it, modulo ten): same replies, no more evaluations, and the late rules still found. 98 tests.
+
+**Measured at identical replies (24 runs: sets A to H, seeds 1 to 3).** Replies are byte-identical to the fixed allocation on all 24 runs, including the two-earlier-values rule of set D. The settings I tried, all at identical replies except the last:
+
+| setting | evaluations saved | late rules found after 4 / 12 / 24 failures (of 6; the fixed allocation: 6 / 0 / 0) |
+|---|---|---|
+| one turn in eight, allowance kept shrunk (min runs 2, worth 30 %) | 17 % | 0 / 0 / 0 |
+| one in eight, whole allowance when run | 7 % | 1 / 1 / 1 |
+| **one in four, whole allowance when run (chosen)** | **1 %** | **5 / 2 / 2** |
+| one in two, whole allowance when run | not run on the exams | 5 / 0 / 0 |
+| one in eight, min runs 1, worth 40 % | 23 %, but one run's replies change (set D's rule lost) | |
+
+**Result, plainly: at identical replies and with the way to late rules kept open, the saving is about 1 %, against the 25 % the review proposed as a target.** The large savings (17 to 23 %) come from rationing the stages harder, and they cost exactly what the shadow log said they would: a rule that needs a dear stage and comes after a run of failures is missed (none of six found after four failures; set D's rule lost at the most aggressive setting). What does improve is discovery: with the fixed allocation six late rules are found after four failures and none after twelve, because a failing record shrank the allowance of every later turn to a tenth; with the chosen setting two of six are still found after twelve and after twenty-four failures, because the protected turn gets the whole allowance. So the allocation moves where the work is spent and makes a late rule findable, and it does not make failure cheap. The work account of the goldens changed (counted evaluations); no reply did.
+
+The chosen setting sits next to a cliff on these development sets (a lower share or a lower bar lost a rule), so it is a choice of safety over saving, not a tuned optimum. What would make failure cheap is a way to tell, before the search, which kinds can have a rule at all; the shadow log found none that was safe.
+
 ### Cost
 
 Counted evaluations (one operation applied at one point), seed 1; the work is almost all in teaching, because a told answer that a believed program already gives costs a few dozen evaluations. Every row has 0 wrong facts except where noted.

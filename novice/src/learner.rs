@@ -270,6 +270,9 @@ pub struct Novice {
     frames_from: usize,
     /// Whether the recurrence search also logs what a feasibility check would say (`NOVICE_SHADOW`); it never acts on it.
     pub shadow_on: bool,
+    /// Whether the dear stages of the recurrence search are rationed by their record (`NOVICE_FIXED_ALLOCATION` turns it off).
+    pub learned_allocation: bool,
+    allocations: BTreeMap<(u8, usize, bool), Allocation>,
     pub shadow: Vec<ShadowRecord>,
     shadow_pending: Option<ShadowRecord>,
     /// The same for the search with the numbers a kind's shape announces.
@@ -279,7 +282,7 @@ pub struct Novice {
 
 impl Default for Novice {
     fn default() -> Self {
-        Novice { lessons: Vec::new(), raw: Vec::new(), lesson_spoke: Vec::new(), numerals: Lexicon::default(), shapes: Arrangements::default(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], reliability: BTreeMap::new(), chain_record: (0, 0), recurrence_paid: Paid::default(), dear_paid: Paid::default(), exact: BTreeMap::new(), trusted_lookups: Default::default(), bags: BTreeMap::new(), lookups: Vec::new(), frames: None, frames_from: 0, shadow_on: std::env::var_os("NOVICE_SHADOW").is_some(), shadow: Vec::new(), shadow_pending: None, shape_paid: Paid::default(), stats: Stats::default() }
+        Novice { lessons: Vec::new(), raw: Vec::new(), lesson_spoke: Vec::new(), numerals: Lexicon::default(), shapes: Arrangements::default(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], reliability: BTreeMap::new(), chain_record: (0, 0), recurrence_paid: Paid::default(), dear_paid: Paid::default(), exact: BTreeMap::new(), trusted_lookups: Default::default(), bags: BTreeMap::new(), lookups: Vec::new(), frames: None, frames_from: 0, shadow_on: std::env::var_os("NOVICE_SHADOW").is_some(), learned_allocation: std::env::var_os("NOVICE_FIXED_ALLOCATION").is_none(), allocations: BTreeMap::new(), shadow: Vec::new(), shadow_pending: None, shape_paid: Paid::default(), stats: Stats::default() }
     }
 }
 
@@ -317,6 +320,44 @@ fn probes(lo: &[i64], hi: &[i64]) -> Vec<Vec<i64>> {
     out.sort();
     out.dedup();
     out
+}
+
+/// Turns of a dear stage that are run whatever its record says, before it has one.
+const MIN_RUNS: u32 = 2;
+/// The share of the turns of a stage that keeps failing that is run anyway, in thousandths: the protected exploration (every fourth turn).
+const EXPLORE_PER_THOUSAND: u32 = 250;
+/// A stage whose estimated chance of success is above this many thousandths is not rationed.
+const WORTH_RUNNING: u64 = 300;
+
+/// The record of one dear stage of the recurrence search in one context (which stage, how many arguments, whether the first stage had produced any
+/// candidate): how often it was run and how often it won. A stage that keeps failing is run on a fixed share of its turns, evenly spread, so that a
+/// rule that needs it still comes up; one that has paid is run every time. The work is spent where it has paid, with a share kept for finding out.
+#[derive(Clone, Copy, Debug, Default)]
+struct Allocation {
+    runs: u32,
+    wins: u32,
+    credit: u32,
+}
+
+impl Allocation {
+    /// Whether the stage is run on this turn.
+    fn due(&mut self) -> bool {
+        if self.runs < MIN_RUNS || 1000 * (u64::from(self.wins) + 1) / (u64::from(self.runs) + 2) > WORTH_RUNNING {
+            self.runs += 1;
+            return true;
+        }
+        self.credit += EXPLORE_PER_THOUSAND;
+        if self.credit >= 1000 {
+            self.credit -= 1000;
+            self.runs += 1;
+            return true;
+        }
+        false
+    }
+
+    fn won(&mut self) {
+        self.wins += 1;
+    }
 }
 
 /// How often a kind of search has found something, over the kinds it has been tried on. It sets how much effort the next kind is given: a search
@@ -885,11 +926,16 @@ impl Novice {
 
         // One earlier value first; the larger steps only if the small ones gave nothing; two earlier values only if one is not enough.
         let mut accepted: Vec<(Cost, Expr)> = Vec::new();
+        let mut first_had_candidates = false;
         for (max_size, how_many) in [(5usize, 24usize), (7, 6)] {
             started.set(self.stats.evaluations);
-            budget_now.set(if max_size == 5 { full } else { scaled });
+            budget_now.set(if max_size == 5 || self.learned_allocation { full } else { scaled });
             if max_size != 5 {
                 self.dear_paid.tried += 1;
+                if self.learned_allocation && !self.allocations.entry((0, arity, first_had_candidates)).or_default().due() {
+                    accepted = Vec::new();
+                    continue;
+                }
             }
             let stage_start = self.stats.evaluations;
             let mut candidates: Vec<(Cost, Expr)> = Vec::new();
@@ -902,13 +948,20 @@ impl Novice {
             if std::env::var_os("NOVICE_TRACE").is_some() {
                 eprintln!("stage {:<12} singles size {max_size}: {} evaluations, {} candidates", self.groups[g].key, self.stats.evaluations - stage_start, candidates.len());
             }
+            if max_size == 5 {
+                first_had_candidates = !candidates.is_empty();
+            }
             accepted = self.accept_recurrences(g, candidates, whole_table, &known, arity);
             if !accepted.is_empty() {
                 self.dear_paid.won += u32::from(max_size != 5);
+                if max_size != 5 {
+                    self.allocations.entry((0, arity, first_had_candidates)).or_default().won();
+                }
                 break;
             }
         }
-        if accepted.is_empty() {
+        let pairs_due = accepted.is_empty() && (!self.learned_allocation || self.allocations.entry((1, arity, first_had_candidates)).or_default().due());
+        if pairs_due {
             // For a pair, only reductions that keep the points apart: one that sends almost every point to the same few (a constant, a
             // remainder by two) is a base case, not a step towards the answer.
             let distinct = |r: &Reduction| (0..inputs.len()).map(|k| at(&r.parts, k)).collect::<std::collections::BTreeSet<_>>().len();
@@ -918,7 +971,7 @@ impl Novice {
             }
             let mut candidates: Vec<(Cost, Expr)> = Vec::new();
             started.set(self.stats.evaluations);
-            budget_now.set(scaled);
+            budget_now.set(if self.learned_allocation { full } else { scaled });
             let pairs_start = self.stats.evaluations;
             let mut tried = 0;
             for i in 0..few.len() {
@@ -934,6 +987,9 @@ impl Novice {
             }
             accepted = self.accept_recurrences(g, candidates, whole_table, &known, arity);
             self.dear_paid.won += u32::from(!accepted.is_empty());
+            if !accepted.is_empty() {
+                self.allocations.entry((1, arity, first_had_candidates)).or_default().won();
+            }
         }
         // They are rivals: each is true of the table, and which one reaches a point depends on the point.
         let mut accepted = accepted.into_iter();
@@ -2851,6 +2907,82 @@ mod recurrence_tests {
         assert!(record.distinct_targets as f64 / record.rows as f64 > 0.9, "every answer different");
         assert!(record.found, "a true recurrence that the search finds today");
         assert!(!record.cost_bound_rejects);
+    }
+
+    #[test]
+    fn a_stage_that_keeps_failing_is_run_less_and_a_share_of_its_turns_is_protected() {
+        let mut a = Allocation::default();
+        // The first turns are all run: nothing is known yet.
+        let first: Vec<bool> = (0..MIN_RUNS).map(|_| a.due()).collect();
+        assert!(first.iter().all(|&d| d));
+        // After that many failures it is run on a fixed share of its turns, evenly spread, and never starved: the protected share.
+        let turns = 400;
+        let run: Vec<bool> = (0..turns).map(|_| a.due()).collect();
+        let ran = run.iter().filter(|&&d| d).count();
+        assert_eq!(ran as u32, turns * EXPLORE_PER_THOUSAND / 1000, "{ran}");
+        let longest_gap = run.split(|&d| d).map(<[bool]>::len).max().unwrap_or(0) as u32;
+        assert!(longest_gap * EXPLORE_PER_THOUSAND <= 1000, "a gap of {longest_gap} turns");
+        // A stage that has won keeps running every turn.
+        let mut b = Allocation::default();
+        for _ in 0..MIN_RUNS {
+            b.due();
+        }
+        b.won();
+        b.won();
+        assert!((0..5).all(|_| b.due()), "a stage that pays is not rationed");
+    }
+
+    #[test]
+    fn learned_allocation_gives_the_same_replies_spends_no_more_and_keeps_the_way_to_late_rules_open() {
+        // Arbitrary answers over one number: kinds that fail in the same context as the rules that come later.
+        let noise = |n: &mut Novice, count: usize| {
+            let mut seed = 424242u64;
+            for k in 0..count {
+                let rule: Vec<i64> = (0..=30)
+                    .map(|_| {
+                        seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                        ((seed >> 33) % 100) as i64
+                    })
+                    .collect();
+                teach_unary(n, &format!("noise{k}yarn"), |x| rule[x as usize], (0..=30).filter(|x| *x != 7 && *x != 14));
+            }
+        };
+        let build = |learned: bool| {
+            let mut n = Novice::default();
+            n.learned_allocation = learned;
+            teach_unary(&mut n, "zarbosido", popcount, (1..=22).filter(|x| *x != 8));
+            noise(&mut n, 24);
+            // Six rules that need the dearer stages (each answer from the two before it, modulo ten), arriving after the failures.
+            for k in 0..6i64 {
+                let seed_pair = (k % 3, k % 2 + 1);
+                let rule = move |x: i64| {
+                    let (mut a, mut b) = seed_pair;
+                    for _ in 0..x {
+                        let t = (a + b) % 10;
+                        a = b;
+                        b = t;
+                    }
+                    a
+                };
+                teach_unary(&mut n, &format!("late{k}yarn"), rule, (1..=30).filter(|x| *x != 9 && *x != 17));
+            }
+            n.ready();
+            n
+        };
+        let (fixed, learned) = (build(false), build(true));
+        // Not more is spent...
+        assert!(learned.stats.evaluations <= fixed.stats.evaluations, "{} against {}", learned.stats.evaluations, fixed.stats.evaluations);
+        // ...the early rule and every kind of arbitrary answers get the same replies...
+        let (mut f, mut l) = (fixed, learned);
+        for q in ["what is zarbosido 30", "what is zarbosido 8", "what is noise3yarn 7", "what is noise20yarn 40"] {
+            assert_eq!(f.ask(q), l.ask(q), "{q}");
+        }
+        // ...and the protected share keeps the way to a rule that comes after many failures open: the fixed allocation's rationed allowance finds
+        // none of these six after two dozen failures, a stage that is run on its protected turn gets its whole allowance and finds some.
+        let found = |n: &Novice| (0..6).filter(|k| n.groups.iter().any(|g| g.key == format!("late{k}yarn") && g.fit.is_some())).count();
+        let (fixed_found, learned_found) = (found(&f), found(&l));
+        eprintln!("late rules found: fixed {fixed_found} of 6, learned {learned_found} of 6; evaluations {} against {}", l.stats.evaluations, f.stats.evaluations);
+        assert!(learned_found >= 1 && learned_found >= fixed_found, "{learned_found} against {fixed_found} of 6");
     }
 
     fn spelled(n: usize) -> String {
