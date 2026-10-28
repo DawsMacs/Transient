@@ -543,6 +543,24 @@ Tests first: bijective base 5 and balanced base 5 are found as `Fold` from a sam
 
 **Why only half of the grammars.** The twenties count ("six muna rovu ten two" for 6 * 20 + 12) is not a step of the same shape: its words do different things (add a digit, multiply by twenty, add nothing). Each word as its own step "number so far times a, plus b" covers it, and also the English-style sums, the positional digits, the multiplier words and the two grammars above as special cases. That is the next change in this direction; it needs the steps to be found, not listed (a search over small (a, b) for the words that no one-word numeral fixes), and it is a larger change than this one.
 
+### The ninth blind test (a ninth set, run once)
+
+A ninth set of kinds was written by a separate session that had not read Novice's code (`tools/hidden_worlds_i.py`, pull request #64): 12 hard kinds (10 new-operation, 2 composed), 15 controls, 5 arbitrary codes, and 118 trap rows per seed in 19 categories that must be refused. 20 of the 32 kinds put their numbers in as words, in three families per seed (plus a fourth that only trap rows use). All kinds are taught in two or three ways of asking; 4 kinds mix digits and words inside one question and 6 answer in another form than the question was asked in. 705, 707 and 709 questions. Novice at the commit frozen beforehand (`1f400ac`, pull request #64's merge; the last change under `novice/` is `6038ab9`, pull request #63) was run **once per seed on seeds 1 to 3, and the numbers below were written down before the kinds, the key or any reviewer's notes were read.** One caveat on that: the run's own stderr, which I grepped for the evaluation counts, also printed the list of programs Novice explained; that is Novice's output, not the key or the generator, and no hard kind's rule was in it.
+
+| seed | wrong facts | hard questions answered right as facts (223 each seed, 30 composed) | hard guesses: right / wrong | controls (282, 284, 286): facts / right guesses / wrong guesses / refused | groups explained by a program | evaluations | energy |
+|---|---|---|---|---|---|---|---|
+| 1 | **0** | **0** | 0 / 2 | 11.7 % / 7.8 % / 0.4 % / 80.1 % | 3 of 53 | 68.9 M | 15.77 J |
+| 2 | **4** | **0** | 0 / 1 | 14.4 % / 5.3 % / 0.4 % / 79.2 % | 4 of 168 | 58.8 M | 16.45 J |
+| 3 | **15** | **0** | 5 / 2 | 8.4 % / 5.9 % / 1.7 % / 81.5 % | 3 of 56 | 68.9 M | 16.77 J |
+
+- **Wrong facts: 0, 4 and 15. The honesty rule did not hold on this set, and one trap row was answered (seed 3).** Seed 2: 2 hard and 2 control questions. Seed 3: 7 hard, 7 control and 1 trap row. Every one was a fact (not labeled a guess) that was never wrongly told. The baby gave 33, 48 and 80 wrong facts and answered 8 to 9 traps on the same worlds, so Novice is far ahead of it and still not clean. This is the first fresh test of the numeral work of pull requests #54 to #63 (Arrangements, Fold) and of the learned allocation, so any of those, or an older mechanism meeting a new kind of input, may be the cause. The cause is not known when this is written; the key is read after this paragraph.
+- **Hard kinds acquired: 0 of 12 on every seed** (no hard question answered right as a fact; 5 right and 5 wrong hard guesses in all, each labeled a guess, the 5 right ones on seed 3). Hard questions answered wrongly as facts: 0, 2 and 7.
+- **Controls: facts 11.7 %, 14.4 % and 8.4 %**, against 17.9 % to 20.6 % on set H, 67 % on set F and about 40 % on set G after their fixes. About four fifths of the controls were refused. Reported as measured; no explanation yet.
+- Refusals are reported apart from wrong answers: 647, 645 and 641 of the questions were refused (91.8 %, 91.2 % and 90.4 %). Over all questions the right-in-each-third column is higher in the last third than in the first on every seed (6.8 to 10.6 %, 6.4 to 8.5 % with a middle third of 8.9 %, 5.1 to 8.1 %).
+- Answering 2.0 to 5.9 J for a seed, teaching 10.9 to 14.5 J, evaluations 58.8 to 68.9 M. The meter warned that other processes shared the machine, so the figures are upper bounds.
+
+**This set is now a development set.**
+
 ### Cost
 
 Counted evaluations (one operation applied at one point), seed 1; the work is almost all in teaching, because a told answer that a believed program already gives costs a few dozen evaluations. Every row has 0 wrong facts except where noted.
