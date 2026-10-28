@@ -20,8 +20,8 @@ cd "$(dirname "$0")/../.." || exit 2
 RUNS=${GOLDEN_RUNS:-2}
 WORK=target/novice-golden-work
 GOLDEN=novice/golden
-# the adaptive exam of the entry tier, and the nine sets of hidden worlds (all development sets now), seed 1 each
-EXAMS="static60-seed1 adapt-seed1 hidden-a-seed1 hidden-b-seed1 hidden-c-seed1 hidden-d-seed1 hidden-e-seed1 hidden-f-seed1 hidden-g-seed1 hidden-h-seed1 hidden-i-seed1"
+# the adaptive exam of the entry tier, and the nine sets of hidden worlds (all development sets now), seed 1 each (and seed 3 of the ninth, the only one with counting in fives)
+EXAMS="static60-seed1 adapt-seed1 hidden-a-seed1 hidden-b-seed1 hidden-c-seed1 hidden-d-seed1 hidden-e-seed1 hidden-f-seed1 hidden-g-seed1 hidden-h-seed1 hidden-i-seed1 hidden-i-seed3"
 
 if [ -z "${NOVICE_BIN:-}" ]; then
     (cd novice && cargo build --quiet --release --offline) || exit 2
@@ -69,7 +69,7 @@ generate() {
                 local letter=${e#hidden-}; letter=${letter%%-*}
                 local script=tools/hidden_worlds_$letter.py
                 [ "$letter" = a ] && script=tools/hidden_worlds.py
-                python3 "$script" "$d/exams/$e" --seed 1 >/dev/null || return 1
+                python3 "$script" "$d/exams/$e" --seed "${e##*-seed}" >/dev/null || return 1
                 adaptive "$d/exams/$e" "$d/$e" || return 1
                 ;;
         esac

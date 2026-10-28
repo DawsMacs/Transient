@@ -44,6 +44,10 @@ pub enum Grammar {
     /// finds the number so far at zero), from the last word backward if `reversed`. Only runs whose neighbouring words were seen to neighbour
     /// each other are numbers.
     Steps { reversed: bool },
+    /// A count and the unit word it counts: a digit word adds to a count that waits, a unit word takes the count (at least one word of it) times its own
+    /// number into the total, a link word puts the count into the total as it is, and so does the end of the numeral ("three five two" is 3 * 5 + 2).
+    /// Only runs all of whose windows of three words were seen are numbers.
+    Units,
 }
 
 /// The words of one family of number words: what each means, and how a run of them makes a number.
@@ -66,6 +70,12 @@ pub struct Family {
     /// were seen next to each other in the order they are taken ("" for the start and the end of a numeral).
     factor: BTreeMap<String, i64>,
     pairs: BTreeSet<(String, String)>,
+    /// For counts and units: the words that take the count times their number, and the words that only put the count into the total.
+    units: BTreeSet<String>,
+    flushes: BTreeSet<String>,
+    /// For counts and units: the windows of three words (with "" before and after a numeral) that were seen; only a run all of whose windows were seen is a
+    /// number, because two neighbours do not tell what may follow a pair ("three five" may be followed by a lone digit and a link, but not by a count of twenties).
+    triples: BTreeSet<(String, String, String)>,
 }
 
 fn pow(b: i64, e: usize) -> i64 {
@@ -142,6 +152,28 @@ impl Family {
                     before = w;
                 }
                 (self.pairs.contains(&(before.to_string(), String::new())) && n >= 0).then_some(n)
+            }
+            Grammar::Units => {
+                if !windows(run).iter().all(|w| self.triples.contains(w)) {
+                    return None;
+                }
+                let (mut total, mut count) = (0i64, 0i64);
+                for w in run {
+                    let v = self.get(w)?;
+                    if self.units.contains(w) {
+                        if count == 0 {
+                            return None;
+                        }
+                        total = total.checked_add(count.checked_mul(v)?)?;
+                        count = 0;
+                    } else if self.flushes.contains(w) {
+                        total = total.checked_add(count)?;
+                        count = 0;
+                    } else {
+                        count = count.checked_add(v)?;
+                    }
+                }
+                total.checked_add(count)
             }
             Grammar::Mixed(r) => {
                 if run.len() != 3 {
@@ -248,6 +280,23 @@ impl Family {
                 (d2 < r[2]).then(|| say(vec![d0, d1, d2])).flatten()
             }
             Grammar::Multiplier { base, minus_from } => self.say_multiplier(n, base, minus_from),
+            Grammar::Units => {
+                // The shortest run of words whose windows were all seen that makes `n`, tried from its first word on.
+                let firsts: BTreeSet<&String> = self.triples.iter().filter(|(a, b, _)| a.is_empty() && !b.is_empty()).map(|(_, b, _)| b).collect();
+                for len in 1..=self.max_len.max(1) {
+                    for first in &firsts {
+                        let Some(&v) = self.values.get(*first) else { continue };
+                        if self.units.contains(*first) || self.flushes.contains(*first) {
+                            continue;
+                        }
+                        let (mut taken, mut tries) = (vec![(*first).clone()], 0usize);
+                        if self.units_forward(n, ("", first.as_str()), (0, v), len - 1, &mut taken, &mut tries) {
+                            return Some(taken.join(" "));
+                        }
+                    }
+                }
+                None
+            }
             Grammar::Steps { reversed } => {
                 // The shortest run of neighbouring words that makes `n`, found from its last word back.
                 for len in 1..=self.max_len.max(1) {
@@ -262,6 +311,43 @@ impl Family {
                 None
             }
         }
+    }
+
+    /// Whether `left` more words, each next to the one before it, make `n` from the total and the count so far; the words are pushed on `taken`.
+    fn units_forward(&self, n: i64, (before2, before): (&str, &str), (total, count): (i64, i64), left: usize, taken: &mut Vec<String>, tries: &mut usize) -> bool {
+        const MOST_TRIES: usize = 30_000;
+        *tries += 1;
+        if *tries > MOST_TRIES {
+            return false;
+        }
+        if left == 0 {
+            return total + count == n && self.triples.contains(&(before2.to_string(), before.to_string(), String::new()));
+        }
+        for (a, b, w) in self.triples.range((before2.to_string(), before.to_string(), String::new())..) {
+            if a != before2 || b != before {
+                break;
+            }
+            let Some(&v) = self.values.get(w) else { continue };
+            let state = if self.units.contains(w) {
+                if count == 0 {
+                    continue;
+                }
+                (total + count * v, 0)
+            } else if self.flushes.contains(w) {
+                (total + count, 0)
+            } else {
+                (total, count + v)
+            };
+            if state.0 + state.1 > n {
+                continue;
+            }
+            taken.push(w.clone());
+            if self.units_forward(n, (before, w), state, left - 1, taken, tries) {
+                return true;
+            }
+            taken.pop();
+        }
+        false
     }
 
     /// Whether a run of at most `left` words ends, in the order they are taken, just before `after` ("" at the end of a numeral) and makes `n`; the
@@ -815,15 +901,27 @@ impl Frac {
 /// disagree, or a number comes out as a fraction or below zero.
 fn solve_additive(runs: &[(Vec<String>, i64)], words: &[&String], factor: &BTreeMap<&String, i64>) -> Option<BTreeMap<String, i64>> {
     let col: BTreeMap<&String, usize> = words.iter().enumerate().map(|(i, w)| (*w, i)).collect();
+    let mut rows: Vec<(Vec<(usize, i128)>, i64)> = Vec::new();
+    for (run, total) in runs {
+        let mut weight = 1i128;
+        let mut row = Vec::new();
+        for w in run.iter().rev() {
+            row.push((col[w], weight));
+            weight = weight.checked_mul(i128::from(*factor.get(w).unwrap_or(&1)))?;
+        }
+        rows.push((row, *total));
+    }
+    solve_rows(&rows, words)
+}
+
+/// The numbers of `words` that make every row (the coefficient of each word, the total) hold, exactly; a word that the rows leave open is nothing.
+fn solve_rows(rows: &[(Vec<(usize, i128)>, i64)], words: &[&String]) -> Option<BTreeMap<String, i64>> {
     let n = words.len();
     let mut pivots: Vec<(usize, Vec<Frac>)> = Vec::new();
-    for (run, total) in runs {
+    for (coefficients, total) in rows {
         let mut row = vec![Frac::ZERO; n + 1];
-        let mut weight = 1i128;
-        for w in run.iter().rev() {
-            let c = col[w];
+        for &(c, weight) in coefficients {
             row[c] = Frac(row[c].0.checked_add(weight)?, 1);
-            weight = weight.checked_mul(i128::from(*factor.get(w).unwrap_or(&1)))?;
         }
         row[n] = Frac(i128::from(*total), 1);
         for (c, prow) in &pivots {
@@ -966,6 +1064,194 @@ fn fit_linear(runs: &[(Vec<String>, i64)], words: &[&String], first: &BTreeSet<&
     None
 }
 
+/// The windows of three words of a numeral, with "" before and after it.
+fn windows(run: &[String]) -> Vec<(String, String, String)> {
+    let padded: Vec<&str> = std::iter::once("").chain(run.iter().map(String::as_str)).chain(std::iter::once("")).collect();
+    (0..padded.len().saturating_sub(2)).map(|i| (padded[i].to_string(), padded[i + 1].to_string(), padded[i + 2].to_string())).collect()
+}
+
+/// What the words of a count-and-unit reading mean: the number of each digit word, of each unit word, and the words that only put the count into the total.
+struct UnitFit {
+    numbers: BTreeMap<String, i64>,
+    units: BTreeSet<String>,
+    flushes: BTreeSet<String>,
+}
+
+/// The number a run makes if its digit words add to a count, a unit word takes the count times its number into the total, and a link word or the end
+/// puts the count in; None if a unit word has no count or a word is not known.
+fn read_units(run: &[String], numbers: &BTreeMap<String, i64>, units: &BTreeSet<String>, flushes: &BTreeSet<String>) -> Option<i64> {
+    let (mut total, mut count) = (0i64, 0i64);
+    for w in run {
+        let v = *numbers.get(w)?;
+        if units.contains(w) {
+            if count == 0 {
+                return None;
+            }
+            total = total.checked_add(count.checked_mul(v)?)?;
+            count = 0;
+        } else if flushes.contains(w) {
+            total = total.checked_add(count)?;
+            count = 0;
+        } else {
+            count = count.checked_add(v)?;
+        }
+    }
+    total.checked_add(count)
+}
+
+/// Fewest runs a count-and-unit reading is looked for in (two thirds of the equations are fitted, and the rest check them).
+const MIN_UNIT_RUNS: usize = 40;
+
+/// The most solves tried to find a count-and-unit reading.
+const UNIT_TRIES: usize = 1200;
+
+/// Solve a count-and-unit reading from `runs`: which words are units (never the first word of a numeral, at most three of them) and which one links,
+/// the number of each unit word from a short list, and the digit words exactly from what that leaves in each run. None if no choice makes the runs hold.
+fn fit_units(runs: &[(Vec<String>, i64)]) -> Option<UnitFit> {
+    // (a count of every unit word and several digit words to fix need more than a few runs)
+    if runs.len() < MIN_UNIT_RUNS {
+        return None;
+    }
+    let words: Vec<&String> = runs.iter().flat_map(|(r, _)| r.iter()).collect::<BTreeSet<_>>().into_iter().collect();
+    if words.len() > LINEAR_WORDS || runs.len() < 2 * words.len() {
+        return None;
+    }
+    let first: BTreeSet<&String> = runs.iter().map(|(r, _)| &r[0]).collect();
+    let mut count: BTreeMap<&String, usize> = BTreeMap::new();
+    for (run, _) in runs {
+        for w in run {
+            *count.entry(w).or_insert(0) += 1;
+        }
+    }
+    // (a unit word or a link is in a good share of the runs; a digit word that no run happened to begin with is not worth a try)
+    let mut never_first: Vec<&String> = words.iter().copied().filter(|w| !first.contains(*w)).collect();
+    never_first.sort_by_key(|w| (std::cmp::Reverse(count[*w]), (*w).clone()));
+    never_first.truncate(5);
+    never_first.sort();
+    if never_first.is_empty() {
+        return None;
+    }
+    let mut by_rarity: Vec<&String> = words.clone();
+    by_rarity.sort_by_key(|w| (count[*w], (*w).clone()));
+    let mut tries = UNIT_TRIES;
+    for most in [2usize, 1, 3].into_iter().filter(|m| *m <= never_first.len()) {
+        let mut chosen: Vec<Vec<&String>> = vec![Vec::new()];
+        for _ in 0..most {
+            let mut next = Vec::new();
+            for c in &chosen {
+                for w in &never_first {
+                    if c.last().is_none_or(|l| l < w) {
+                        let mut d = c.clone();
+                        d.push(*w);
+                        next.push(d);
+                    }
+                }
+            }
+            chosen = next;
+        }
+        for units in chosen {
+            let rest: Vec<&String> = never_first.iter().copied().filter(|w| !units.contains(w)).collect();
+            for link in rest.into_iter().map(Some).chain(std::iter::once(None)) {
+                let mut numbers = BTreeMap::new();
+                if let Some(fit) = assign_units(runs, &by_rarity, &units, link, &mut numbers, &mut tries) {
+                    return Some(fit);
+                }
+                if tries == 0 {
+                    return None;
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Give the unit words the numbers from the list one after another, each time requiring that the runs that have only the words given so far can still
+/// be made to hold by some digit words; when all are given, solve every run.
+fn assign_units<'a>(runs: &[(Vec<String>, i64)], words: &[&'a String], units: &[&'a String], link: Option<&'a String>, given: &mut BTreeMap<&'a String, i64>, tries: &mut usize) -> Option<UnitFit> {
+    let digits: Vec<&String> = words.iter().copied().filter(|w| !units.contains(w) && Some(*w) != link).collect();
+    let col: BTreeMap<&String, usize> = digits.iter().enumerate().map(|(i, w)| (*w, i)).collect();
+    // the rows of the runs whose unit words all have their numbers; None if some run cannot be a count and its unit at all
+    let rows = |given: &BTreeMap<&String, i64>| -> Option<Vec<(Vec<(usize, i128)>, i64)>> {
+        let mut out = Vec::new();
+        'runs: for (run, n) in runs {
+            let (mut row, mut waiting) = (Vec::new(), Vec::new());
+            for w in run {
+                if units.contains(&w) {
+                    let Some(&v) = given.get(w) else { continue 'runs };
+                    if waiting.is_empty() {
+                        return None;
+                    }
+                    row.extend(waiting.drain(..).map(|c| (c, i128::from(v))));
+                } else if Some(w) == link {
+                    row.extend(waiting.drain(..).map(|c| (c, 1)));
+                } else {
+                    waiting.push(col[w]);
+                }
+            }
+            row.extend(waiting.drain(..).map(|c| (c, 1)));
+            out.push((row, *n));
+        }
+        Some(out)
+    };
+    let k = given.len();
+    if k == units.len() {
+        let solved = solve_rows(&rows(given)?, &digits)?;
+        let mut numbers = solved;
+        for (w, v) in given.iter() {
+            numbers.insert((*w).clone(), *v);
+        }
+        if let Some(l) = link {
+            numbers.insert(l.clone(), 0);
+        }
+        let unit_set: BTreeSet<String> = units.iter().map(|w| (*w).clone()).collect();
+        let flush_set: BTreeSet<String> = link.iter().map(|w| (*w).clone()).collect();
+        return runs.iter().all(|(run, n)| read_units(run, &numbers, &unit_set, &flush_set) == Some(*n)).then_some(UnitFit { numbers, units: unit_set, flushes: flush_set });
+    }
+    for v in (2..=MAX_BASE).chain([100]) {
+        if *tries == 0 {
+            return None;
+        }
+        *tries -= 1;
+        given.insert(units[k], v);
+        let feasible = rows(given).is_some_and(|r| r.is_empty() || solve_rows(&r, &digits).is_some());
+        if feasible {
+            if let Some(fit) = assign_units(runs, words, units, link, given, tries) {
+                return Some(fit);
+            }
+        }
+        given.remove(units[k]);
+    }
+    None
+}
+
+/// A family of counts and units that fit `equations`, if they fit a third of them kept back as well as the rest (the same check as for steps).
+fn units_family(equations: &[(Vec<String>, i64)]) -> Option<Family> {
+    let (train, held): (Vec<_>, Vec<_>) = equations.iter().enumerate().partition(|(i, _)| i % 3 != 2);
+    let train: Vec<(Vec<String>, i64)> = train.into_iter().map(|(_, e)| e.clone()).collect();
+    let fitted = fit_units(&train)?;
+    let mut checked = 0;
+    for (_, (run, n)) in held {
+        if run.iter().all(|w| fitted.numbers.contains_key(w)) {
+            match read_units(run, &fitted.numbers, &fitted.units, &fitted.flushes) {
+                Some(v) if v == *n => checked += 1,
+                _ => return None,
+            }
+        }
+    }
+    if checked < 3 {
+        return None;
+    }
+    let UnitFit { numbers: values, units, flushes } = fit_units(equations)?;
+    let mut triples = BTreeSet::new();
+    for (run, _) in equations {
+        if run.iter().any(|w| !values.contains_key(w)) {
+            continue;
+        }
+        triples.extend(windows(run));
+    }
+    Some(Family { values, units, flushes, triples, grammar: Grammar::Units, ..Family::default() })
+}
+
 /// A family of words whose steps fit `equations`, if they fit a third of them that were kept back (at least three of them complete) as well as they fit
 /// the rest: the line of a word through two runs is exact however the runs came about, so only what it says of runs it was not made from counts.
 fn steps_family(equations: &[(Vec<String>, i64)], reversed: bool) -> Option<Family> {
@@ -1009,7 +1295,7 @@ fn generalizes(equations: &[(Vec<String>, i64)], grammar: Grammar) -> bool {
     let (train, held): (Vec<_>, Vec<_>) = equations.iter().enumerate().partition(|(i, _)| i % 3 != 2);
     let train: Vec<(Vec<String>, i64)> = train.into_iter().map(|(_, e)| e.clone()).collect();
     let fitted = match grammar {
-        Grammar::Steps { .. } => return true,
+        Grammar::Steps { .. } | Grammar::Units => return true,
         Grammar::Multiplier { base, .. } => multiplier_family(&train).into_iter().find(|f| matches!(f.grammar, Grammar::Multiplier { base: b, .. } if b == base)),
         g => fix_runs(&train, g).map(|values| Family { values, grammar: g, ..Family::default() }),
     };
@@ -1097,8 +1383,14 @@ pub fn learn_reading(lessons: &[(String, String)]) -> Lexicon {
             }
         }
         candidates.extend(multiplier_family(&equations));
-        candidates.extend([false, true].into_iter().filter_map(|reversed| steps_family(&equations, reversed)));
-        for mut family in candidates {
+        // (the dearer searches only when the cheaper ones found nothing that holds)
+        'stages: for stage in 0..3 {
+            let stage_candidates = match stage {
+                0 => std::mem::take(&mut candidates),
+                1 => [false, true].into_iter().filter_map(|reversed| steps_family(&equations, reversed)).collect(),
+                _ => units_family(&equations).into_iter().collect(),
+            };
+        for mut family in stage_candidates {
             family.used = used.clone();
             family.max_len = equations.iter().map(|(r, _)| r.len()).max().unwrap_or(0);
             family.max_spoken = equations.iter().map(|(_, v)| *v).max().unwrap_or(0);
@@ -1142,7 +1434,8 @@ pub fn learn_reading(lessons: &[(String, String)]) -> Lexicon {
                     found.push(family);
                 }
             }
-            break;
+            break 'stages;
+        }
         }
     }
     // Largest families first; a family that shares a word with a larger one is dropped.
@@ -1658,7 +1951,11 @@ mod tests {
     /// A kind that reads a spelled number, as the exams teach it: about a hundred facts from 0 up to `upto`, each in two wordings, and no more
     /// small numbers than chance gives.
     fn reading_sample(name: &str, spell: impl Fn(usize) -> String, upto: usize, count: usize) -> Vec<(String, String)> {
-        let mut seed = 99u64;
+        reading_sample_seeded(name, spell, upto, count, 99)
+    }
+
+    fn reading_sample_seeded(name: &str, spell: impl Fn(usize) -> String, upto: usize, count: usize, seed: u64) -> Vec<(String, String)> {
+        let mut seed = seed;
         let mut next = move || {
             seed = seed.wrapping_add(0x9e3779b97f4a7c15);
             let mut z = seed;
@@ -1711,5 +2008,146 @@ mod tests {
             }
         }
         assert!(failures.is_empty(), "{failures:#?}");
+    }
+
+    // ---- a digit that waits for the word after it: fives and bi-quinary places ----
+
+    const FIVES_DIGITS: [&str; 9] = ["kazu", "lumeb", "nyrao", "oquik", "pavor", "rhenu", "sikat", "tomul", "uvlam"];
+
+    /// Counting in twenties, then in fives, then in ones: a count and the word for twenty, a count and the word for five, a lone digit word for the ones,
+    /// and a link word between the twenties and the rest (the rest first in one variant). A word of its own for zero.
+    fn fives(n: usize, rest_first: bool) -> String {
+        if n == 0 {
+            return "alefo".to_string();
+        }
+        let (q, r) = (n / 20, n % 20);
+        let (f, u) = (r / 5, r % 5);
+        let top: Vec<&str> = if q > 0 { vec![FIVES_DIGITS[q - 1], "zhekt"] } else { Vec::new() };
+        let mut rest: Vec<&str> = Vec::new();
+        if f > 0 {
+            rest.extend([FIVES_DIGITS[f - 1], "wintu"]);
+        }
+        if u > 0 {
+            rest.push(FIVES_DIGITS[u - 1]);
+        }
+        let words: Vec<&str> = match (top.is_empty(), rest.is_empty()) {
+            (false, false) if rest_first => rest.into_iter().chain(["ydrom"]).chain(top).collect(),
+            (false, false) => top.into_iter().chain(["ydrom"]).chain(rest).collect(),
+            (false, true) => top,
+            _ => rest,
+        };
+        words.join(" ")
+    }
+
+    /// Decimal places of one to four with a word for five of its own in the units and another in the tens (a digit from five to nine is that five and the
+    /// word of the rest, the rest first in one variant), a word that closes the tens and one that closes the hundreds.
+    fn biquinary(n: usize, rest_first: bool) -> String {
+        if n == 0 {
+            return "lyovi".to_string();
+        }
+        let digit = ["bravo", "civek", "dokar", "fenil"];
+        let part = |x: usize, five: &'static str| -> Vec<&'static str> {
+            let mut toks: Vec<&'static str> = Vec::new();
+            if x >= 5 {
+                toks.push(five);
+            }
+            if x % 5 > 0 {
+                toks.push(digit[x % 5 - 1]);
+            }
+            if rest_first {
+                toks.reverse();
+            }
+            toks
+        };
+        let (h, r) = (n / 100, n % 100);
+        let (t, u) = (r / 10, r % 10);
+        let mut out: Vec<&str> = Vec::new();
+        if h > 0 {
+            out.extend([digit[h - 1], "kepon"]);
+        }
+        if t > 0 {
+            out.extend(part(t, "hosit"));
+            out.push("jilas");
+        }
+        if u > 0 {
+            out.extend(part(u, "gulen"));
+        }
+        out.join(" ")
+    }
+
+    #[test]
+    fn a_digit_that_waits_for_the_unit_word_after_it_is_found_in_fives_and_in_bi_quinary_places() {
+        for rest_first in [false, true] {
+            let lexicon = learn_reading(&reading("fivayarn", |n| fives(n, rest_first), 199));
+            assert_eq!(lexicon.families(), 1, "fives {rest_first}");
+            for k in [0usize, 1, 4, 5, 9, 17, 20, 25, 63, 100, 119, 199] {
+                assert_eq!(lexicon.value_of_text(&fives(k, rest_first)), Some((k as i64, 0)), "fives {rest_first} {k} = {}", fives(k, rest_first));
+                assert_eq!(lexicon.speak(0, k as i64).as_deref(), Some(fives(k, rest_first).as_str()), "fives {rest_first} {k}");
+            }
+            // A word for twenty or five with no count, two digit words in a row, and a link with nothing after it were never shown.
+            assert_eq!(lexicon.value_of_text("zhekt"), None);
+            assert_eq!(lexicon.value_of_text("wintu"), None);
+            assert_eq!(lexicon.value_of_text("kazu kazu"), None);
+            let lexicon = learn_reading(&reading("biquayarn", |n| biquinary(n, rest_first), 499));
+            assert_eq!(lexicon.families(), 1, "bi-quinary {rest_first}");
+            for k in [0usize, 3, 5, 8, 10, 56, 99, 100, 250, 407, 499] {
+                assert_eq!(lexicon.value_of_text(&biquinary(k, rest_first)), Some((k as i64, 0)), "bi-quinary {rest_first} {k} = {}", biquinary(k, rest_first));
+                assert_eq!(lexicon.speak(0, k as i64).as_deref(), Some(biquinary(k, rest_first).as_str()), "bi-quinary {rest_first} {k}");
+            }
+            assert_eq!(lexicon.value_of_text("kepon"), None);
+            assert_eq!(lexicon.value_of_text("jilas"), None);
+        }
+    }
+
+    #[test]
+    fn a_hundred_facts_find_fives_and_bi_quinary_places_too() {
+        let cases: [(&str, Box<dyn Fn(usize) -> String>, usize); 4] = [
+            ("fives", Box::new(|n| fives(n, false)), 199),
+            ("fives, rest first", Box::new(|n| fives(n, true)), 199),
+            ("bi-quinary", Box::new(|n| biquinary(n, false)), 499),
+            ("bi-quinary, rest first", Box::new(|n| biquinary(n, true)), 499),
+        ];
+        let mut failures = Vec::new();
+        for (name, spell, upto) in cases {
+            for sample in [99u64, 5, 61, 1234, 77777] {
+            let lexicon = learn_reading(&reading_sample_seeded("sagelyarn", &spell, upto, 114, sample));
+            if lexicon.families() != 1 {
+                failures.push(format!("{name} (sample {sample}): {} families", lexicon.families()));
+                continue;
+            }
+            let mut read = 0;
+            for k in 0..=upto {
+                if let Some((v, _)) = lexicon.value_of_text(&spell(k)) {
+                    if v != k as i64 {
+                        failures.push(format!("{name}: {} read as {v}, not {k}", spell(k)));
+                    }
+                    read += 1;
+                }
+            }
+            if read * 4 < upto + 1 {
+                failures.push(format!("{name} (sample {sample}): only {read} of {} numerals read", upto + 1));
+            }
+            }
+        }
+        assert!(failures.is_empty(), "{failures:#?}");
+    }
+
+    #[test]
+    fn a_teacher_who_is_wrong_about_a_few_numerals_gives_no_number_words() {
+        // Fives, with every thirteenth fact wrong by one: no reading holds for the whole kind, and nothing smaller may stand in for it.
+        let mut lessons = reading("fivayarn", |n| fives(n, true), 199);
+        for (_, a) in lessons.iter_mut() {
+            let n: i64 = a.parse().unwrap();
+            if n % 13 == 7 {
+                *a = (n + 1).to_string();
+            }
+        }
+        let lexicon = learn_reading(&lessons);
+        for k in 0..=199usize {
+            if let Some((v, _)) = lexicon.value_of_text(&fives(k, true)) {
+                assert_eq!(v, k as i64, "{}", fives(k, true));
+            }
+        }
+        assert_eq!(lexicon.families(), 0);
     }
 }
