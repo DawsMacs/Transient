@@ -106,6 +106,72 @@ struct Said {
     chain_of: Option<usize>,
 }
 
+/// Whether the cheapest way to reduce a number already costs more than a recurrence could pay for: more than the whole table, the margin for chance and
+/// the answers still to come, the same sum a recurrence has to beat to be accepted. The step and the base cases would only add to it, so no recurrence
+/// that uses this reduction (or any dearer one) can be accepted; this is a certificate, not a guess. It fires only for tables that are cheap to write.
+fn cost_bound_rejects(cheapest_reduction: Cost, whole_table: Cost, points: u64) -> bool {
+    let future = (points / 2) * bits::log2(ANSWER_SPACE);
+    cheapest_reduction + u64::from(RISK_BITS) * bits::BIT >= whole_table + future
+}
+
+/// A soft feature of a table, not a certificate: how well the answer minus the answer at the reduced point is settled by the number's remainder
+/// (the best share, over moduli 2 to 12, of the rows in groups of at least two that agree, counted only where at least half of the rows are in such
+/// groups), and the modulus. A step like "the earlier answer plus something about the last digit" has agreeing groups; arbitrary answers have
+/// groups of one or groups that disagree.
+fn shadow_support(inputs: &[Vec<i64>], target: &[i64], earlier: &[Option<i64>]) -> (f64, usize) {
+    let rows: Vec<(i64, i64)> = (0..inputs.len()).filter_map(|k| earlier[k].map(|r| (inputs[k][0], target[k] - r))).collect();
+    if rows.len() < 4 {
+        return (0.0, 0);
+    }
+    let mut best = (0.0f64, 0usize);
+    for m in 2..=12i64 {
+        let mut groups: BTreeMap<i64, Vec<i64>> = BTreeMap::new();
+        for &(x, d) in &rows {
+            groups.entry(x.rem_euclid(m)).or_default().push(d);
+        }
+        let in_groups: usize = groups.values().filter(|g| g.len() >= 2).map(Vec::len).sum();
+        if in_groups * 2 < rows.len() {
+            continue;
+        }
+        // (the most common difference in each group)
+        let agreeing: usize = groups
+            .values()
+            .filter(|g| g.len() >= 2)
+            .map(|g| {
+                let mut counts: BTreeMap<i64, usize> = BTreeMap::new();
+                for &d in g {
+                    *counts.entry(d).or_default() += 1;
+                }
+                counts.values().copied().max().unwrap_or(0)
+            })
+            .sum();
+        let score = agreeing as f64 / in_groups as f64;
+        if score > best.0 {
+            best = (score, m as usize);
+        }
+    }
+    best
+}
+
+/// What the shadow check saw of one call of the recurrence search, and what the search then did. Logged, never acted on.
+#[derive(Clone, Debug, Default)]
+pub struct ShadowRecord {
+    pub key: String,
+    pub rows: usize,
+    pub found: bool,
+    /// Evaluations the search spent inside this call.
+    pub evaluations: u64,
+    pub table_bits: f64,
+    pub distinct_targets: usize,
+    pub reductions: usize,
+    /// No reduction of the pool brings enough points down to a known one: the stages have nothing to try.
+    pub no_reduction: bool,
+    /// The sound certificate above.
+    pub cost_bound_rejects: bool,
+    pub support: f64,
+    pub support_modulus: usize,
+}
+
 /// Work done, for the report at the end.
 #[derive(Default, Debug, Clone, Copy)]
 pub struct Stats {
@@ -202,6 +268,10 @@ pub struct Novice {
     frames: Option<Frames>,
     /// How many lookups the frames were built from.
     frames_from: usize,
+    /// Whether the recurrence search also logs what a feasibility check would say (`NOVICE_SHADOW`); it never acts on it.
+    pub shadow_on: bool,
+    pub shadow: Vec<ShadowRecord>,
+    shadow_pending: Option<ShadowRecord>,
     /// The same for the search with the numbers a kind's shape announces.
     shape_paid: Paid,
     pub stats: Stats,
@@ -209,7 +279,7 @@ pub struct Novice {
 
 impl Default for Novice {
     fn default() -> Self {
-        Novice { lessons: Vec::new(), raw: Vec::new(), lesson_spoke: Vec::new(), numerals: Lexicon::default(), shapes: Arrangements::default(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], reliability: BTreeMap::new(), chain_record: (0, 0), recurrence_paid: Paid::default(), dear_paid: Paid::default(), exact: BTreeMap::new(), trusted_lookups: Default::default(), bags: BTreeMap::new(), lookups: Vec::new(), frames: None, frames_from: 0, shape_paid: Paid::default(), stats: Stats::default() }
+        Novice { lessons: Vec::new(), raw: Vec::new(), lesson_spoke: Vec::new(), numerals: Lexicon::default(), shapes: Arrangements::default(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], reliability: BTreeMap::new(), chain_record: (0, 0), recurrence_paid: Paid::default(), dear_paid: Paid::default(), exact: BTreeMap::new(), trusted_lookups: Default::default(), bags: BTreeMap::new(), lookups: Vec::new(), frames: None, frames_from: 0, shadow_on: std::env::var_os("NOVICE_SHADOW").is_some(), shadow: Vec::new(), shadow_pending: None, shape_paid: Paid::default(), stats: Stats::default() }
     }
 }
 
@@ -685,6 +755,18 @@ impl Novice {
     /// value is known; then `e` is searched on the points that have such values. The points the recurrence does not account for are paid for one
     /// by one, so it is kept only if that is cheaper than the whole table by the error budget and it passes the held-out check.
     fn recurrence(&mut self, g: usize) -> bool {
+        let began = self.stats.evaluations;
+        self.shadow_pending = None;
+        let found = self.recurrence_search(g);
+        if let Some(mut record) = self.shadow_pending.take() {
+            record.found = found;
+            record.evaluations = self.stats.evaluations - began;
+            self.shadow.push(record);
+        }
+        found
+    }
+
+    fn recurrence_search(&mut self, g: usize) -> bool {
         let arity = self.groups[g].arity;
         if arity == 0 || arity > 2 {
             return false;
@@ -738,6 +820,25 @@ impl Novice {
         reductions.retain(|r| r.cover >= enough);
         reductions.sort_by(|a, b| a.cost.cmp(&b.cost).then(b.cover.cmp(&a.cover)).then(a.parts.cmp(&b.parts)));
         self.stats.searches += 1;
+        if self.shadow_on {
+            let earlier: Vec<Option<i64>> = match reductions.first() {
+                Some(r) => (0..inputs.len()).map(|k| known.get(&at(&r.parts, k)).copied()).collect(),
+                None => Vec::new(),
+            };
+            let (support, support_modulus) = if earlier.is_empty() { (0.0, 0) } else { shadow_support(&inputs, &target, &earlier) };
+            self.shadow_pending = Some(ShadowRecord {
+                key: self.groups[g].key.clone(),
+                rows: inputs.len(),
+                table_bits: bits::as_bits(whole_table),
+                distinct_targets: target.iter().collect::<std::collections::BTreeSet<_>>().len(),
+                reductions: reductions.len(),
+                no_reduction: reductions.is_empty(),
+                cost_bound_rejects: reductions.first().is_some_and(|r| cost_bound_rejects(r.cost, whole_table, known.len() as u64)),
+                support,
+                support_modulus,
+                ..ShadowRecord::default()
+            });
+        }
 
         // Fit the step for a choice of one or two reductions.
         let started = std::cell::Cell::new(self.stats.evaluations);
@@ -1861,6 +1962,12 @@ impl System for Novice {
             s.composed,
             s.composed_evaluations
         );
+        for r in &self.shadow {
+            eprintln!(
+                "shadow {:<14} rows {:>3} found {} evaluations {:>9} table_bits {:>6.1} distinct {:>3} reductions {:>3} no_reduction {} cost_bound_rejects {} support {:.2} (mod {})",
+                r.key, r.rows, u8::from(r.found), r.evaluations, r.table_bits, r.distinct_targets, r.reductions, u8::from(r.no_reduction), u8::from(r.cost_bound_rejects), r.support, r.support_modulus
+            );
+        }
         eprintln!("recurrences accepted after holding part of the table out: {} with nothing skipped, {} only because points the refitted step gets wrong were skipped", s.validations_clean, s.validations_with_skips);
         let mut order: Vec<&Group> = self.groups.iter().filter(|g| g.explained_at.is_some()).collect();
         order.sort_by_key(|g| g.explained_at);
@@ -2681,6 +2788,69 @@ mod recurrence_tests {
         assert!(fact(&n.ask("what is 8 zorpyarn 1")).is_none(), "{}", answer_text(&n.ask("what is 8 zorpyarn 1")));
         assert!(fact(&n.ask("what is 8 zorpyarn 8")).is_none(), "{}", answer_text(&n.ask("what is 8 zorpyarn 8")));
         assert!(fact(&n.ask("what is 4 zorpyarn 5")).is_none(), "{}", answer_text(&n.ask("what is 4 zorpyarn 5")));
+    }
+
+    #[test]
+    fn the_shadow_check_logs_what_it_would_reject_and_changes_nothing() {
+        let build = |shadow: bool| {
+            let mut n = Novice::default();
+            n.shadow_on = shadow;
+            teach_unary(&mut n, "zarbosido", popcount, (1..=22).filter(|x| *x != 8));
+            let mut seed = 777u64;
+            let rule: Vec<i64> = (0..=22)
+                .map(|_| {
+                    seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                    ((seed >> 33) % 100) as i64
+                })
+                .collect();
+            teach_unary(&mut n, "noiseyarn", |x| rule[x as usize], (0..=22).filter(|x| *x != 7 && *x != 14));
+            n.ready();
+            n
+        };
+        let (mut off, mut on) = (build(false), build(true));
+        // Not a count, a reply or a kind differs.
+        assert_eq!(off.stats.evaluations, on.stats.evaluations);
+        assert_eq!(off.kinds(), on.kinds());
+        for q in ["what is zarbosido 8", "what is zarbosido 30", "what is noiseyarn 7", "what is noiseyarn 40"] {
+            assert_eq!(off.ask(q), on.ask(q), "{q}");
+        }
+        assert!(off.shadow.is_empty());
+        // One record for each kind that reached the recurrence search.
+        let of = |key: &str| on.shadow.iter().find(|r| r.key == key).unwrap_or_else(|| panic!("no record for {key}: {:?}", on.shadow.iter().map(|r| r.key.clone()).collect::<Vec<_>>()));
+        let (real, noise) = (of("zarbosido"), of("noiseyarn"));
+        assert!(real.found && !noise.found);
+        assert!(real.evaluations > 0 && noise.evaluations > 0, "the work spent inside the search is recorded");
+        // A real recurrence is never what the sound check rejects.
+        assert!(!real.cost_bound_rejects);
+        // The soft feature: a step that is the earlier answer plus something about the number has agreeing groups; arbitrary answers do not.
+        assert!(real.support > noise.support, "{} against {}", real.support, noise.support);
+    }
+
+    #[test]
+    fn the_cost_bound_rejects_only_what_no_recurrence_could_pay_for() {
+        // The cheapest way to reduce the number already costs more than the whole table, the margin for chance and the answers still to come.
+        assert!(cost_bound_rejects(300 * bits::BIT, 100 * bits::BIT, 20));
+        // A table of 200 bits against a reduction of 3 bits: nothing is ruled out.
+        assert!(!cost_bound_rejects(3 * bits::BIT, 200 * bits::BIT, 20));
+        // The margin matters at the edge.
+        let table = 100 * bits::BIT;
+        let future = (20u64 / 2) * bits::log2(ANSWER_SPACE);
+        assert!(!cost_bound_rejects(table + future - u64::from(RISK_BITS) * bits::BIT - 1, table, 20));
+        assert!(cost_bound_rejects(table + future - u64::from(RISK_BITS) * bits::BIT, table, 20));
+    }
+
+    #[test]
+    fn a_recurrence_whose_answers_are_all_different_is_found_so_a_distinct_answers_gate_would_reject_a_true_rule() {
+        // Doubling (2^x): every answer is different, so "the answers repeat" cannot be a condition for a recurrence to be worth searching for. (The
+        // factorial, which is also all different, is not found today: a gap, not a positive control.)
+        let mut n = Novice::default();
+        n.shadow_on = true;
+        teach_unary(&mut n, "doubleyarn", |x| 1i64 << x, (1..=18).filter(|x| *x != 5));
+        n.ready();
+        let record = n.shadow.iter().find(|r| r.key == "doubleyarn").unwrap_or_else(|| panic!("no recurrence search ran: {:?}", n.shadow));
+        assert!(record.distinct_targets as f64 / record.rows as f64 > 0.9, "every answer different");
+        assert!(record.found, "a true recurrence that the search finds today");
+        assert!(!record.cost_bound_rejects);
     }
 
     fn spelled(n: usize) -> String {
