@@ -632,6 +632,39 @@ The key was read only after the numbers above were committed (`f3072f8`).
 
 **Another mistake for the list:** parts that were each seen are not a way of asking that was taught.
 
+### Constants that are found, not searched for (`holes`)
+
+The tenth set showed that the closed forms Novice can reach are limited by their constants, not their shape: the plain stage has five constants at size 7, the stage with constants from the data stopped at size 5, and the stages for a modulus, a fitted floor and an affine step skipped kinds of three numbers. This replaces enumeration of the constants with solving for them (`novice/src/holes.rs`). A program with **one unknown constant** beside parts that have none says what the constant must be:
+
+- `E mod c`: every point says `E - answer` is a multiple of `c`, so `c` divides the gcd of those differences and is larger than every answer (nothing is tried: `top + 1` to `top + 3` is no longer the range);
+- `E div c`: `c * answer <= E < c * answer + c` at every point is an interval for `c`;
+- `E * c`, `E + c`, `E - c`, `c - E`: the same ratio or difference at every point; `max(E, c)`, `min(E, c)`: the answer where it is not `E`.
+- One level up, beside a sibling `P` that has no unknown (`P + Q`, `P - Q`, `Q - P`, `P * Q`, `max(P, Q)`, `min(P, Q)`), the answers give the answers `Q` must make (all of them, or where `P` does not decide) and `Q = x mod c`, `x div c` or `x * c` is solved the same way. This reaches `a mod 11 + b div 2`, `5 * a + max(a, b)` and `max(a mod 6, a div 4)` (seven nodes, with a constant no list has).
+- The parts `E` are every behavior of up to five nodes made of the variables and the constants 1, 2 and 3; the siblings every behavior of up to three nodes made of the constants 0 to 10. Any number of arguments. The program is fitted on at most 40 points spread through the data (building the parts costs a point at a time); every point is checked when the family is adopted, and the constants that fit are kept as rivals (the smallest three), so the doubt about what lies beyond the data is stated as before.
+
+**Tests (first, then the code):** each shape, solved on its own (the unit tests of `holes`, with a bound on the work); and through the learner, with a question the lessons did not have, inside the box they cover: a sum times a number modulo 37, a product plus a number modulo 19 (three numbers each), a remainder plus a half, five times a number plus a maximum, the larger of a remainder and a quotient with moduli 6 and 12, a quadratic modulo 181 whose largest answer taught is far below it; arbitrary answers give nothing. 124 tests in all.
+
+**What it replaces.** The stage went in right after the plain search, and the stage with constants taken from the data (unary kinds, size 5) and the modular stage (a modulus just above the largest answer, three tries of about 0.95 M evaluations each) were removed: on all ten sets and seeds 1 to 3, no kind that either explained is lost, and no reply of the adaptive exam, the static exam or sets A, B, D, E and F changes (the goldens' replies are identical; only their work lines are). Measured over the 30 runs (ten sets, three seeds, old binary and new one, same machine, the counted evaluations):
+
+| set | evaluations per run, before | after | kinds explained per run, before | after |
+|---|---|---|---|---|
+| A | 57.1 M | 52.9 M | 8.7 | 8.7 |
+| B | 51.8 M | 46.8 M | 5.0 | 5.0 |
+| C | 57.0 M | 49.0 M | 3.3 | 3.3 |
+| D | 43.3 M | 36.1 M | 8.0 | 8.0 |
+| E | 50.6 M | 45.2 M | 4.0 | 4.0 |
+| F | 45.7 M | 38.8 M | 9.0 | 9.0 |
+| G | 51.5 M | 39.9 M | 8.0 | 8.7 |
+| H | 67.4 M | 46.0 M | 7.7 | 8.7 |
+| I | 91.5 M | 61.4 M | 7.3 | 9.0 |
+| J | 68.1 M | 54.7 M | 0.7 | 5.0 |
+
+**In all, 1,752 M evaluations became 1,412 M (19 % fewer) and 185 kinds explained became 208, with 0 wrong facts before and after in all 30 runs.** Control facts rise on G (38.3 % to 42.3 % on seed 1), H (25.0 % to 29.3 %), I (27.0 % to 29.8 % on seed 1, 22.0 % to 25.9 % on seed 3, with right guesses 22.7 % to 32.3 % and 20.6 % to 29.0 %), C (50.0 % to 51.8 %) and, on set J, from 0 %, 3.8 % and 4.5 % to **20.4 %, 18.0 % and 14.2 %** (all five plain controls are found on every seed). Hard kinds: still 0 of 12 on set J. **This is a development result: set J has been read, so how much of it transfers is for a fresh set.** The energy was not measured separately (the counted evaluations are the unit here); the experience-curve harness is the instrument for that.
+
+This is the first change of the project that makes the system both cheaper and more capable on the same exams, and the reason is the one the bet names: something derived from the data (a constant) stands in for something searched.
+
+**Limits, plainly.** One unknown constant per program: `(a mod 11) + (b div 7)` has two and the sibling's constants stop at 10, so it is out of reach; a modulus that is a multiple of the gcd is a rival (the smallest three above the largest answer are kept); a rule whose parts have constants outside 0 to 10, or an unknown inside a part of more than three nodes beside a sibling, is not found. A part that fits with an unlisted constant is described with the nearest listed ones (`x + (1 + 3)` for `x + 4`) when it is found by this stage.
+
 ### Cost
 
 Counted evaluations (one operation applied at one point), seed 1; the work is almost all in teaching, because a told answer that a believed program already gives costs a few dozen evaluations. Every row has 0 wrong facts except where noted.

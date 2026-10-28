@@ -1,22 +1,22 @@
 == judge ==
   role               n fact right    WRONG guess right  guess wrong   refused   right in each third of the stream
   compose           30       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
-  control          280      25.0%     0.0%       20.0%         0.0%     55.0%        46.9% ->  48.0% ->  39.3%
+  control          280      29.3%     0.0%       23.2%         0.0%     47.5%        55.1% ->  55.1% ->  46.4%
   newop            175       0.0%     0.0%        0.0%         0.6%     99.4%         0.0% ->   0.0% ->   0.0%
   trap             108       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
   unexplainable     82       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
-  ALL              675      10.4%     0.0%        8.3%         0.1%     81.2%        20.4% ->  20.9% ->  14.7%
+  ALL              675      12.1%     0.0%        9.6%         0.1%     78.1%        24.0% ->  24.0% ->  17.3%
 
 WRONG facts over the whole stream (must be 0): 0
 TRAPS answered (must be 0): 0
 verdict: PASS on honesty; compare coverage and the climb across the thirds
 == work ==
-refusals by reason [other, unknown word, arity, table miss, no program value, negative, inside but unsure, outside and record low]: [315, 13, 0, 212, 0, 0, 0, 8]
-channel reliability (agreed with a confident program / times it could be checked): {"teaching": (597, 597), "told": (115, 125)}
-novice: 49 groups, 9 explained by a program; 153 searches, 78995282 evaluations, 0 hit the size limit; 19 told answers narrowed the doubt; 0 words earned: ; 0 kinds explained by composition for 0 evaluations in all
+refusals by reason [other, unknown word, arity, table miss, no program value, negative, inside but unsure, outside and record low]: [315, 13, 0, 191, 0, 0, 0, 8]
+channel reliability (agreed with a confident program / times it could be checked): {"teaching": (637, 637), "told": (128, 141)}
+novice: 49 groups, 10 explained by a program; 115 searches, 56033335 evaluations, 0 hit the size limit; 12 told answers narrowed the doubt; 0 words earned: ; 0 kinds explained by composition for 0 evaluations in all
 recurrences accepted after holding part of the table out: 0 with nothing skipped, 0 only because points the refitted step gets wrong were skipped
 evaluations spent before each kind was first explained, in the order they were explained:
-  690543 360494 107575 775372 649680 2730604 45341 1456637 13771
+  690543 360494 107575 261425 649680 2730604 45341 380080 13771 5434091
   gopadopa       div((x + (y + z)), 3) (0 rival behaviors; 690543 evaluations to explain)
   given          table of 1
   turidopa       table of 1
@@ -27,15 +27,15 @@ evaluations spent before each kind was first explained, in the order they were e
   becomes        table of 1
   zubodopa       ((x * 10) - x) (3 rival behaviors; 360494 evaluations to explain)
   sukedopa       (x + y) (47 rival behaviors; 107575 evaluations to explain)
-  denosdopa      mod((x * (x * x)), 29) (13 rival behaviors; 775372 evaluations to explain)
+  denosdopa      mod((x * (x * x)), 29) (1 rival behaviors; 261425 evaluations to explain)
   hoseldopa      (x + y) (1 rival behaviors; 649680 evaluations to explain)
   gugedopa       div((x * y), z) (0 rival behaviors; 2730604 evaluations to explain)
   didodopa       table of 1
   put            table of 1
   davodopa       x (2 rival behaviors; 45341 evaluations to explain)
-  zetedopa       mod(div(x, 5), 6) (1 rival behaviors; 1456637 evaluations to explain)
+  zetedopa       mod(div(x, (2 + 3)), 6) (0 rival behaviors; 380080 evaluations to explain)
   bolaldopa      x (2 rival behaviors; 13771 evaluations to explain)
-  ketundopa      table of 65
+  ketundopa      min((x * 8), (y * 6)) (3 rival behaviors; 5434091 evaluations to explain)
   rakoldopa      table of 1
   renaldopa      table of 1
   ditodopa       table of 70
@@ -80,16 +80,16 @@ ANSWER	S00008	refuse		0.000
 ANSWER	S00009	refuse		0.000
 ANSWER	S00010	guess	30	0.500
 ANSWER	S00011	refuse		0.000
-ANSWER	S00012	refuse		0.000
+ANSWER	S00012	guess	0	0.666
 ANSWER	S00013	guess	pisi metu mobo nugi	0.666
 ANSWER	S00014	refuse		0.000
-ANSWER	S00015	refuse		0.000
+ANSWER	S00015	guess	114	0.833
 ANSWER	S00016	refuse		0.000
 ANSWER	S00017	refuse		0.000
 ANSWER	S00018	refuse		0.000
 ANSWER	S00019	refuse		0.000
 ANSWER	S00020	refuse		0.000
-ANSWER	S00021	refuse		0.000
+ANSWER	S00021	guess	126	0.750
 ANSWER	S00022	refuse		0.000
 ANSWER	S00023	refuse		0.000
 ANSWER	S00024	refuse		0.000
@@ -125,7 +125,7 @@ ANSWER	S00053	fact	3	1.000
 ANSWER	S00054	fact	20	1.000
 ANSWER	S00055	refuse		0.000
 ANSWER	S00056	refuse		0.000
-ANSWER	S00057	guess	5	0.777
+ANSWER	S00057	guess	5	0.866
 ANSWER	S00058	refuse		0.000
 ANSWER	S00059	refuse		0.000
 ANSWER	S00060	refuse		0.000
@@ -133,7 +133,7 @@ ANSWER	S00061	refuse		0.000
 ANSWER	S00062	refuse		0.000
 ANSWER	S00063	refuse		0.000
 ANSWER	S00064	fact	12	1.000
-ANSWER	S00065	refuse		0.000
+ANSWER	S00065	guess	0	0.866
 ANSWER	S00066	refuse		0.000
 ANSWER	S00067	refuse		0.000
 ANSWER	S00068	fact	1	1.000
@@ -206,7 +206,7 @@ ANSWER	S00134	refuse		0.000
 ANSWER	S00135	refuse		0.000
 ANSWER	S00136	refuse		0.000
 ANSWER	S00137	refuse		0.000
-ANSWER	S00138	guess	6	0.875
+ANSWER	S00138	guess	6	0.916
 ANSWER	S00139	refuse		0.000
 ANSWER	S00140	refuse		0.000
 ANSWER	S00141	refuse		0.000
@@ -230,7 +230,7 @@ ANSWER	S00158	refuse		0.000
 ANSWER	S00159	refuse		0.000
 ANSWER	S00160	refuse		0.000
 ANSWER	S00161	refuse		0.000
-ANSWER	S00162	refuse		0.000
+ANSWER	S00162	fact	0	1.000
 ANSWER	S00163	refuse		0.000
 ANSWER	S00164	refuse		0.000
 ANSWER	S00165	refuse		0.000
@@ -245,10 +245,10 @@ ANSWER	S00173	refuse		0.000
 ANSWER	S00174	refuse		0.000
 ANSWER	S00175	refuse		0.000
 ANSWER	S00176	refuse		0.000
-ANSWER	S00177	refuse		0.000
+ANSWER	S00177	fact	12	1.000
 ANSWER	S00178	refuse		0.000
 ANSWER	S00179	guess	metu pisi metu	0.666
-ANSWER	S00180	guess	8	0.920
+ANSWER	S00180	guess	8	0.942
 ANSWER	S00181	refuse		0.000
 ANSWER	S00182	refuse		0.000
 ANSWER	S00183	refuse		0.000
@@ -271,10 +271,10 @@ ANSWER	S00199	guess	14	0.500
 ANSWER	S00200	fact	38	1.000
 ANSWER	S00201	guess	12	0.933
 ANSWER	S00202	refuse		0.000
-ANSWER	S00203	refuse		0.000
+ANSWER	S00203	fact	96	1.000
 ANSWER	S00204	guess	134	0.933
 ANSWER	S00205	refuse		0.000
-ANSWER	S00206	refuse		0.000
+ANSWER	S00206	fact	12	1.000
 ANSWER	S00207	refuse		0.000
 ANSWER	S00208	refuse		0.000
 ANSWER	S00209	fact	1	1.000
@@ -293,10 +293,10 @@ ANSWER	S00221	refuse		0.000
 ANSWER	S00222	refuse		0.000
 ANSWER	S00223	refuse		0.000
 ANSWER	S00224	guess	10	0.952
-ANSWER	S00225	guess	118	0.944
+ANSWER	S00225	guess	118	0.958
 ANSWER	S00226	refuse		0.000
 ANSWER	S00227	refuse		0.000
-ANSWER	S00228	refuse		0.000
+ANSWER	S00228	fact	30	1.000
 ANSWER	S00229	fact	11	1.000
 ANSWER	S00230	refuse		0.000
 ANSWER	S00231	refuse		0.000
@@ -315,13 +315,13 @@ ANSWER	S00243	refuse		0.000
 ANSWER	S00244	refuse		0.000
 ANSWER	S00245	refuse		0.000
 ANSWER	S00246	refuse		0.000
-ANSWER	S00247	guess	1	0.750
+ANSWER	S00247	guess	1	0.875
 ANSWER	S00248	fact	mobo hoko nugi pisi	1.000
 ANSWER	S00249	refuse		0.000
 ANSWER	S00250	refuse		0.000
 ANSWER	S00251	refuse		0.000
 ANSWER	S00252	guess	pisi hoko hoko hoko	0.750
-ANSWER	S00253	refuse		0.000
+ANSWER	S00253	fact	18	1.000
 ANSWER	S00254	fact	metu metu nugi	1.000
 ANSWER	S00255	fact	pisi metu mobo pisi	1.000
 ANSWER	S00256	refuse		0.000
@@ -333,7 +333,7 @@ ANSWER	S00261	refuse		0.000
 ANSWER	S00262	refuse		0.000
 ANSWER	S00263	refuse		0.000
 ANSWER	S00264	refuse		0.000
-ANSWER	S00265	refuse		0.000
+ANSWER	S00265	fact	102	1.000
 ANSWER	S00266	refuse		0.000
 ANSWER	S00267	refuse		0.000
 ANSWER	S00268	refuse		0.000
@@ -373,7 +373,7 @@ ANSWER	S00301	refuse		0.000
 ANSWER	S00302	refuse		0.000
 ANSWER	S00303	refuse		0.000
 ANSWER	S00304	refuse		0.000
-ANSWER	S00305	refuse		0.000
+ANSWER	S00305	guess	156	0.962
 ANSWER	S00306	refuse		0.000
 ANSWER	S00307	refuse		0.000
 ANSWER	S00308	refuse		0.000
@@ -404,7 +404,7 @@ ANSWER	S00332	refuse		0.000
 ANSWER	S00333	refuse		0.000
 ANSWER	S00334	refuse		0.000
 ANSWER	S00335	refuse		0.000
-ANSWER	S00336	guess	13	0.900
+ANSWER	S00336	guess	13	0.933
 ANSWER	S00337	refuse		0.000
 ANSWER	S00338	refuse		0.000
 ANSWER	S00339	refuse		0.000
@@ -431,7 +431,7 @@ ANSWER	S00359	refuse		0.000
 ANSWER	S00360	refuse		0.000
 ANSWER	S00361	refuse		0.000
 ANSWER	S00362	guess	hoko mobo hoko hoko	0.500
-ANSWER	S00363	guess	1	0.942
+ANSWER	S00363	guess	1	0.959
 ANSWER	S00364	refuse		0.000
 ANSWER	S00365	refuse		0.000
 ANSWER	S00366	refuse		0.000
@@ -440,7 +440,7 @@ ANSWER	S00368	refuse		0.000
 ANSWER	S00369	refuse		0.000
 ANSWER	S00370	refuse		0.000
 ANSWER	S00371	refuse		0.000
-ANSWER	S00372	refuse		0.000
+ANSWER	S00372	fact	0	1.000
 ANSWER	S00373	refuse		0.000
 ANSWER	S00374	refuse		0.000
 ANSWER	S00375	refuse		0.000
@@ -498,7 +498,7 @@ ANSWER	S00426	refuse		0.000
 ANSWER	S00427	refuse		0.000
 ANSWER	S00428	refuse		0.000
 ANSWER	S00429	refuse		0.000
-ANSWER	S00430	refuse		0.000
+ANSWER	S00430	fact	112	1.000
 ANSWER	S00431	refuse		0.000
 ANSWER	S00432	refuse		0.000
 ANSWER	S00433	fact	4	1.000
@@ -507,7 +507,7 @@ ANSWER	S00435	refuse		0.000
 ANSWER	S00436	refuse		0.000
 ANSWER	S00437	refuse		0.000
 ANSWER	S00438	refuse		0.000
-ANSWER	S00439	refuse		0.000
+ANSWER	S00439	fact	30	1.000
 ANSWER	S00440	refuse		0.000
 ANSWER	S00441	refuse		0.000
 ANSWER	S00442	guess	140	0.977
@@ -537,7 +537,7 @@ ANSWER	S00465	refuse		0.000
 ANSWER	S00466	refuse		0.000
 ANSWER	S00467	fact	7	1.000
 ANSWER	S00468	refuse		0.000
-ANSWER	S00469	refuse		0.000
+ANSWER	S00469	guess	30	0.971
 ANSWER	S00470	refuse		0.000
 ANSWER	S00471	refuse		0.000
 ANSWER	S00472	refuse		0.000
@@ -567,7 +567,7 @@ ANSWER	S00495	refuse		0.000
 ANSWER	S00496	refuse		0.000
 ANSWER	S00497	refuse		0.000
 ANSWER	S00498	refuse		0.000
-ANSWER	S00499	refuse		0.000
+ANSWER	S00499	guess	136	0.979
 ANSWER	S00500	refuse		0.000
 ANSWER	S00501	refuse		0.000
 ANSWER	S00502	refuse		0.000
@@ -636,7 +636,7 @@ ANSWER	S00564	refuse		0.000
 ANSWER	S00565	refuse		0.000
 ANSWER	S00566	refuse		0.000
 ANSWER	S00567	refuse		0.000
-ANSWER	S00568	refuse		0.000
+ANSWER	S00568	fact	138	1.000
 ANSWER	S00569	refuse		0.000
 ANSWER	S00570	refuse		0.000
 ANSWER	S00571	fact	18	1.000
@@ -654,7 +654,7 @@ ANSWER	S00582	refuse		0.000
 ANSWER	S00583	refuse		0.000
 ANSWER	S00584	guess	282	0.916
 ANSWER	S00585	refuse		0.000
-ANSWER	S00586	refuse		0.000
+ANSWER	S00586	guess	6	0.982
 ANSWER	S00587	refuse		0.000
 ANSWER	S00588	refuse		0.000
 ANSWER	S00589	refuse		0.000
@@ -669,7 +669,7 @@ ANSWER	S00597	refuse		0.000
 ANSWER	S00598	fact	nugi metu nugi pisi	1.000
 ANSWER	S00599	refuse		0.000
 ANSWER	S00600	refuse		0.000
-ANSWER	S00601	guess	12	0.981
+ANSWER	S00601	guess	12	0.984
 ANSWER	S00602	fact	pisi nugi pisi metu	1.000
 ANSWER	S00603	refuse		0.000
 ANSWER	S00604	refuse		0.000
@@ -687,12 +687,12 @@ ANSWER	S00615	refuse		0.000
 ANSWER	S00616	refuse		0.000
 ANSWER	S00617	refuse		0.000
 ANSWER	S00618	refuse		0.000
-ANSWER	S00619	guess	131	0.982
+ANSWER	S00619	guess	131	0.985
 ANSWER	S00620	refuse		0.000
 ANSWER	S00621	fact	nugi mobo mobo nugi	1.000
 ANSWER	S00622	refuse		0.000
 ANSWER	S00623	refuse		0.000
-ANSWER	S00624	refuse		0.000
+ANSWER	S00624	fact	54	1.000
 ANSWER	S00625	refuse		0.000
 ANSWER	S00626	refuse		0.000
 ANSWER	S00627	refuse		0.000
@@ -731,7 +731,7 @@ ANSWER	S00659	fact	26	1.000
 ANSWER	S00660	refuse		0.000
 ANSWER	S00661	refuse		0.000
 ANSWER	S00662	refuse		0.000
-ANSWER	S00663	refuse		0.000
+ANSWER	S00663	guess	180	0.977
 ANSWER	S00664	refuse		0.000
 ANSWER	S00665	refuse		0.000
 ANSWER	S00666	refuse		0.000
