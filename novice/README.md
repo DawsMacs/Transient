@@ -683,6 +683,25 @@ An eleventh set of kinds was written by a separate session that was told not to 
 
 **This set is now a development set.**
 
+### After the eleventh blind test: what transferred
+
+The key was read only after the numbers above were committed (`8762334`). The same worlds were then run with the binary from before pull request #70 (constant inference) and the one from before #69 (the dropped-word policy), to say what each change did on kinds nobody had read.
+
+| seed | binary | control facts | kinds explained | evaluations | wrong facts, traps answered |
+|---|---|---|---|---|---|
+| 1 | before #69, and before #70 | 11.0 % | 4 | 53.0 M | 0, 0 |
+| 1 | now | 15.5 % | 5 | 49.8 M | 0, 0 |
+| 2 | before #69, and before #70 | 9.7 % | 2 | 53.4 M | 0, 0 |
+| 2 | now | 14.5 % | 3 | 56.0 M | 0, 0 |
+| 3 | before #69, and before #70 | 10.3 % | 2 | 43.7 M | 0, 0 |
+| 3 | now | 14.5 % | 3 | 46.8 M | 0, 0 |
+
+- **Constant inference transferred, narrowly.** It added exactly one kind per seed, the same one each time: a product of a maximum of two numbers and a third, reduced modulo a prime (three numbers; the modulus is hidden behind the product, which only the gcd of the differences finds). The other two kinds found, a number plus a constant modulo a prime and a remainder of a difference, were found by the older stages too. **The five plain controls: three found on every seed, two refused on every seed** (a number times a constant over another number plus a constant; a sum over a third number plus a constant): each has a constant inside the divisor, and two constants in the first case, which the stage does not cover (a division join, with an interval for the divisor, would). That is the next increment, not done.
+- **The saving in work did not transfer.** The 19 % fewer evaluations measured on the ten sets read earlier came from dropping the two stages that tried constants for kinds of one or two numbers; most controls here have three, which those stages skipped, while the new stage now runs on every failing kind. On K the total went from 150.0 M to 152.7 M evaluations (1.8 % more), with one more kind explained per seed. So the claim that stands is capability without a rise in work beyond 2 %, not a general reduction.
+- **The dropped-word policy was not exercised.** The three controls taught in every way, with each filler left out for the same facts, make the rows that leave a filler out into ways that were taught; the four traps that leave out a word no lesson shows dropped were refused by every binary. Results are identical before and after #69 on all three seeds. The honesty on K came from the fairer rows, not from the policy.
+- **Hard kinds: 0 of 12 before and after.** Five of the twelve are closed forms of nine or eleven nodes with up to three constants; none is reachable in seven. The ten controls over spelled numbers were refused, as they must be when none of the six grammars is one the readers cover; the decoders in the tests (which are told the kind of grammar) recover them, so they are learnable in principle by a reader that is not yet built.
+- **What this says about the bet.** On kinds nobody had read, adaptation (here: solving for a constant from the data) made the system a little more capable at about the same cost; it did not make it cheaper, and it did not reach the hard kinds, which is where the cost of failing lies.
+
 ### Cost
 
 Counted evaluations (one operation applied at one point), seed 1; the work is almost all in teaching, because a told answer that a believed program already gives costs a few dozen evaluations. Every row has 0 wrong facts except where noted.
