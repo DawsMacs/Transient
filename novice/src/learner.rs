@@ -1479,8 +1479,11 @@ impl Novice {
             if spoke[i].is_some() {
                 self.groups[g].speaks = spoke[i];
             }
-            let arrangement = Self::arrangement(p, &self.groups[g].key);
-            self.shapes.add(arrangement);
+            // (only questions with numbers: without any, the word taken for the kind's name may be a digit word of numbers nobody could read)
+            if !p.nums.is_empty() {
+                let arrangement = Self::arrangement(p, &self.groups[g].key);
+                self.shapes.add(arrangement);
+            }
             if self.groups[g].arity == p.nums.len() {
                 self.groups[g].forms.insert(p.forms.clone());
                 self.add_point(g, &p.nums, answer);
