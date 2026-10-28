@@ -6,7 +6,7 @@ What Novice produces on the reference platform (Linux x86_64, glibc), kept so th
 |---|---|
 | `static60-seed1.txt` | The static entry exam (`baby exam write DIR --units 60 --seed 1`): the judge's table, then Novice's predictions (`novice static`). |
 | `adapt-seed1.txt` | The adaptive entry exam (`baby exam adapt-write DIR --seed 1`) driven with `novice serve`: the judge's table, Novice's account of its work (kinds explained, the programs it found, counted evaluations), then every reply. |
-| `hidden-a-seed1.txt` to `hidden-h-seed1.txt` | The same for the eight sets of hidden worlds (`tools/hidden_worlds*.py`, seed 1). All eight are development sets. |
+| `hidden-a-seed1.txt` to `hidden-i-seed1.txt` | The same for the nine sets of hidden worlds (`tools/hidden_worlds*.py`, seed 1). All nine are development sets. |
 | `PROVENANCE.txt` | Which compiler and machine produced them. Informational; not compared. |
 
 Only deterministic outputs are compared. Timings, memory and joules are never part of a golden (the exams are driven with `EXAM_NO_JOULES=1`).

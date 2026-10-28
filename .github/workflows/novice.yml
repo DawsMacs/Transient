@@ -52,7 +52,7 @@ jobs:
           cargo build --release --offline
           cargo test --release --offline
 
-      # The goldens (novice/golden/README.md): the static exam, the adaptive exam and the eight sets of hidden worlds, replies and counted work, compared byte
+      # The goldens (novice/golden/README.md): the static exam, the adaptive exam and the nine sets of hidden worlds, replies and counted work, compared byte
       # for byte. A difference fails the job on the reference row (Linux x86_64 glibc) and is only reported on the other.
       - name: Goldens
         continue-on-error: ${{ matrix.name != 'linux-x86_64-glibc' }}

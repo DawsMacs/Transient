@@ -85,6 +85,9 @@ struct Group {
     claims: BTreeMap<Vec<i64>, BTreeMap<String, String>>,
     /// Points where the told answer disagreed with the program believed at the time: not believed, not forgotten.
     disputed: std::collections::BTreeSet<Vec<i64>>,
+    /// Points that one channel has answered in two ways: the numbers do not decide them (something the kind depends on is not among the numbers, such
+    /// as number words that are not read), and the latest claim of the channel must not stand for all of them.
+    conflicted: std::collections::BTreeSet<Vec<i64>>,
     /// This kind's own record of guesses made outside its region: (right, made).
     record: (u32, u32),
     /// The same for answers worked out by walking a chain of reductions.
@@ -691,6 +694,16 @@ impl Novice {
         let total: u64 = weights.iter().sum::<u64>() + other_count * bits::exp2_neg(other - floor);
         let (best, top) = weights.iter().enumerate().max_by(|a, b| a.1.cmp(b.1).then(candidates[b.0].cmp(candidates[a.0])))?;
         Some((candidates[best].clone(), *top, total))
+    }
+
+    /// A point that was given different answers: a guess at the answer it was given most often, as sure as that share of what it was given, and none at all
+    /// if the share is under a half.
+    fn share_guess(&self, g: usize, nums: &[i64]) -> Option<Answer> {
+        let given = self.groups[g].points.get(nums)?;
+        let total: u32 = given.values().sum();
+        let best = majority(given)?;
+        let permille = (1000 * given.get(best).copied().unwrap_or(0) / total.max(1)).min(999);
+        (permille >= 500).then(|| Answer::Guess(best.to_string(), permille))
     }
 
     /// Whether some taught or told point of the group is at least as large as `nums` in every coordinate. A fact is stated only inside the region a
@@ -1662,7 +1675,7 @@ impl Novice {
             let g = match self.by_key.get(&key) {
                 Some(&g) => g,
                 None => {
-                    self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, enumerated_with: 0, recurrence_tried: 0, spent: 0, explained_at: None, table: Default::default(), claims: BTreeMap::new(), disputed: Default::default(), record: (0, 0), chain_record: (0, 0), negative: false, speaks: None, forms: Default::default() });
+                    self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, enumerated_with: 0, recurrence_tried: 0, spent: 0, explained_at: None, table: Default::default(), claims: BTreeMap::new(), disputed: Default::default(), conflicted: Default::default(), record: (0, 0), chain_record: (0, 0), negative: false, speaks: None, forms: Default::default() });
                     self.by_key.insert(key, self.groups.len() - 1);
                     self.groups.len() - 1
                 }
@@ -1678,6 +1691,9 @@ impl Novice {
             if self.groups[g].arity == p.nums.len() {
                 self.groups[g].forms.insert(p.forms.clone());
                 self.add_point(g, &p.nums, answer);
+                if self.groups[g].claims.get(&p.nums).and_then(|c| c.get(TEACHING)).is_some_and(|said| said != answer) {
+                    self.groups[g].conflicted.insert(p.nums.clone());
+                }
                 self.groups[g].claims.entry(p.nums.clone()).or_default().insert(TEACHING.to_string(), answer.clone());
                 if let Ok(v) = answer.parse::<i64>() {
                     self.groups[g].table.borrow_mut().entry(p.nums.clone()).or_insert(v);
@@ -1801,6 +1817,17 @@ impl System for Novice {
                 reason.set(3);
                 let gi = self.group_of(&p)?;
                 let (answer, top, total) = self.believe(gi, &p.nums)?;
+                if self.groups[gi].conflicted.contains(&p.nums) {
+                    return self.share_guess(gi, &p.nums);
+                }
+                // A kind whose numbers have been seen to leave the answer open elsewhere is not read from its table as a fact: what the numbers do
+                // not say may differ here too. The answer is a guess, as sure as the share of the kind's points that were never contradicted.
+                let doubt = self.groups[gi].conflicted.len();
+                if doubt > 0 {
+                    let settled = self.groups[gi].points.len().saturating_sub(doubt);
+                    let permille = (1000 * settled / self.groups[gi].points.len().max(1)).min(999) as u32;
+                    return (permille >= 500).then(|| Answer::Guess(answer, permille));
+                }
                 if u128::from(top) << RISK_BITS >= u128::from(total) * ((1u128 << RISK_BITS) - 1) {
                     return Some(Answer::Fact(answer));
                 }
@@ -1820,7 +1847,7 @@ impl System for Novice {
             // out is a guess whose confidence is how often such answers have been right.
             if fit.found[0].expr.has_fix() {
                 let gi = self.group_of(&p)?;
-                if !self.groups[gi].disputed.contains(&p.nums) {
+                if !self.groups[gi].disputed.contains(&p.nums) && !self.groups[gi].conflicted.contains(&p.nums) {
                     if let Some((answer, top, total)) = self.believe(gi, &p.nums) {
                         if u128::from(top) << RISK_BITS >= u128::from(total) * ((1u128 << RISK_BITS) - 1) {
                             return Some(Answer::Fact(answer));
@@ -1838,7 +1865,7 @@ impl System for Novice {
             if inside {
                 // All but 2^-RISK_BITS of the belief on this answer? (Not at a point where a told answer was refused: that stays a guess.)
                 let sure = u128::from(top) << RISK_BITS >= u128::from(total) * ((1u128 << RISK_BITS) - 1);
-                if sure && !g.disputed.contains(&p.nums) {
+                if sure && !g.disputed.contains(&p.nums) && !g.conflicted.contains(&p.nums) {
                     return Some(Answer::Fact(value.to_string()));
                 }
                 let permille = (u128::from(top) * 1000 / u128::from(total.max(1))) as u32;
@@ -1897,7 +1924,7 @@ impl System for Novice {
             None => {
                 // A kind word it has never met names a new group.
                 let Some(key) = p.words.iter().filter(|w| !self.df.contains_key(*w)).min().cloned() else { return };
-                self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, enumerated_with: 0, recurrence_tried: 0, spent: 0, explained_at: None, table: Default::default(), claims: BTreeMap::new(), disputed: Default::default(), record: (0, 0), chain_record: (0, 0), negative: false, speaks: None, forms: Default::default() });
+                self.groups.push(Group { key: key.clone(), arity: p.nums.len(), points: BTreeMap::new(), fit: None, searched_at: 0, words_tried: 0, enumerated_with: 0, recurrence_tried: 0, spent: 0, explained_at: None, table: Default::default(), claims: BTreeMap::new(), disputed: Default::default(), conflicted: Default::default(), record: (0, 0), chain_record: (0, 0), negative: false, speaks: None, forms: Default::default() });
                 self.by_key.insert(key, self.groups.len() - 1);
                 self.groups.len() - 1
             }
@@ -1925,6 +1952,9 @@ impl System for Novice {
             let tally = self.reliability.entry(channel.clone()).or_insert((0, 0));
             tally.1 += 1;
             tally.0 += u32::from(confident == v);
+        }
+        if self.groups[g].claims.get(&p.nums).and_then(|c| c.get(&channel)).is_some_and(|said| said != truth) {
+            self.groups[g].conflicted.insert(p.nums.clone());
         }
         self.groups[g].claims.entry(p.nums.clone()).or_default().insert(channel, truth.to_string());
         let points = self.groups[g].points.len() as u64;
@@ -3145,5 +3175,65 @@ mod recurrence_tests {
         let target: Vec<i64> = (0..20).map(|x: i64| x.min(9) + 2 * (x - 9).max(0)).collect();
         let found = shape_constants(&inputs, &target).expect("a knee is a shape");
         assert!(found.contains(&9) || found.contains(&10), "{found:?}");
+    }
+}
+
+#[cfg(test)]
+mod unread_words_tests {
+    use super::*;
+
+    /// A digit and a number spelled in a system no lesson explains: the spelled words look like phrasing, so one digit is given many answers.
+    fn teach_unread(n: &mut Novice) {
+        let value = |w: &str| match w {
+            "kovi" => 1,
+            "zeru" => 2,
+            "kovi zeru" => 3,
+            "zeru zeru" => 4,
+            _ => 0,
+        };
+        for a in [3, 4, 5, 6, 7] {
+            for w in ["kovi", "zeru", "kovi zeru", "zeru zeru"] {
+                n.teach(&format!("given {a} and {w} evaluate dolpa"), &(a + 2 * value(w)).to_string());
+            }
+        }
+        // The spelled words are common words, used by another kind as well, so that the kind word is the rarest in its lessons.
+        for k in 0..40 {
+            for w in ["kovi", "zeru", "kovi zeru", "zeru zeru"] {
+                n.teach(&format!("tell {w} in tongue flonka{}", k % 3), &format!("v{}", (k * 7 + w.len()) % 11));
+            }
+        }
+        // Digits taught once each: no contradiction at them, but the kind has shown elsewhere that the digit alone does not decide it.
+        for (a, answer) in (10..=20).zip([17, 4, 29, 11, 23, 8, 30, 2, 19, 26, 14]) {
+            n.teach(&format!("given {a} and kovi evaluate dolpa"), &answer.to_string());
+        }
+    }
+
+    #[test]
+    fn a_point_that_was_given_different_answers_is_not_a_fact() {
+        let mut n = Novice::default();
+        teach_unread(&mut n);
+        n.ready();
+        // 5 was taught with four answers, one for each spelled number; the digit alone does not decide, and the last teaching must not stand for it.
+        for w in ["kovi", "zeru", "kovi zeru", "zeru zeru"] {
+            let reply = n.ask(&format!("given 5 and {w} evaluate dolpa"));
+            assert!(!matches!(reply, Answer::Fact(_)), "{w}: {reply:?}");
+        }
+        // A digit that was taught only once, with another spelled number: the kind has shown elsewhere that the digit does not decide it.
+        let reply = n.ask("given 12 and kovi evaluate dolpa");
+        assert!(matches!(reply, Answer::Guess(ref w, 687) if w == "29"), "{reply:?}");
+        // A trap with one number: the kind was taught with the digit and words, but the words are not here.
+        let reply = n.ask("given 5 evaluate dolpa");
+        assert!(!matches!(reply, Answer::Fact(_)), "{reply:?}");
+    }
+
+    #[test]
+    fn a_correction_still_replaces_what_was_said_before() {
+        let mut n = Novice::default();
+        n.teach("what is dolpa 4", "9");
+        n.teach("what is dolpa 5", "11");
+        n.teach("what is dolpa 6", "13");
+        n.teach("what is dolpa 7", "15");
+        n.ready();
+        assert_eq!(n.ask("what is dolpa 5"), Answer::Fact("11".to_string()));
     }
 }
