@@ -11,7 +11,7 @@ verdict: PASS on honesty; compare coverage and the climb across the thirds
 == work ==
 refusals by reason [other, unknown word, arity, table miss, no program value, negative, inside but unsure, outside and record low]: [0, 0, 0, 277, 7, 0, 0, 0]
 channel reliability (agreed with a confident program / times it could be checked): {"teaching": (228, 228), "told": (67, 67)}
-novice: 23 groups, 5 explained by a program; 198 searches, 49578171 evaluations, 0 hit the size limit; 21 told answers narrowed the doubt; 0 words earned: ; 0 kinds explained by composition for 0 evaluations in all
+novice: 23 groups, 5 explained by a program; 198 searches, 52851379 evaluations, 0 hit the size limit; 21 told answers narrowed the doubt; 0 words earned: ; 0 kinds explained by composition for 0 evaluations in all
 recurrences accepted after holding part of the table out: 2 with nothing skipped, 0 only because points the refitted step gets wrong were skipped
 evaluations spent before each kind was first explained, in the order they were explained:
   907217 837443 401170 210178 1363886 2835483
