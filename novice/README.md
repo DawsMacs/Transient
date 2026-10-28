@@ -461,6 +461,20 @@ An eighth set of kinds was written by a separate session that had not read Novic
 
 **This set is now a development set.**
 
+### After the eighth blind test: what the key says, and two defects an outside review found
+
+**What the key says** (read after the numbers were recorded; seed 1's key, the other seeds draw other constants and grammars).
+- **Number words: the finder found no word on any seed, so 0 of 6 new grammars.** The first family of each seed was bijective base 5 (no zero digit), balanced base 5 (digits from minus 2 to 2), a twenties-with-a-leftover count, and, for the families no kind reads, tally words, three places with a different set of digit words for each, and order-signed words with a subtractive pair. The finder's grammars are a hand-built list (sums, positional, least significant first, three-word mixed radix, multiplier words with minus); a set that invents other grammars gets none of the benefit. This is the plain answer to "does the number-word work generalize": it generalizes within the grammars it lists. Adding bijective and balanced digits (digit ranges other than zero to base minus one) and a connective word would cover two of the six; the better route, noted for later, is a finder that learns each word as a small arithmetic step (multiply the number so far by a constant and add a constant) instead of choosing among named grammars. Nothing was changed for this set: it is spent as a test.
+- **Hard kinds: 0 of 12.** New-operation kinds here include three-number closed forms (the median, the greatest common divisor, a sum of three products modulo a prime), a powers-of-digits rule, sequences, a grid walk and a digit rule with a state. The modulus kind of set G has no counterpart that was acquired: a three-argument modular form is outside the two-argument fit stage.
+- **Controls over digits are found** (a cube modulo a prime, a three-number average, a product over a quotient, a division then a remainder: 5 to 16 of 17 to 24 questions each); controls over number words are refused for the reason in the first point.
+
+**Two defects found by an independent reviewer's notes (read after the numbers were recorded), each reproduced, then fixed test first.**
+1. **A word-only answer from one unchecked source became a fact.** `TOLD q red` with a named source nobody had checked, then `ASK q`, gave a fact. A question with no numbers has no program to check a source against, so the answer is now kept apart and is only ever a guess (confidence one half); lessons and an unlabeled teacher stay facts. (The numeric path already weighed sources.)
+2. **A correction did not reach the cached frame view.** My lazy rebuild of the frame lookups (a twentieth more lookups) meant that after `TOLD q blue` for a question that had been taught `red`, the same fact asked in another wording was still stated as `red`. A second answer for words that had one now rebuilds the frames at once.
+Neither fix changed an answer on any exam run here (the generated worlds do not tell word-only answers from labeled sources or correct a cached wording). 91 tests; goldens A to G identical, set H added; sets F, G and H unchanged.
+
+**Open, from the same notes and not done:** (1) the validation of a recurrence uses the held-out target to decide that a point is a base case and skip it, so an accepted validation can omit reachable errors (a clean outer split is the proposed repair, and it may lower the acquisition counts); (2) a table that is exactly the teaching table of a capped rule (`min(x + y, 8)`) is explained as `x + y` and states `9` as a fact at a corner of the box; (3) the adaptive judge does not count a guessed trap as a violation (the traps of set H were all refused, so no number here is affected). These are the next honesty items before more capability.
+
 ### Cost
 
 Counted evaluations (one operation applied at one point), seed 1; the work is almost all in teaching, because a told answer that a believed program already gives costs a few dozen evaluations. Every row has 0 wrong facts except where noted.
