@@ -665,6 +665,24 @@ This is the first change of the project that makes the system both cheaper and m
 
 **Limits, plainly.** One unknown constant per program: `(a mod 11) + (b div 7)` has two and the sibling's constants stop at 10, so it is out of reach; a modulus that is a multiple of the gcd is a rival (the smallest three above the largest answer are kept); a rule whose parts have constants outside 0 to 10, or an unknown inside a part of more than three nodes beside a sibling, is not found. A part that fits with an unlisted constant is described with the nearest listed ones (`x + (1 + 3)` for `x + 4`) when it is found by this stage.
 
+### The eleventh blind test (an eleventh set, run once): the transfer test
+
+An eleventh set of kinds was written by a separate session that was told not to read Novice's code (`tools/hidden_worlds_k.py`, pull request #71): 12 hard kinds (10 new-operation, 2 composed), 15 controls (a third of them plain closed forms of one to three numbers and one to three constants, of five to seven nodes), 5 arbitrary codes, and 126 trap rows per seed that must be refused. It was commissioned as the transfer test of the two changes made after the earlier sets were read: the policy that a word left out of a taught way of asking is a guess (pull request #69), and constants that are found, not searched for (pull request #70). Its rewordings are fairer than set J's: three controls are taught in every way, also with each filler left out for the same facts, which is the evidence of what can be dropped, and 4 trap rows per world leave out a word no lesson shows dropped. Numbers are spelled in six new grammars, three per seed, with the three-family design of the earlier sets. 736 questions per seed. Novice at the commit frozen beforehand (`1f674c4`, the merge of pull request #71; `novice/` and `baby/` are exactly as pull request #70 left them) was run **once per seed on seeds 1 to 3, and the numbers below were written down before the kinds, the key or any reviewer's notes were read.**
+
+| seed | wrong facts | hard questions answered right as facts (238 each seed, 38 composed) | hard guesses: right / wrong | controls (290): facts / right guesses / wrong guesses / refused | groups explained by a program | evaluations | energy |
+|---|---|---|---|---|---|---|---|
+| 1 | **0** | **0** | 0 / 0 | 15.5 % / 4.8 % / 0.3 % / 79.3 % | 5 of 98 | 49.8 M | 17.55 J |
+| 2 | **0** | **0** | 0 / 0 | 14.5 % / 5.5 % / 0 % / 80.0 % | 3 of 93 | 56.0 M | 19.63 J |
+| 3 | **0** | **0** | 0 / 0 | 14.5 % / 5.5 % / 0 % / 80.0 % | 3 of 72 | 46.8 M | 16.67 J |
+
+- **Wrong facts: 0 on every seed, and 0 of 126 trap rows answered on every seed.** The honesty rule held on a set written after the dropped-word fix, including the rows that leave out a word nobody showed dropped. The baby gave 12, 34 and 13 wrong facts and answered 1, 7 and 2 trap questions on the same worlds.
+- **Hard kinds acquired: 0 of 12 on every seed** (no hard question answered right as a fact; no hard guess at all). Five of the twelve are closed forms of nine or eleven nodes; none is reachable in seven.
+- **Controls: facts 15.5 %, 14.5 % and 14.5 %, plus 4.8 % to 5.5 % right guesses** (one wrong guess on seed 1), against 0 % to 4.5 % on set J before the changes and 29.3 % to 42.3 % on the sets read before them (G, H, I). The cause of the gap is not known when this is written; the key is read after this paragraph.
+- Refusals are reported apart from wrong answers: 676, 678 and 678 of the questions were refused (91.8 %, 92.1 %, 92.1 %).
+- Answering 1.7 to 3.6 J a seed, teaching 13.0 to 16.7 J; 46.8 to 56.0 M evaluations; **3 to 5 of 72 to 98 groups explained by a program**, so most of the work was again spent on failing. The meter warned that other processes shared the machine, so the figures are upper bounds.
+
+**This set is now a development set.**
+
 ### Cost
 
 Counted evaluations (one operation applied at one point), seed 1; the work is almost all in teaching, because a told answer that a believed program already gives costs a few dozen evaluations. Every row has 0 wrong facts except where noted.
