@@ -20,7 +20,7 @@ const MIN_LESSONS: usize = 8;
 /// Fewest words a vocabulary of numbers must have.
 const MIN_WORDS: usize = 4;
 
-/// How the words of a lexicon make a number.
+/// How the words of a family make a number.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Grammar {
     /// Every word is a number of its own ("five").
@@ -30,84 +30,136 @@ pub enum Grammar {
     Additive,
     /// A run of words is a number written in this base, the first word the most significant digit.
     Positional(i64),
+    /// The same, the first word the least significant digit.
+    LeastFirst(i64),
+    /// Three words, the first the least significant digit, with a radix for each place.
+    Mixed([i64; 3]),
+    /// A word for each digit, a word for the base and one for its square that multiply the digit word before them (none means one), the parts added
+    /// ("two ten three" is 23); `minus_from` is the first last digit that is said as the next ten minus what is missing (0: no such word).
+    Multiplier { base: i64, minus_from: i64 },
 }
 
-/// The words that are numbers, what they mean, and how a run of them makes one number (and how a number is said again).
+/// The words of one family of number words: what each means, and how a run of them makes a number.
 #[derive(Clone, Debug, Default)]
-pub struct Lexicon {
+pub struct Family {
     values: BTreeMap<String, i64>,
     grammar: Grammar,
-    /// For single words: the word for each number. For runs: unused.
+    /// For single words: the word for each number.
     spoken: BTreeMap<i64, String>,
-    /// For runs: the largest number the lessons showed, and whether saying numbers back reproduced every one of them.
+    /// The word for "minus", if the grammar has one.
+    minus: Option<String>,
+    /// How often each word is used in an answer: where two words mean the same, the answers use the more common.
+    used: BTreeMap<String, usize>,
+    /// For runs: the largest number the lessons showed, and whether saying numbers back reproduced every one the lessons said.
     max_spoken: i64,
     speaks_runs: bool,
+    /// The most words in any numeral the lessons showed: a longer run is a structure nobody showed.
+    max_len: usize,
 }
 
-impl Lexicon {
-    /// Words that are one number each.
-    pub fn single(values: BTreeMap<String, i64>) -> Lexicon {
-        let spoken = values.iter().map(|(w, v)| (*v, w.clone())).collect();
-        Lexicon { values, grammar: Grammar::Single, spoken, max_spoken: 0, speaks_runs: false }
-    }
+fn pow(b: i64, e: usize) -> i64 {
+    (0..e).fold(1i64, |acc, _| acc.saturating_mul(b))
+}
 
-    pub fn is_empty(&self) -> bool {
-        self.values.is_empty()
-    }
-
-    pub fn grammar(&self) -> Grammar {
-        self.grammar
-    }
-
-    pub fn get(&self, word: &str) -> Option<i64> {
+impl Family {
+    fn get(&self, word: &str) -> Option<i64> {
         self.values.get(word).copied()
     }
 
-    pub fn len(&self) -> usize {
-        self.values.len()
+    fn is_minus(&self, word: &str) -> bool {
+        self.minus.as_deref() == Some(word)
     }
 
-    /// The number a run of words makes under the grammar, if every word is in the lexicon.
+    /// The number a run of words makes under the grammar, if every word is in the family.
     pub fn value_of(&self, run: &[String]) -> Option<i64> {
-        if run.is_empty() {
+        if run.is_empty() || (self.max_len > 0 && run.len() > self.max_len) {
             return None;
         }
         match self.grammar {
             Grammar::Single => (run.len() == 1).then(|| self.get(&run[0])).flatten(),
             Grammar::Additive => run.iter().map(|w| self.get(w)).sum::<Option<i64>>(),
+            Grammar::Positional(_) if run.len() > 1 && self.get(&run[0]) == Some(0) => None,
+            Grammar::LeastFirst(_) if run.len() > 1 && self.get(&run[run.len() - 1]) == Some(0) => None,
             Grammar::Positional(b) => run.iter().try_fold(0i64, |acc, w| {
                 let d = self.get(w)?;
                 (d < b).then(|| acc.checked_mul(b)?.checked_add(d)).flatten()
             }),
+            Grammar::LeastFirst(b) => run.iter().enumerate().try_fold(0i64, |acc, (i, w)| {
+                let d = self.get(w)?;
+                (d < b).then(|| acc.checked_add(d.checked_mul(pow(b, i))?)).flatten()
+            }),
+            Grammar::Mixed(r) => {
+                if run.len() != 3 {
+                    return None;
+                }
+                let d: Vec<i64> = run.iter().map(|w| self.get(w)).collect::<Option<_>>()?;
+                (d[0] < r[0] && d[1] < r[1] && d[2] < r[2]).then(|| d[0] + r[0] * d[1] + r[0] * r[1] * d[2])
+            }
+            Grammar::Multiplier { base, .. } => match run.iter().position(|w| self.is_minus(w)) {
+                Some(at) => {
+                    let (left, right) = (self.multiplier_value(&run[..at], base)?, self.multiplier_value(&run[at + 1..], base)?);
+                    (left > right).then_some(left - right)
+                }
+                None => self.multiplier_value(run, base),
+            },
         }
     }
 
-    /// The number a whole text is made of, if all of it is number words.
-    pub fn value_of_text(&self, text: &str) -> Option<i64> {
-        let words = tokens(text);
-        self.value_of(&words)
+    fn multiplier_value(&self, run: &[String], base: i64) -> Option<i64> {
+        if run.is_empty() {
+            return None;
+        }
+        // The parts come from the largest unit down, each at most once, and a last digit by itself.
+        let (mut total, mut pending, mut last_rank) = (0i64, None, 3);
+        for w in run {
+            let v = self.get(w)?;
+            if v == 0 {
+                return (run.len() == 1).then_some(0);
+            } else if v == base || v == base * base {
+                let rank = if v == base { 1 } else { 2 };
+                if rank >= last_rank {
+                    return None;
+                }
+                last_rank = rank;
+                total += pending.take().unwrap_or(1) * v;
+            } else if v >= 1 && v < base {
+                if pending.is_some() {
+                    return None;
+                }
+                pending = Some(v);
+            } else {
+                return None;
+            }
+        }
+        Some(total + pending.unwrap_or(0))
     }
 
-    /// The words for a number: the word the lessons used for it, or for a run grammar the words that make it, within the range the lessons showed
-    /// and only if saying back every number of the lessons gave exactly what the lessons said.
-    pub fn speak(&self, n: i64) -> Option<String> {
-        match self.grammar {
-            Grammar::Single => self.spoken.get(&n).cloned(),
-            _ if !self.speaks_runs => None,
-            _ => self.compose(n),
-        }
+    /// The word the lessons use for a number (or a digit): of the words with that meaning, the one the answers use most.
+    fn word_for(&self, v: i64) -> Option<String> {
+        self.values.iter().filter(|(_, x)| **x == v).max_by_key(|(w, _)| (self.used.get(*w).copied().unwrap_or(0), std::cmp::Reverse((*w).clone()))).map(|(w, _)| w.clone())
     }
 
     fn compose(&self, n: i64) -> Option<String> {
         if n < 0 || n > self.max_spoken {
             return None;
         }
-        let word_for = |v: i64| self.values.iter().find(|(_, x)| **x == v).map(|(w, _)| w.clone());
+        let digits_msd = |b: i64| -> Vec<i64> {
+            let (mut out, mut rest) = (Vec::new(), n);
+            loop {
+                out.push(rest % b);
+                rest /= b;
+                if rest == 0 {
+                    break;
+                }
+            }
+            out
+        };
+        let say = |digits: Vec<i64>| digits.iter().map(|&d| self.word_for(d)).collect::<Option<Vec<_>>>().map(|w| w.join(" "));
         match self.grammar {
-            Grammar::Single => None,
+            Grammar::Single => self.spoken.get(&n).cloned(),
             Grammar::Additive => {
                 if n == 0 {
-                    return word_for(0);
+                    return self.word_for(0);
                 }
                 let mut rest = n;
                 let mut out: Vec<String> = Vec::new();
@@ -118,18 +170,112 @@ impl Lexicon {
                 }
                 Some(out.join(" "))
             }
-            Grammar::Positional(b) => {
-                let mut digits = Vec::new();
-                let mut rest = n;
-                loop {
-                    digits.push(rest % b);
-                    rest /= b;
-                    if rest == 0 {
-                        break;
-                    }
-                }
-                digits.iter().rev().map(|&d| word_for(d)).collect::<Option<Vec<_>>>().map(|w| w.join(" "))
+            Grammar::Positional(b) => say(digits_msd(b).into_iter().rev().collect()),
+            Grammar::LeastFirst(b) => say(digits_msd(b)),
+            Grammar::Mixed(r) => {
+                let (d0, rest) = (n % r[0], n / r[0]);
+                let (d1, d2) = (rest % r[1], rest / r[1]);
+                (d2 < r[2]).then(|| say(vec![d0, d1, d2])).flatten()
             }
+            Grammar::Multiplier { base, minus_from } => self.say_multiplier(n, base, minus_from),
+        }
+    }
+
+    fn say_multiplier(&self, n: i64, base: i64, minus_from: i64) -> Option<String> {
+        if n == 0 {
+            return self.word_for(0);
+        }
+        let digit = |d: i64| self.word_for(d);
+        // The last digit is said as the next ten minus what is missing.
+        if minus_from > 0 && n % base >= minus_from {
+            let missing = base - n % base;
+            let up = self.say_multiplier(n + missing, base, minus_from)?;
+            return Some(format!("{up} {} {}", self.minus.clone()?, digit(missing)?));
+        }
+        let (squares, rest) = (n / (base * base), n % (base * base));
+        let (tens, ones) = (rest / base, rest % base);
+        let mut out: Vec<String> = Vec::new();
+        for (count, unit) in [(squares, base * base), (tens, base)] {
+            if count > 0 {
+                if count > 1 {
+                    out.push(digit(count)?);
+                }
+                out.push(self.word_for(unit)?);
+            }
+        }
+        if ones > 0 {
+            out.push(digit(ones)?);
+        }
+        Some(out.join(" "))
+    }
+}
+
+/// The words that are numbers, in as many families as the lessons show: what each means, and how a run of them makes one number (and how a number
+/// is said again). A word is in at most one family.
+#[derive(Clone, Debug, Default)]
+pub struct Lexicon {
+    families: Vec<Family>,
+}
+
+impl Lexicon {
+    /// Words that are one number each.
+    pub fn single(values: BTreeMap<String, i64>) -> Lexicon {
+        if values.is_empty() {
+            return Lexicon::default();
+        }
+        let spoken = values.iter().map(|(w, v)| (*v, w.clone())).collect();
+        Lexicon { families: vec![Family { values, grammar: Grammar::Single, spoken, ..Family::default() }] }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.families.is_empty()
+    }
+
+    pub fn families(&self) -> usize {
+        self.families.len()
+    }
+
+    pub fn grammar(&self, family: usize) -> Grammar {
+        self.families[family].grammar
+    }
+
+    pub fn len(&self) -> usize {
+        self.families.iter().map(|f| f.values.len() + usize::from(f.minus.is_some())).sum()
+    }
+
+    /// The family a word is in and, for a family of single words, its number; for a family that makes numbers from runs, any number (its place in a run
+    /// is what counts).
+    pub fn owner(&self, word: &str) -> Option<(usize, i64)> {
+        self.families.iter().enumerate().find_map(|(i, f)| f.get(word).or_else(|| f.is_minus(word).then_some(0)).map(|v| (i, v)))
+    }
+
+    pub fn get(&self, word: &str) -> Option<i64> {
+        self.owner(word).map(|(_, v)| v)
+    }
+
+    /// The number a run of words of `family` makes.
+    pub fn value_of_run(&self, family: usize, run: &[String]) -> Option<i64> {
+        self.families.get(family)?.value_of(run)
+    }
+
+    /// The number a whole text is made of and the family it is in, if all of it is number words of one family.
+    pub fn value_of_text(&self, text: &str) -> Option<(i64, usize)> {
+        let words = tokens(text);
+        let (family, _) = self.owner(words.first()?)?;
+        if words.iter().any(|w| self.owner(w).map(|(i, _)| i) != Some(family)) {
+            return None;
+        }
+        self.value_of_run(family, &words).map(|v| (v, family))
+    }
+
+    /// The words for a number in `family`: the word the lessons used for it, or for a run grammar the words that make it, within the range the lessons
+    /// showed and only if saying back the numbers of the lessons gave exactly what the lessons said.
+    pub fn speak(&self, family: usize, n: i64) -> Option<String> {
+        let f = self.families.get(family)?;
+        match f.grammar {
+            Grammar::Single => f.spoken.get(&n).cloned(),
+            _ if !f.speaks_runs => None,
+            _ => f.compose(n),
         }
     }
 }
@@ -301,27 +447,35 @@ pub fn learn(lessons: &[(String, String)]) -> BTreeMap<String, i64> {
 /// Fewest lessons of one kind to look for a reading in.
 const MIN_READING: usize = 20;
 /// Largest base looked for.
-const MAX_BASE: i64 = 16;
+const MAX_BASE: i64 = 24;
 
-/// Give the words of `equations` (a run of words, the number it makes) the numbers that make every equation hold under `grammar`, by fixing a word wherever an equation
-/// has only one word left that is not fixed. None if an equation fails or a word would need a number that is not whole or below zero.
+/// What a run of words in position `i` of `len` weighs in a number under `grammar`, and the number its meaning must stay below there (None: not a
+/// grammar of weighted places).
+fn places(grammar: Grammar, len: usize) -> Option<Vec<(i64, i64)>> {
+    match grammar {
+        Grammar::Additive => Some(vec![(1, i64::MAX); len]),
+        Grammar::Positional(b) => Some((0..len).map(|i| (pow(b, len - 1 - i), b)).collect()),
+        Grammar::LeastFirst(b) => Some((0..len).map(|i| (pow(b, i), b)).collect()),
+        Grammar::Mixed(r) => (len == 3).then(|| vec![(1, r[0]), (r[0], r[1]), (r[0] * r[1], r[2])]),
+        _ => None,
+    }
+}
+
+/// Give the words of `equations` (a run of words, the number it makes) the numbers that make every equation hold under a grammar of weighted places,
+/// by fixing a word wherever an equation has only one word left that is not fixed. None if an equation fails or a word would need a number that is not
+/// whole, below zero or too large for its place.
 fn fix_runs(equations: &[(Vec<String>, i64)], grammar: Grammar) -> Option<BTreeMap<String, i64>> {
-    let weights = |len: usize| -> Vec<i64> {
-        match grammar {
-            Grammar::Positional(b) => (0..len).map(|i| b.pow((len - 1 - i) as u32)).collect(),
-            _ => vec![1; len],
-        }
-    };
     let mut known: BTreeMap<String, i64> = BTreeMap::new();
     loop {
         let mut changed = false;
         for (run, n) in equations {
-            let w = weights(run.len());
+            let w = places(grammar, run.len())?;
             let mut sum = 0i64;
             let mut open: Vec<usize> = Vec::new();
             for (i, t) in run.iter().enumerate() {
                 match known.get(t) {
-                    Some(v) => sum += w[i] * v,
+                    Some(v) if *v < w[i].1 => sum += w[i].0 * v,
+                    Some(_) => return None,
                     None => open.push(i),
                 }
             }
@@ -334,16 +488,14 @@ fn fix_runs(equations: &[(Vec<String>, i64)], grammar: Grammar) -> Option<BTreeM
             if open.iter().any(|&i| run[i] != run[open[0]]) {
                 continue;
             }
-            let weight: i64 = open.iter().map(|&i| w[i]).sum();
+            let weight: i64 = open.iter().map(|&i| w[i].0).sum();
             let rest = n - sum;
             if rest < 0 || rest % weight != 0 {
                 return None;
             }
             let v = rest / weight;
-            if let Grammar::Positional(b) = grammar {
-                if v >= b {
-                    return None;
-                }
+            if open.iter().any(|&i| v >= w[i].1) {
+                return None;
             }
             known.insert(run[open[0]].clone(), v);
             changed = true;
@@ -354,12 +506,71 @@ fn fix_runs(equations: &[(Vec<String>, i64)], grammar: Grammar) -> Option<BTreeM
     }
 }
 
+/// The families of words whose runs make numbers by a base word and a multiplier, for each base that could be. The one-word numbers fix the words said
+/// alone; a word that is left is fixed by a run that has no other word not yet fixed, to a digit, the base or its square, if only one of them makes the
+/// run hold; one word left over is "minus".
+fn multiplier_family(equations: &[(Vec<String>, i64)]) -> Vec<Family> {
+    let mut singles: BTreeMap<String, i64> = BTreeMap::new();
+    for (run, n) in equations {
+        if run.len() == 1 {
+            match singles.get(&run[0]) {
+                Some(v) if v != n => return Vec::new(),
+                _ => {
+                    singles.insert(run[0].clone(), *n);
+                }
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for base in 2..=MAX_BASE {
+        let mut values = singles.clone();
+        if singles.values().any(|v| *v > 1 && *v != base && *v != base * base && *v >= base) {
+            continue;
+        }
+        loop {
+            let mut changed = false;
+            for (run, n) in equations {
+                let open: BTreeSet<&String> = run.iter().filter(|w| !values.contains_key(*w)).collect();
+                if open.len() != 1 {
+                    continue;
+                }
+                let u = (*open.iter().next().unwrap()).clone();
+                let fits: Vec<i64> = (1..base).chain([base, base * base])
+                    .filter(|&v| {
+                        let mut trial = values.clone();
+                        trial.insert(u.clone(), v);
+                        let f = Family { values: trial, grammar: Grammar::Multiplier { base, minus_from: 0 }, ..Family::default() };
+                        f.value_of(run) == Some(*n)
+                    })
+                    .collect();
+                if fits.len() == 1 {
+                    values.insert(u, fits[0]);
+                    changed = true;
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+        let unknown: BTreeSet<&String> = equations.iter().flat_map(|(r, _)| r.iter()).filter(|w| !values.contains_key(*w)).collect();
+        let minus = match unknown.len() {
+            0 => None,
+            1 => Some((*unknown.iter().next().unwrap()).clone()),
+            _ => continue,
+        };
+        out.push(Family { values, grammar: Grammar::Multiplier { base, minus_from: 0 }, minus, ..Family::default() });
+    }
+    out
+}
+
 /// Number words found from a kind that reads them: its questions are made of number words and its answers are written numbers ("twenty three" is
 /// 23). Which words of a question are the number is not known; they are what is left when the words that every lesson of the kind has (its name
 /// and its frame) are taken away from what all the wordings of one fact have in common. The meaning of each word is then fixed the way the counting
-/// is: a number of one word fixes it, a longer one fixes its last unknown word. Two ways of making a number from a run of words are tried: the sum
-/// of its words, and its words as the digits of a number in some base; the first that holds in every lesson is kept. It is then required that saying
-/// the numbers back reproduces what the lessons said, or the lexicon only reads.
+/// is: a number of one word fixes it, a longer one fixes its last unknown word. Several ways of making a number from a run of words are tried (the
+/// sum of its words, its words as the digits of a number in some base, most or least significant first, three words of a mixed radix, and words that
+/// multiply a base word, with a word for "minus" or without); the first that holds in every lesson is kept. Each kind that reads gives a family;
+/// families that share no word are all kept. It is then required that saying the numbers back reproduces what the lessons said (their answers where
+/// they spell numbers), or the family only reads.
 pub fn learn_reading(lessons: &[(String, String)]) -> Lexicon {
     let reading: Vec<(Vec<String>, i64)> = lessons
         .iter()
@@ -371,6 +582,12 @@ pub fn learn_reading(lessons: &[(String, String)]) -> Lexicon {
             (written && digit_free && !words.is_empty()).then(|| (words, a.parse().unwrap_or(0)))
         })
         .collect();
+    let mut used: BTreeMap<String, usize> = BTreeMap::new();
+    for (_, a) in lessons {
+        for w in tokens(a) {
+            *used.entry(w).or_insert(0) += 1;
+        }
+    }
     let mut df: BTreeMap<&str, usize> = BTreeMap::new();
     for (words, _) in &reading {
         for w in words.iter().collect::<BTreeSet<_>>() {
@@ -378,7 +595,7 @@ pub fn learn_reading(lessons: &[(String, String)]) -> Lexicon {
         }
     }
     let names: Vec<&str> = df.iter().filter(|(_, n)| **n >= MIN_READING).map(|(w, _)| *w).collect();
-    let mut best: Option<(Lexicon, usize)> = None;
+    let mut found: Vec<Family> = Vec::new();
     for name in names {
         let kind: Vec<&(Vec<String>, i64)> = reading.iter().filter(|(w, _)| w.iter().any(|x| x == name)).collect();
         let common: BTreeSet<&String> = kind.iter().map(|(w, _)| w.iter().collect::<BTreeSet<_>>()).reduce(|a, b| a.intersection(&b).copied().collect()).unwrap_or_default();
@@ -402,24 +619,76 @@ pub fn learn_reading(lessons: &[(String, String)]) -> Lexicon {
         if equations.len() < MIN_READING / 2 || distinct.len() < 10 {
             continue;
         }
-        let grammars = std::iter::once(Grammar::Additive).chain((2..=MAX_BASE).map(Grammar::Positional));
-        for grammar in grammars {
-            let Some(values) = fix_runs(&equations, grammar) else { continue };
-            let determined = equations.iter().filter(|(run, _)| run.iter().all(|w| values.contains_key(w))).count();
-            if values.len() < MIN_WORDS || determined * 10 < equations.len() * 9 {
+        let mut candidates: Vec<Family> = Vec::new();
+        let weighted = std::iter::once(Grammar::Additive)
+            .chain((2..=MAX_BASE).map(Grammar::Positional))
+            .chain((2..=MAX_BASE).map(Grammar::LeastFirst))
+            .chain(equations.iter().all(|(r, _)| r.len() == 3).then(|| (2..=MAX_BASE).flat_map(|a| (2..=MAX_BASE).flat_map(move |b| (2..=MAX_BASE).map(move |c| Grammar::Mixed([a, b, c]))))).into_iter().flatten());
+        for grammar in weighted {
+            if let Some(values) = fix_runs(&equations, grammar) {
+                candidates.push(Family { values, grammar, ..Family::default() });
+            }
+            if candidates.len() >= 4 {
+                break;
+            }
+        }
+        candidates.extend(multiplier_family(&equations));
+        for mut family in candidates {
+            family.used = used.clone();
+            family.max_len = equations.iter().map(|(r, _)| r.len()).max().unwrap_or(0);
+            family.max_spoken = equations.iter().map(|(_, v)| *v).max().unwrap_or(0);
+            let reads = |f: &Family| equations.iter().filter(|(run, _)| run.iter().all(|w| f.values.contains_key(w) || f.is_minus(w))).all(|(run, v)| f.value_of(run) == Some(*v));
+            let covered = equations.iter().filter(|(run, _)| run.iter().all(|w| family.values.contains_key(w) || family.is_minus(w))).count();
+            if family.values.len() < MIN_WORDS || covered * 10 < equations.len() * 9 || !reads(&family) {
                 continue;
             }
-            let max_spoken = equations.iter().map(|(_, v)| *v).max().unwrap_or(0);
-            let mut lexicon = Lexicon { values, grammar, spoken: BTreeMap::new(), max_spoken, speaks_runs: true };
-            lexicon.speaks_runs = equations.iter().filter(|(run, _)| run.iter().all(|w| lexicon.values.contains_key(w))).all(|(run, v)| lexicon.compose(*v).as_deref() == Some(run.join(" ").as_str()));
-            if best.as_ref().is_none_or(|(_, n)| lexicon.values.len() > *n) {
-                let n = lexicon.values.len();
-                best = Some((lexicon, n));
+            // What the lessons say in this family's words, for checking that the numbers come back as they were said.
+            let said: Vec<(String, i64)> = lessons
+                .iter()
+                .map(|(_, a)| a.trim().to_lowercase())
+                .filter_map(|a| {
+                    let words = tokens(&a);
+                    (!words.is_empty() && words.iter().all(|w| family.values.contains_key(w) || family.is_minus(w))).then(|| family.value_of(&words).map(|v| (a, v))).flatten()
+                })
+                .collect();
+            family.max_len = said.iter().map(|(t, _)| tokens(t).len()).chain(std::iter::once(family.max_len)).max().unwrap_or(0);
+            family.max_spoken = said.iter().map(|(_, v)| *v).chain(std::iter::once(family.max_spoken)).max().unwrap_or(0);
+            let to_check: Vec<(String, i64)> = if said.is_empty() { equations.iter().map(|(r, v)| (r.join(" "), *v)).collect() } else { said };
+            let thresholds: Vec<i64> = match family.grammar {
+                Grammar::Multiplier { .. } if family.minus.is_some() => (6..=9).collect(),
+                _ => vec![0],
+            };
+            let mut chosen = None;
+            for t in thresholds {
+                let mut trial = family.clone();
+                if let Grammar::Multiplier { base, .. } = trial.grammar {
+                    trial.grammar = Grammar::Multiplier { base, minus_from: if trial.minus.is_some() { t } else { 0 } };
+                }
+                trial.speaks_runs = true;
+                if to_check.iter().all(|(text, v)| trial.compose(*v).as_deref() == Some(text.as_str())) {
+                    chosen = Some(trial);
+                    break;
+                }
+            }
+            match chosen {
+                Some(f) => found.push(f),
+                None => {
+                    family.speaks_runs = false;
+                    found.push(family);
+                }
             }
             break;
         }
     }
-    best.map(|(l, _)| l).unwrap_or_default()
+    // Largest families first; a family that shares a word with a larger one is dropped.
+    found.sort_by(|a, b| b.values.len().cmp(&a.values.len()));
+    let mut kept: Vec<Family> = Vec::new();
+    for f in found {
+        if kept.iter().all(|k| f.values.keys().all(|w| !k.values.contains_key(w))) {
+            kept.push(f);
+        }
+    }
+    Lexicon { families: kept }
 }
 
 #[cfg(test)]
@@ -547,28 +816,28 @@ mod tests {
     #[test]
     fn words_that_add_up_are_found_from_a_kind_that_reads_them() {
         let lexicon = learn_reading(&reading("tehayarn", english, 99));
-        assert_eq!(lexicon.grammar(), Grammar::Additive);
+        assert_eq!(lexicon.grammar(0), Grammar::Additive);
         assert_eq!(lexicon.get("twenty"), Some(20));
         assert_eq!(lexicon.get("seventeen"), Some(17));
         assert_eq!(lexicon.get("zero"), Some(0));
-        assert_eq!(lexicon.value_of_text("sixty three"), Some(63));
+        assert_eq!(lexicon.value_of_text("sixty three"), Some((63, 0)));
         // Nothing is a number that no lesson says is one, and the name of the kind is not.
         assert_eq!(lexicon.get("tehayarn"), None);
         assert_eq!(lexicon.get("what"), None);
         // Saying numbers back, within what the lessons showed.
-        assert_eq!(lexicon.speak(55).as_deref(), Some("fifty five"));
-        assert_eq!(lexicon.speak(0).as_deref(), Some("zero"));
-        assert_eq!(lexicon.speak(19).as_deref(), Some("nineteen"));
-        assert_eq!(lexicon.speak(100), None);
+        assert_eq!(lexicon.speak(0, 55).as_deref(), Some("fifty five"));
+        assert_eq!(lexicon.speak(0, 0).as_deref(), Some("zero"));
+        assert_eq!(lexicon.speak(0, 19).as_deref(), Some("nineteen"));
+        assert_eq!(lexicon.speak(0, 100), None);
     }
 
     #[test]
     fn digit_words_with_place_value_are_found_in_their_base() {
         let lexicon = learn_reading(&reading("henuyarn", invented, 99));
-        assert_eq!(lexicon.grammar(), Grammar::Positional(6));
-        assert_eq!(lexicon.value_of_text("sim dag"), Some(6));
-        assert_eq!(lexicon.value_of_text("bat bat gar"), Some(2 * 36 + 2 * 6 + 3));
-        assert_eq!(lexicon.speak(77).as_deref(), Some(invented(77).as_str()));
+        assert_eq!(lexicon.grammar(0), Grammar::Positional(6));
+        assert_eq!(lexicon.value_of_text("sim dag"), Some((6, 0)));
+        assert_eq!(lexicon.value_of_text("bat bat gar"), Some((2 * 36 + 2 * 6 + 3, 0)));
+        assert_eq!(lexicon.speak(0, 77).as_deref(), Some(invented(77).as_str()));
     }
 
     #[test]
@@ -588,5 +857,115 @@ mod tests {
             digits.push((format!("fegisido of {a}"), (a + 1).to_string()));
         }
         assert!(learn_reading(&digits).is_empty());
+    }
+
+    /// Words that multiply: a word per digit, a word for the base (10) and one for its square, a missing digit word is one; with `minus_from` > 0, a last
+    /// digit of that size or more is the next ten minus what is missing.
+    fn multiplier(n: usize, minus_from: usize) -> String {
+        let digit = ["nolu", "ana", "beru", "cile", "dovi", "eka", "fumi", "gato", "hely", "ibo"];
+        let say = |d: usize, unit: &str| -> Vec<String> {
+            let mut out = Vec::new();
+            if d > 1 {
+                out.push(digit[d].to_string());
+            }
+            out.push(unit.to_string());
+            out
+        };
+        fn up(n: usize, digit: &[&str; 10], say: &dyn Fn(usize, &str) -> Vec<String>, minus_from: usize) -> Vec<String> {
+            if n == 0 {
+                return vec![digit[0].to_string()];
+            }
+            if minus_from > 0 && n % 10 >= minus_from {
+                let missing = 10 - n % 10;
+                let mut out = up(n + missing, digit, say, minus_from);
+                out.push("nopa".to_string());
+                out.push(digit[missing].to_string());
+                return out;
+            }
+            let (h, t, o) = (n / 100, n % 100 / 10, n % 10);
+            let mut out = Vec::new();
+            if h > 0 {
+                out.extend(say(h, "kora"));
+            }
+            if t > 0 {
+                out.extend(say(t, "zaru"));
+            }
+            if o > 0 {
+                out.push(digit[o].to_string());
+            }
+            out
+        }
+        up(n, &digit, &say, minus_from).join(" ")
+    }
+
+    /// Base 7, the least significant digit first.
+    fn least_first(n: usize) -> String {
+        let digit = ["moa", "pel", "rik", "sav", "tuo", "vex", "wyn"];
+        let (mut rest, mut out) = (n, Vec::new());
+        loop {
+            out.push(digit[rest % 7]);
+            rest /= 7;
+            if rest == 0 {
+                break;
+            }
+        }
+        out.join(" ")
+    }
+
+    #[test]
+    fn words_that_multiply_a_base_word_are_found_with_and_without_a_word_for_minus() {
+        for minus_from in [0usize, 8] {
+            let lexicon = learn_reading(&reading("hexayarn", |n| multiplier(n, minus_from), 199));
+            assert_eq!(lexicon.families(), 1, "{minus_from}");
+            assert_eq!(lexicon.grammar(0), Grammar::Multiplier { base: 10, minus_from: minus_from as i64 }, "{minus_from}");
+            assert_eq!(lexicon.value_of_text(&multiplier(137, minus_from)), Some((137, 0)));
+            assert_eq!(lexicon.speak(0, 168).as_deref(), Some(multiplier(168, minus_from).as_str()));
+            assert_eq!(lexicon.speak(0, 98).as_deref(), Some(multiplier(98, minus_from).as_str()));
+        }
+    }
+
+    #[test]
+    fn digits_with_the_least_significant_first_are_found_in_their_base() {
+        let lexicon = learn_reading(&reading("tamayarn", least_first, 300));
+        assert_eq!(lexicon.grammar(0), Grammar::LeastFirst(7));
+        assert_eq!(lexicon.value_of_text("pel pel"), Some((8, 0)));
+        assert_eq!(lexicon.speak(0, 250).as_deref(), Some(least_first(250).as_str()));
+    }
+
+    #[test]
+    fn a_world_with_two_families_of_number_words_reads_both() {
+        let mut lessons = reading("tehayarn", english, 99);
+        lessons.extend(reading("hexayarn", |n| multiplier(n, 0), 199));
+        let lexicon = learn_reading(&lessons);
+        assert_eq!(lexicon.families(), 2);
+        assert_eq!(lexicon.value_of_text("sixty three").map(|x| x.0), Some(63));
+        assert_eq!(lexicon.value_of_text(&multiplier(137, 0)).map(|x| x.0), Some(137));
+        let (a, b) = (lexicon.value_of_text("sixty three").unwrap().1, lexicon.value_of_text(&multiplier(137, 0)).unwrap().1);
+        assert_ne!(a, b);
+        // A run that mixes the two families is no number.
+        assert_eq!(lexicon.value_of_text("sixty kora"), None);
+    }
+
+    #[test]
+    fn a_run_that_the_grammar_does_not_allow_is_no_number() {
+        // Multiplier words: the parts come from the largest down, each once.
+        let lexicon = learn_reading(&reading("hexayarn", |n| multiplier(n, 0), 199));
+        assert_eq!(lexicon.value_of_text(&multiplier(137, 0)).map(|x| x.0), Some(137));
+        assert_eq!(lexicon.value_of_text("beru zaru cile kora"), None, "tens before hundreds");
+        assert_eq!(lexicon.value_of_text("ana kora ana kora"), None, "hundreds twice");
+        // Positional digits: a number does not begin with a zero digit (here the last word is the most significant).
+        let lexicon = learn_reading(&reading("tamayarn", least_first, 300));
+        assert_eq!(lexicon.value_of_text("moa pel"), Some((7, 0)));
+        assert_eq!(lexicon.value_of_text("pel moa"), None, "ends in the zero digit");
+        let msd = learn_reading(&reading("henuyarn", invented, 99));
+        assert_eq!(msd.value_of_text("dag sim"), None, "begins with the zero digit");
+    }
+
+    #[test]
+    fn a_run_longer_than_any_numeral_the_lessons_showed_is_no_number() {
+        let lexicon = learn_reading(&reading("tamayarn", least_first, 300));
+        // 300 is three digits in base 7; four words were never shown.
+        assert_eq!(lexicon.value_of_text("pel pel pel"), Some((1 + 7 + 49, 0)));
+        assert_eq!(lexicon.value_of_text("pel pel pel pel"), None);
     }
 }
