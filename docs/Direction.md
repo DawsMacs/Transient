@@ -33,7 +33,7 @@ imposes limits a personal system does not share. A light local system can win on
 The goal is a system that is clearly better than a cloud model on some of these axes, on hardware people already own, while being
 good enough on the rest. It does not need to win every benchmark to win where it matters to the person using it.
 
-## Why this is reachable (reasons for optimism, sources are in private research notes that are not part of this repository)
+## Why this is reachable (reasons for optimism)
 
 - Capability density has been rising fast: the size needed for a given quality has been halving roughly every quarter.
 - Retrieval and extra compute at answer time have let small models beat much larger ones on knowledge and math tasks.
