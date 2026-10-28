@@ -107,6 +107,8 @@ struct Said {
     group: Option<usize>,
     /// The kind whose chain of reductions worked this answer out.
     chain_of: Option<usize>,
+    /// The arrangement of a question that left words out of a way of asking that was taught (the answer is then at most a guess).
+    dropped: Option<Vec<String>>,
 }
 
 /// Whether the cheapest way to reduce a number already costs more than a recurrence could pay for: more than the whole table, the margin for chance and
@@ -202,6 +204,9 @@ struct Arrangements {
     cores: std::collections::BTreeSet<Vec<String>>,
     prefixes: std::collections::BTreeSet<Vec<String>>,
     suffixes: std::collections::BTreeSet<Vec<String>>,
+    /// The starts that were seen with each core, and the ends that were seen with each core.
+    starts_of: std::collections::BTreeSet<(Vec<String>, Vec<String>)>,
+    ends_of: std::collections::BTreeSet<(Vec<String>, Vec<String>)>,
 }
 
 impl Arrangements {
@@ -213,6 +218,8 @@ impl Arrangements {
 
     fn add(&mut self, a: Vec<String>) {
         if let Some((p, c, s)) = Self::parts(&a) {
+            self.starts_of.insert((p.clone(), c.clone()));
+            self.ends_of.insert((c.clone(), s.clone()));
             self.prefixes.insert(p);
             self.cores.insert(c);
             self.suffixes.insert(s);
@@ -221,15 +228,44 @@ impl Arrangements {
     }
 
     fn known(&self, a: &[String]) -> bool {
-        // (a part may drop words of a way of asking that was seen: "which is" before the core, "which" before it)
+        self.grade(a) != Seen::Not
+    }
+
+    /// How the arrangement is known: as taught (the whole, or a core that was seen with its start and with its end, each as they are, though in
+    /// different ways), or only with words left out of a way that was seen ("which is" before the core, "which" before it), which may be a filler or a word
+    /// that makes the way, and nothing in the lessons tells which.
+    fn grade(&self, a: &[String]) -> Seen {
+        if self.whole.contains(a) {
+            return Seen::AsTaught;
+        }
+        let Some((p, c, s)) = Self::parts(a) else { return Seen::Not };
+        if !self.cores.contains(&c) {
+            return Seen::Not;
+        }
+        // (a start and an end of different ways put together are a way of asking that was taught if the core was seen with that start and with that end:
+        // a start, a core and an end that were each seen, but never the core with the start, are not)
+        if self.starts_of.contains(&(p.clone(), c.clone())) && self.ends_of.contains(&(c.clone(), s.clone())) {
+            return Seen::AsTaught;
+        }
         let cut = |part: &Vec<String>, seen: &std::collections::BTreeSet<Vec<String>>| {
             seen.iter().any(|whole| {
                 let mut rest = whole.iter();
                 part.iter().all(|w| rest.any(|x| x == w))
             })
         };
-        self.whole.contains(a) || Self::parts(a).is_some_and(|(p, c, s)| self.cores.contains(&c) && cut(&p, &self.prefixes) && cut(&s, &self.suffixes))
+        if cut(&p, &self.prefixes) && cut(&s, &self.suffixes) {
+            Seen::WithWordsLeftOut
+        } else {
+            Seen::Not
+        }
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Seen {
+    Not,
+    AsTaught,
+    WithWordsLeftOut,
 }
 
 pub struct Novice {
@@ -256,6 +292,9 @@ pub struct Novice {
     reliability: BTreeMap<String, (u32, u32)>,
     /// How often answers worked out by a chain of reductions have been right, over all kinds.
     chain_record: (u32, u32),
+    /// How often answers to questions that left words out of a taught way of asking have been right, for each arrangement (words in order, numbers
+    /// as "#", the kind's word as "K"): (right, made).
+    dropped_shapes: BTreeMap<Vec<String>, (u32, u32)>,
     /// How often the search for a recurrence has found one.
     recurrence_paid: Paid,
     /// The dear stages of the recurrence search (larger steps, two earlier values), which only run when the first stage found nothing.
@@ -285,7 +324,7 @@ pub struct Novice {
 
 impl Default for Novice {
     fn default() -> Self {
-        Novice { lessons: Vec::new(), raw: Vec::new(), lesson_spoke: Vec::new(), numerals: Lexicon::default(), shapes: Arrangements::default(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], reliability: BTreeMap::new(), chain_record: (0, 0), recurrence_paid: Paid::default(), dear_paid: Paid::default(), exact: BTreeMap::new(), trusted_lookups: Default::default(), bags: BTreeMap::new(), lookups: Vec::new(), frames: None, frames_from: 0, shadow_on: std::env::var_os("NOVICE_SHADOW").is_some(), learned_allocation: std::env::var_os("NOVICE_FIXED_ALLOCATION").is_none(), allocations: BTreeMap::new(), shadow: Vec::new(), shadow_pending: None, shape_paid: Paid::default(), stats: Stats::default() }
+        Novice { lessons: Vec::new(), raw: Vec::new(), lesson_spoke: Vec::new(), numerals: Lexicon::default(), shapes: Arrangements::default(), df: BTreeMap::new(), groups: Vec::new(), by_key: BTreeMap::new(), said: BTreeMap::new(), record: [(0, 0); 8], words: Vec::new(), explained: 0, why: [0; 8], reliability: BTreeMap::new(), chain_record: (0, 0), dropped_shapes: BTreeMap::new(), recurrence_paid: Paid::default(), dear_paid: Paid::default(), exact: BTreeMap::new(), trusted_lookups: Default::default(), bags: BTreeMap::new(), lookups: Vec::new(), frames: None, frames_from: 0, shadow_on: std::env::var_os("NOVICE_SHADOW").is_some(), learned_allocation: std::env::var_os("NOVICE_FIXED_ALLOCATION").is_none(), allocations: BTreeMap::new(), shadow: Vec::new(), shadow_pending: None, shape_paid: Paid::default(), stats: Stats::default() }
     }
 }
 
@@ -1749,7 +1788,8 @@ impl System for Novice {
         if p.nums.is_empty() {
             self.ensure_frames();
         }
-        let mut said = Said { answer: None, bucket: None, group: None, chain_of: None };
+        let dropped = if p.nums.is_empty() { None } else { self.group_of(&p).map(|gi| Self::arrangement(&p, &self.groups[gi].key)).filter(|a| self.shapes.grade(a) == Seen::WithWordsLeftOut) };
+        let mut said = Said { answer: None, bucket: None, group: None, chain_of: None, dropped: dropped.clone() };
         let reason = std::cell::Cell::new(0usize);
         let reply = (|| {
             // A question with no numbers is a lookup, not an instance of a kind: the words that two facts share name no kind, and the answer of
@@ -1885,7 +1925,17 @@ impl System for Novice {
             reason.set(7);
             (permille >= 500).then(|| Answer::Guess(value.to_string(), permille))
         })();
-        let reply = reply.unwrap_or(Answer::Refuse);
+        let mut reply = reply.unwrap_or(Answer::Refuse);
+        // A word left out of a taught way may be a filler or the word that makes the way. The lessons cannot tell which, so what is said is a guess, as sure
+        // as answers to this arrangement have been right when the teacher said what the answer was (never a fact: that would take a thousand of them in a row).
+        if let Some(shape) = &dropped {
+            if let Answer::Fact(a) | Answer::Guess(a, _) = &reply {
+                // (what answers to this arrangement have proved: with none, as sure as a coin toss)
+                let (right, made) = self.dropped_shapes.get(shape).copied().unwrap_or((0, 0));
+                let permille = (1000 * (right + 1) / (made + 2)).min(999);
+                reply = if permille >= 500 { Answer::Guess(a.clone(), permille) } else { Answer::Refuse };
+            }
+        }
         if matches!(reply, Answer::Refuse) {
             self.why[reason.get()] += 1;
         }
@@ -1909,6 +1959,11 @@ impl System for Novice {
                 self.chain_record.0 += u32::from(a == truth);
                 self.groups[gi].chain_record.1 += 1;
                 self.groups[gi].chain_record.0 += u32::from(a == truth);
+            }
+            if let (Some(shape), Some(a)) = (said.dropped.as_ref(), said.answer.as_ref()) {
+                let entry = self.dropped_shapes.entry(shape.clone()).or_insert((0, 0));
+                entry.1 += 1;
+                entry.0 += u32::from(a == truth);
             }
             if let (Some(b), Some(a)) = (said.bucket, said.answer) {
                 self.record[b].1 += 1;
@@ -3235,5 +3290,102 @@ mod unread_words_tests {
         n.teach("what is dolpa 7", "15");
         n.ready();
         assert_eq!(n.ask("what is dolpa 5"), Answer::Fact("11".to_string()));
+    }
+}
+
+#[cfg(test)]
+mod dropped_word_tests {
+    use super::*;
+
+    /// A kind taught in two ways of asking, one with a word before the number and one with words after it.
+    fn taught() -> Novice {
+        let mut n = Novice::default();
+        for x in (0..40).step_by(3) {
+            n.teach(&format!("once {x} enters kuvabimo what leaves"), &(3 * x + 1).to_string());
+            n.teach(&format!("gauge kuvabimo at {x} promptly"), &(3 * x + 1).to_string());
+        }
+        n.ready();
+        n
+    }
+
+    #[test]
+    fn a_word_left_out_of_a_taught_way_is_a_guess_not_a_fact() {
+        let mut n = taught();
+        // taught ways, and the start of one with the end of another, are facts
+        assert_eq!(n.ask("once 12 enters kuvabimo what leaves"), Answer::Fact("37".to_string()));
+        assert_eq!(n.ask("gauge kuvabimo at 12 promptly"), Answer::Fact("37".to_string()));
+        // a word left out may be a filler or may be the word that makes the way: nothing tells which, so the answer is a guess, as sure as such answers have proved
+        match n.ask("12 enters kuvabimo what leaves") {
+            Answer::Guess(a, p) => assert!((500..=999).contains(&p) && a == "37", "{a} {p}"),
+            other => panic!("a word left out should be a guess, not {other:?}"),
+        }
+        match n.ask("gauge kuvabimo at 12") {
+            Answer::Guess(a, _) => assert_eq!(a, "37"),
+            other => panic!("a word left out should be a guess, not {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parts_seen_in_other_ways_do_not_make_a_way_that_was_taught() {
+        // A kind of two numbers taught in a way with no start, and one of one number taught with a start: the empty start and the core "# enters K" have
+        // each been seen, but never together, so the way of asking with "once" left out is not one that was taught.
+        let mut n = taught();
+        for x in (0..30).step_by(4) {
+            n.teach(&format!("{x} followed by {x} enters nauvabimo promptly"), &(x + x).to_string());
+        }
+        n.ready();
+        assert_eq!(n.ask("once 12 enters kuvabimo what leaves"), Answer::Fact("37".to_string()));
+        assert!(!matches!(n.ask("12 enters kuvabimo what leaves"), Answer::Fact(_)));
+    }
+
+    #[test]
+    fn what_a_word_left_out_cost_is_learned_for_each_way_of_asking_it_was_left_out_of() {
+        let mut n = taught();
+        let ask = |n: &mut Novice, q: &str| n.ask(q);
+        // the same word left out twice, answered wrongly by the teacher's account: that way of asking is then refused ...
+        for x in [14, 15, 16] {
+            let q = format!("{x} enters kuvabimo what leaves");
+            ask(&mut n, &q);
+            n.told(&q, "0", Some("teacher"));
+        }
+        assert_eq!(ask(&mut n, "17 enters kuvabimo what leaves"), Answer::Refuse);
+        // ... while another word left out of another way, never wrong, is still answered, and the more surely the more often it was right
+        let before = match ask(&mut n, "gauge kuvabimo at 18") {
+            Answer::Guess(_, p) => p,
+            other => panic!("{other:?}"),
+        };
+        for x in [19, 20, 21] {
+            let q = format!("gauge kuvabimo at {x}");
+            ask(&mut n, &q);
+            n.told(&q, &(3 * x + 1).to_string(), Some("teacher"));
+        }
+        match ask(&mut n, "gauge kuvabimo at 22") {
+            Answer::Guess(a, p) => assert!(p > before && a == "67", "{before} -> {p}"),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_guess_from_a_word_left_out_is_as_sure_as_such_guesses_have_been_right() {
+        let mut n = taught();
+        let confidence = |n: &mut Novice, q: &str| match n.ask(q) {
+            Answer::Guess(_, p) => Some(p),
+            Answer::Refuse => None,
+            other => panic!("{other:?}"),
+        };
+        let start = confidence(&mut n, "13 enters kuvabimo what leaves").expect("a guess at first");
+        // a right answer told for such a question makes the next guess surer ...
+        n.ask("14 enters kuvabimo what leaves");
+        n.told("14 enters kuvabimo what leaves", "43", Some("teacher"));
+        let after_right = confidence(&mut n, "15 enters kuvabimo what leaves").expect("still a guess");
+        assert!(after_right > start, "{start} -> {after_right}");
+        // ... and wrong ones make it refuse: a guess that is not even likely is not made
+        for x in 16..20 {
+            n.ask(&format!("{x} enters kuvabimo what leaves"));
+            n.told(&format!("{x} enters kuvabimo what leaves"), "0", Some("teacher"));
+        }
+        assert_eq!(confidence(&mut n, "21 enters kuvabimo what leaves"), None);
+        // and a taught way is not touched by any of this
+        assert_eq!(n.ask("once 21 enters kuvabimo what leaves"), Answer::Fact("64".to_string()));
     }
 }

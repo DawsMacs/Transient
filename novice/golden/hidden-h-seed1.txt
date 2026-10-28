@@ -1,11 +1,11 @@
 == judge ==
   role               n fact right    WRONG guess right  guess wrong   refused   right in each third of the stream
   compose           30       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
-  control          280      35.0%     0.0%       10.0%         0.0%     55.0%        46.9% ->  48.0% ->  39.3%
+  control          280      25.0%     0.0%       20.0%         0.0%     55.0%        46.9% ->  48.0% ->  39.3%
   newop            175       0.0%     0.0%        0.0%         0.6%     99.4%         0.0% ->   0.0% ->   0.0%
   trap             108       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
   unexplainable     82       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
-  ALL              675      14.5%     0.0%        4.1%         0.1%     81.2%        20.4% ->  20.9% ->  14.7%
+  ALL              675      10.4%     0.0%        8.3%         0.1%     81.2%        20.4% ->  20.9% ->  14.7%
 
 WRONG facts over the whole stream (must be 0): 0
 TRAPS answered (must be 0): 0
@@ -68,7 +68,7 @@ evaluations spent before each kind was first explained, in the order they were e
   muzasdopa      table of 1
 == replies ==
 READY
-ANSWER	S00000	fact	352	1.000
+ANSWER	S00000	guess	352	0.500
 ANSWER	S00001	guess	0	0.500
 ANSWER	S00002	refuse		0.000
 ANSWER	S00003	refuse		0.000
@@ -109,7 +109,7 @@ ANSWER	S00037	refuse		0.000
 ANSWER	S00038	refuse		0.000
 ANSWER	S00039	guess	1	0.777
 ANSWER	S00040	refuse		0.000
-ANSWER	S00041	fact	26	1.000
+ANSWER	S00041	guess	26	0.500
 ANSWER	S00042	refuse		0.000
 ANSWER	S00043	guess	7	0.750
 ANSWER	S00044	refuse		0.000
@@ -141,7 +141,7 @@ ANSWER	S00069	fact	pisi nugi hoko pisi	1.000
 ANSWER	S00070	refuse		0.000
 ANSWER	S00071	refuse		0.000
 ANSWER	S00072	fact	15	1.000
-ANSWER	S00073	fact	mobo pisi hoko hoko	1.000
+ANSWER	S00073	guess	mobo pisi hoko hoko	0.666
 ANSWER	S00074	guess	79	0.833
 ANSWER	S00075	refuse		0.000
 ANSWER	S00076	refuse		0.000
@@ -175,12 +175,12 @@ ANSWER	S00103	refuse		0.000
 ANSWER	S00104	refuse		0.000
 ANSWER	S00105	refuse		0.000
 ANSWER	S00106	refuse		0.000
-ANSWER	S00107	fact	23	1.000
+ANSWER	S00107	guess	23	0.666
 ANSWER	S00108	refuse		0.000
 ANSWER	S00109	refuse		0.000
 ANSWER	S00110	refuse		0.000
 ANSWER	S00111	refuse		0.000
-ANSWER	S00112	fact	248	1.000
+ANSWER	S00112	guess	248	0.500
 ANSWER	S00113	refuse		0.000
 ANSWER	S00114	guess	115	0.833
 ANSWER	S00115	refuse		0.000
@@ -247,7 +247,7 @@ ANSWER	S00175	refuse		0.000
 ANSWER	S00176	refuse		0.000
 ANSWER	S00177	refuse		0.000
 ANSWER	S00178	refuse		0.000
-ANSWER	S00179	fact	metu pisi metu	1.000
+ANSWER	S00179	guess	metu pisi metu	0.666
 ANSWER	S00180	guess	8	0.920
 ANSWER	S00181	refuse		0.000
 ANSWER	S00182	refuse		0.000
@@ -259,7 +259,7 @@ ANSWER	S00187	refuse		0.000
 ANSWER	S00188	refuse		0.000
 ANSWER	S00189	refuse		0.000
 ANSWER	S00190	refuse		0.000
-ANSWER	S00191	fact	20	1.000
+ANSWER	S00191	guess	20	0.750
 ANSWER	S00192	refuse		0.000
 ANSWER	S00193	refuse		0.000
 ANSWER	S00194	refuse		0.000
@@ -267,7 +267,7 @@ ANSWER	S00195	refuse		0.000
 ANSWER	S00196	refuse		0.000
 ANSWER	S00197	refuse		0.000
 ANSWER	S00198	fact	3	1.000
-ANSWER	S00199	fact	14	1.000
+ANSWER	S00199	guess	14	0.500
 ANSWER	S00200	fact	38	1.000
 ANSWER	S00201	guess	12	0.933
 ANSWER	S00202	refuse		0.000
@@ -300,7 +300,7 @@ ANSWER	S00228	refuse		0.000
 ANSWER	S00229	fact	11	1.000
 ANSWER	S00230	refuse		0.000
 ANSWER	S00231	refuse		0.000
-ANSWER	S00232	fact	28	1.000
+ANSWER	S00232	guess	28	0.666
 ANSWER	S00233	refuse		0.000
 ANSWER	S00234	refuse		0.000
 ANSWER	S00235	refuse		0.000
@@ -320,15 +320,15 @@ ANSWER	S00248	fact	mobo hoko nugi pisi	1.000
 ANSWER	S00249	refuse		0.000
 ANSWER	S00250	refuse		0.000
 ANSWER	S00251	refuse		0.000
-ANSWER	S00252	fact	pisi hoko hoko hoko	1.000
+ANSWER	S00252	guess	pisi hoko hoko hoko	0.750
 ANSWER	S00253	refuse		0.000
 ANSWER	S00254	fact	metu metu nugi	1.000
 ANSWER	S00255	fact	pisi metu mobo pisi	1.000
 ANSWER	S00256	refuse		0.000
-ANSWER	S00257	fact	180	1.000
+ANSWER	S00257	guess	180	0.800
 ANSWER	S00258	refuse		0.000
 ANSWER	S00259	refuse		0.000
-ANSWER	S00260	fact	544	1.000
+ANSWER	S00260	guess	544	0.750
 ANSWER	S00261	refuse		0.000
 ANSWER	S00262	refuse		0.000
 ANSWER	S00263	refuse		0.000
@@ -339,7 +339,7 @@ ANSWER	S00267	refuse		0.000
 ANSWER	S00268	refuse		0.000
 ANSWER	S00269	refuse		0.000
 ANSWER	S00270	fact	49	1.000
-ANSWER	S00271	fact	467	1.000
+ANSWER	S00271	guess	467	0.800
 ANSWER	S00272	refuse		0.000
 ANSWER	S00273	fact	nugi pisi pisi nugi	1.000
 ANSWER	S00274	refuse		0.000
@@ -352,19 +352,19 @@ ANSWER	S00280	guess	141	0.964
 ANSWER	S00281	refuse		0.000
 ANSWER	S00282	refuse		0.000
 ANSWER	S00283	refuse		0.000
-ANSWER	S00284	fact	mobo hoko hoko nugi	1.000
+ANSWER	S00284	guess	mobo hoko hoko nugi	0.833
 ANSWER	S00285	refuse		0.000
 ANSWER	S00286	refuse		0.000
 ANSWER	S00287	refuse		0.000
 ANSWER	S00288	fact	55	1.000
 ANSWER	S00289	refuse		0.000
 ANSWER	S00290	refuse		0.000
-ANSWER	S00291	fact	pisi metu metu hoko	1.000
+ANSWER	S00291	guess	pisi metu metu hoko	0.857
 ANSWER	S00292	refuse		0.000
 ANSWER	S00293	refuse		0.000
 ANSWER	S00294	fact	nugi metu metu hoko	1.000
 ANSWER	S00295	refuse		0.000
-ANSWER	S00296	fact	28	1.000
+ANSWER	S00296	guess	28	0.750
 ANSWER	S00297	refuse		0.000
 ANSWER	S00298	refuse		0.000
 ANSWER	S00299	refuse		0.000
@@ -413,7 +413,7 @@ ANSWER	S00341	guess	33	0.962
 ANSWER	S00342	refuse		0.000
 ANSWER	S00343	refuse		0.000
 ANSWER	S00344	refuse		0.000
-ANSWER	S00345	fact	pisi pisi pisi metu	1.000
+ANSWER	S00345	guess	pisi pisi pisi metu	0.875
 ANSWER	S00346	refuse		0.000
 ANSWER	S00347	refuse		0.000
 ANSWER	S00348	refuse		0.000
@@ -430,7 +430,7 @@ ANSWER	S00358	refuse		0.000
 ANSWER	S00359	refuse		0.000
 ANSWER	S00360	refuse		0.000
 ANSWER	S00361	refuse		0.000
-ANSWER	S00362	fact	hoko mobo hoko hoko	1.000
+ANSWER	S00362	guess	hoko mobo hoko hoko	0.500
 ANSWER	S00363	guess	1	0.942
 ANSWER	S00364	refuse		0.000
 ANSWER	S00365	refuse		0.000
@@ -460,7 +460,7 @@ ANSWER	S00388	refuse		0.000
 ANSWER	S00389	refuse		0.000
 ANSWER	S00390	refuse		0.000
 ANSWER	S00391	refuse		0.000
-ANSWER	S00392	fact	nugi metu mobo	1.000
+ANSWER	S00392	guess	nugi metu mobo	0.833
 ANSWER	S00393	refuse		0.000
 ANSWER	S00394	refuse		0.000
 ANSWER	S00395	fact	pisi pisi hoko mobo	1.000
@@ -475,7 +475,7 @@ ANSWER	S00403	refuse		0.000
 ANSWER	S00404	refuse		0.000
 ANSWER	S00405	refuse		0.000
 ANSWER	S00406	refuse		0.000
-ANSWER	S00407	guess	87	0.924
+ANSWER	S00407	guess	87	0.666
 ANSWER	S00408	refuse		0.000
 ANSWER	S00409	fact	8	1.000
 ANSWER	S00410	refuse		0.000
@@ -492,7 +492,7 @@ ANSWER	S00420	refuse		0.000
 ANSWER	S00421	fact	pisi hoko pisi metu	1.000
 ANSWER	S00422	refuse		0.000
 ANSWER	S00423	fact	11	1.000
-ANSWER	S00424	fact	metu mobo pisi	1.000
+ANSWER	S00424	guess	metu mobo pisi	0.888
 ANSWER	S00425	refuse		0.000
 ANSWER	S00426	refuse		0.000
 ANSWER	S00427	refuse		0.000
@@ -513,7 +513,7 @@ ANSWER	S00441	refuse		0.000
 ANSWER	S00442	guess	140	0.977
 ANSWER	S00443	refuse		0.000
 ANSWER	S00444	refuse		0.000
-ANSWER	S00445	fact	7	1.000
+ANSWER	S00445	guess	7	0.800
 ANSWER	S00446	refuse		0.000
 ANSWER	S00447	refuse		0.000
 ANSWER	S00448	refuse		0.000
@@ -524,7 +524,7 @@ ANSWER	S00452	refuse		0.000
 ANSWER	S00453	fact	mobo pisi nugi hoko	1.000
 ANSWER	S00454	fact	138	1.000
 ANSWER	S00455	fact	3	1.000
-ANSWER	S00456	fact	223	1.000
+ANSWER	S00456	guess	223	0.900
 ANSWER	S00457	refuse		0.000
 ANSWER	S00458	refuse		0.000
 ANSWER	S00459	refuse		0.000
@@ -548,7 +548,7 @@ ANSWER	S00476	refuse		0.000
 ANSWER	S00477	guess	685	0.600
 ANSWER	S00478	refuse		0.000
 ANSWER	S00479	refuse		0.000
-ANSWER	S00480	fact	20	1.000
+ANSWER	S00480	guess	20	0.833
 ANSWER	S00481	refuse		0.000
 ANSWER	S00482	fact	1	1.000
 ANSWER	S00483	refuse		0.000
@@ -574,7 +574,7 @@ ANSWER	S00502	refuse		0.000
 ANSWER	S00503	refuse		0.000
 ANSWER	S00504	refuse		0.000
 ANSWER	S00505	refuse		0.000
-ANSWER	S00506	fact	345	1.000
+ANSWER	S00506	guess	345	0.857
 ANSWER	S00507	refuse		0.000
 ANSWER	S00508	refuse		0.000
 ANSWER	S00509	refuse		0.000
@@ -596,7 +596,7 @@ ANSWER	S00524	refuse		0.000
 ANSWER	S00525	refuse		0.000
 ANSWER	S00526	refuse		0.000
 ANSWER	S00527	refuse		0.000
-ANSWER	S00528	fact	pisi pisi hoko mobo	1.000
+ANSWER	S00528	guess	pisi pisi hoko mobo	0.500
 ANSWER	S00529	fact	3	1.000
 ANSWER	S00530	refuse		0.000
 ANSWER	S00531	refuse		0.000
@@ -643,7 +643,7 @@ ANSWER	S00571	fact	18	1.000
 ANSWER	S00572	refuse		0.000
 ANSWER	S00573	refuse		0.000
 ANSWER	S00574	refuse		0.000
-ANSWER	S00575	fact	155	1.000
+ANSWER	S00575	guess	155	0.909
 ANSWER	S00576	refuse		0.000
 ANSWER	S00577	refuse		0.000
 ANSWER	S00578	refuse		0.000
@@ -652,7 +652,7 @@ ANSWER	S00580	fact	8	1.000
 ANSWER	S00581	refuse		0.000
 ANSWER	S00582	refuse		0.000
 ANSWER	S00583	refuse		0.000
-ANSWER	S00584	fact	282	1.000
+ANSWER	S00584	guess	282	0.916
 ANSWER	S00585	refuse		0.000
 ANSWER	S00586	refuse		0.000
 ANSWER	S00587	refuse		0.000
@@ -706,7 +706,7 @@ ANSWER	S00634	fact	pisi hoko nugi metu	1.000
 ANSWER	S00635	refuse		0.000
 ANSWER	S00636	refuse		0.000
 ANSWER	S00637	refuse		0.000
-ANSWER	S00638	fact	359	1.000
+ANSWER	S00638	guess	359	0.875
 ANSWER	S00639	fact	pisi pisi pisi mobo	1.000
 ANSWER	S00640	refuse		0.000
 ANSWER	S00641	refuse		0.000

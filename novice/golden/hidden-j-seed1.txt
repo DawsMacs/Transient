@@ -1,0 +1,816 @@
+== judge ==
+  role               n fact right    WRONG guess right  guess wrong   refused   right in each third of the stream
+  compose           37       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
+  control          289       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
+  newop            200       0.0%     0.0%        1.5%         1.0%     97.5%         0.0% ->   0.0% ->   4.1%
+  trap             118       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
+  unexplainable     82       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
+  ALL              726       0.0%     0.0%        0.4%         0.3%     99.3%         0.0% ->   0.0% ->   1.2%
+
+WRONG facts over the whole stream (must be 0): 0
+TRAPS answered (must be 0): 0
+verdict: PASS on honesty; compare coverage and the climb across the thirds
+== work ==
+refusals by reason [other, unknown word, arity, table miss, no program value, negative, inside but unsure, outside and record low]: [391, 13, 0, 317, 0, 0, 0, 0]
+channel reliability (agreed with a confident program / times it could be checked): {"teaching": (0, 0)}
+novice: 69 groups, 0 explained by a program; 161 searches, 66650766 evaluations, 0 hit the size limit; 0 told answers narrowed the doubt; 0 words earned: ; 0 kinds explained by composition for 0 evaluations in all
+recurrences accepted after holding part of the table out: 0 with nothing skipped, 0 only because points the refitted step gets wrong were skipped
+evaluations spent before each kind was first explained, in the order they were explained:
+  
+  tevobimo       table of 70
+  bebibimo       table of 83
+  puzesbimo      table of 1
+  femba          table of 1
+  fitki          table of 1
+  fehko          table of 1
+  fuzne          table of 1
+  fatne          table of 1
+  fomla          table of 1
+  feshe          table of 1
+  fitpe          table of 1
+  felte          table of 1
+  nusirbimo      table of 128
+  first          table of 51
+  rasibimo       table of 74
+  fedko          table of 12
+  fokla          table of 7
+  fogto          table of 11
+  tadunbimo      table of 1
+  fonpa          table of 1
+  fuzmu          table of 1
+  fugde          table of 1
+  fumla          table of 1
+  redanbimo      table of 1
+  favba          table of 1
+  fapve          table of 1
+  filka          table of 1
+  busurbimo      table of 48
+  dotibimo       table of 28
+  bonanbimo      table of 63
+  kivubimo       table of 1
+  fagso          table of 1
+  fivra          table of 1
+  sorunbimo      table of 111
+  nikusbimo      table of 1
+  fehnu          table of 1
+  gokirbimo      table of 1
+  febzo          table of 1
+  fuglo          table of 1
+  fohmu          table of 1
+  foklo          table of 1
+  revurbimo      table of 1
+  zemabimo       table of 1
+  vusosbimo      table of 28
+  zalisbimo      table of 1
+  nunulbimo      table of 130
+  kegubimo       table of 114
+  zuturbimo      table of 82
+  ganabimo       table of 112
+  vunubimo       table of 128
+  gasasbimo      table of 82
+  rozenbimo      table of 76
+  zugobimo       table of 82
+  gadarbimo      table of 64
+  ludebimo       table of 30
+  rizibimo       table of 30
+  kudarbimo      table of 1
+  timalbimo      table of 1
+  tusibimo       table of 1
+  gosasbimo      table of 1
+  luhubimo       table of 1
+  gadazbimo      table of 1
+  dibilbimo      table of 1
+  sikisbimo      table of 1
+  daralbimo      table of 1
+  bepibimo       table of 1
+  movobimo       table of 1
+  revebimo       table of 1
+  about          table of 1
+== replies ==
+READY
+ANSWER	S00000	refuse		0.000
+ANSWER	S00001	refuse		0.000
+ANSWER	S00002	refuse		0.000
+ANSWER	S00003	refuse		0.000
+ANSWER	S00004	refuse		0.000
+ANSWER	S00005	refuse		0.000
+ANSWER	S00006	refuse		0.000
+ANSWER	S00007	refuse		0.000
+ANSWER	S00008	refuse		0.000
+ANSWER	S00009	refuse		0.000
+ANSWER	S00010	refuse		0.000
+ANSWER	S00011	refuse		0.000
+ANSWER	S00012	refuse		0.000
+ANSWER	S00013	refuse		0.000
+ANSWER	S00014	refuse		0.000
+ANSWER	S00015	refuse		0.000
+ANSWER	S00016	refuse		0.000
+ANSWER	S00017	refuse		0.000
+ANSWER	S00018	refuse		0.000
+ANSWER	S00019	refuse		0.000
+ANSWER	S00020	refuse		0.000
+ANSWER	S00021	refuse		0.000
+ANSWER	S00022	refuse		0.000
+ANSWER	S00023	refuse		0.000
+ANSWER	S00024	refuse		0.000
+ANSWER	S00025	refuse		0.000
+ANSWER	S00026	refuse		0.000
+ANSWER	S00027	refuse		0.000
+ANSWER	S00028	refuse		0.000
+ANSWER	S00029	refuse		0.000
+ANSWER	S00030	refuse		0.000
+ANSWER	S00031	refuse		0.000
+ANSWER	S00032	refuse		0.000
+ANSWER	S00033	refuse		0.000
+ANSWER	S00034	refuse		0.000
+ANSWER	S00035	refuse		0.000
+ANSWER	S00036	refuse		0.000
+ANSWER	S00037	refuse		0.000
+ANSWER	S00038	refuse		0.000
+ANSWER	S00039	refuse		0.000
+ANSWER	S00040	refuse		0.000
+ANSWER	S00041	refuse		0.000
+ANSWER	S00042	refuse		0.000
+ANSWER	S00043	refuse		0.000
+ANSWER	S00044	refuse		0.000
+ANSWER	S00045	refuse		0.000
+ANSWER	S00046	refuse		0.000
+ANSWER	S00047	refuse		0.000
+ANSWER	S00048	refuse		0.000
+ANSWER	S00049	refuse		0.000
+ANSWER	S00050	refuse		0.000
+ANSWER	S00051	refuse		0.000
+ANSWER	S00052	refuse		0.000
+ANSWER	S00053	refuse		0.000
+ANSWER	S00054	refuse		0.000
+ANSWER	S00055	refuse		0.000
+ANSWER	S00056	refuse		0.000
+ANSWER	S00057	refuse		0.000
+ANSWER	S00058	refuse		0.000
+ANSWER	S00059	refuse		0.000
+ANSWER	S00060	refuse		0.000
+ANSWER	S00061	refuse		0.000
+ANSWER	S00062	refuse		0.000
+ANSWER	S00063	refuse		0.000
+ANSWER	S00064	refuse		0.000
+ANSWER	S00065	refuse		0.000
+ANSWER	S00066	refuse		0.000
+ANSWER	S00067	refuse		0.000
+ANSWER	S00068	refuse		0.000
+ANSWER	S00069	refuse		0.000
+ANSWER	S00070	refuse		0.000
+ANSWER	S00071	refuse		0.000
+ANSWER	S00072	refuse		0.000
+ANSWER	S00073	refuse		0.000
+ANSWER	S00074	refuse		0.000
+ANSWER	S00075	refuse		0.000
+ANSWER	S00076	refuse		0.000
+ANSWER	S00077	refuse		0.000
+ANSWER	S00078	refuse		0.000
+ANSWER	S00079	refuse		0.000
+ANSWER	S00080	refuse		0.000
+ANSWER	S00081	refuse		0.000
+ANSWER	S00082	refuse		0.000
+ANSWER	S00083	refuse		0.000
+ANSWER	S00084	refuse		0.000
+ANSWER	S00085	refuse		0.000
+ANSWER	S00086	refuse		0.000
+ANSWER	S00087	refuse		0.000
+ANSWER	S00088	refuse		0.000
+ANSWER	S00089	refuse		0.000
+ANSWER	S00090	refuse		0.000
+ANSWER	S00091	refuse		0.000
+ANSWER	S00092	refuse		0.000
+ANSWER	S00093	refuse		0.000
+ANSWER	S00094	refuse		0.000
+ANSWER	S00095	refuse		0.000
+ANSWER	S00096	refuse		0.000
+ANSWER	S00097	refuse		0.000
+ANSWER	S00098	refuse		0.000
+ANSWER	S00099	refuse		0.000
+ANSWER	S00100	refuse		0.000
+ANSWER	S00101	refuse		0.000
+ANSWER	S00102	refuse		0.000
+ANSWER	S00103	refuse		0.000
+ANSWER	S00104	refuse		0.000
+ANSWER	S00105	refuse		0.000
+ANSWER	S00106	refuse		0.000
+ANSWER	S00107	refuse		0.000
+ANSWER	S00108	refuse		0.000
+ANSWER	S00109	refuse		0.000
+ANSWER	S00110	refuse		0.000
+ANSWER	S00111	refuse		0.000
+ANSWER	S00112	refuse		0.000
+ANSWER	S00113	refuse		0.000
+ANSWER	S00114	refuse		0.000
+ANSWER	S00115	refuse		0.000
+ANSWER	S00116	refuse		0.000
+ANSWER	S00117	refuse		0.000
+ANSWER	S00118	refuse		0.000
+ANSWER	S00119	refuse		0.000
+ANSWER	S00120	refuse		0.000
+ANSWER	S00121	refuse		0.000
+ANSWER	S00122	refuse		0.000
+ANSWER	S00123	refuse		0.000
+ANSWER	S00124	refuse		0.000
+ANSWER	S00125	refuse		0.000
+ANSWER	S00126	refuse		0.000
+ANSWER	S00127	refuse		0.000
+ANSWER	S00128	refuse		0.000
+ANSWER	S00129	refuse		0.000
+ANSWER	S00130	refuse		0.000
+ANSWER	S00131	refuse		0.000
+ANSWER	S00132	refuse		0.000
+ANSWER	S00133	refuse		0.000
+ANSWER	S00134	refuse		0.000
+ANSWER	S00135	refuse		0.000
+ANSWER	S00136	refuse		0.000
+ANSWER	S00137	refuse		0.000
+ANSWER	S00138	refuse		0.000
+ANSWER	S00139	refuse		0.000
+ANSWER	S00140	refuse		0.000
+ANSWER	S00141	refuse		0.000
+ANSWER	S00142	refuse		0.000
+ANSWER	S00143	refuse		0.000
+ANSWER	S00144	refuse		0.000
+ANSWER	S00145	refuse		0.000
+ANSWER	S00146	refuse		0.000
+ANSWER	S00147	refuse		0.000
+ANSWER	S00148	refuse		0.000
+ANSWER	S00149	refuse		0.000
+ANSWER	S00150	refuse		0.000
+ANSWER	S00151	refuse		0.000
+ANSWER	S00152	refuse		0.000
+ANSWER	S00153	refuse		0.000
+ANSWER	S00154	refuse		0.000
+ANSWER	S00155	refuse		0.000
+ANSWER	S00156	refuse		0.000
+ANSWER	S00157	refuse		0.000
+ANSWER	S00158	refuse		0.000
+ANSWER	S00159	refuse		0.000
+ANSWER	S00160	refuse		0.000
+ANSWER	S00161	refuse		0.000
+ANSWER	S00162	refuse		0.000
+ANSWER	S00163	refuse		0.000
+ANSWER	S00164	refuse		0.000
+ANSWER	S00165	refuse		0.000
+ANSWER	S00166	refuse		0.000
+ANSWER	S00167	refuse		0.000
+ANSWER	S00168	refuse		0.000
+ANSWER	S00169	refuse		0.000
+ANSWER	S00170	refuse		0.000
+ANSWER	S00171	refuse		0.000
+ANSWER	S00172	refuse		0.000
+ANSWER	S00173	refuse		0.000
+ANSWER	S00174	refuse		0.000
+ANSWER	S00175	refuse		0.000
+ANSWER	S00176	refuse		0.000
+ANSWER	S00177	refuse		0.000
+ANSWER	S00178	refuse		0.000
+ANSWER	S00179	refuse		0.000
+ANSWER	S00180	refuse		0.000
+ANSWER	S00181	refuse		0.000
+ANSWER	S00182	refuse		0.000
+ANSWER	S00183	refuse		0.000
+ANSWER	S00184	refuse		0.000
+ANSWER	S00185	refuse		0.000
+ANSWER	S00186	refuse		0.000
+ANSWER	S00187	refuse		0.000
+ANSWER	S00188	refuse		0.000
+ANSWER	S00189	refuse		0.000
+ANSWER	S00190	refuse		0.000
+ANSWER	S00191	refuse		0.000
+ANSWER	S00192	refuse		0.000
+ANSWER	S00193	refuse		0.000
+ANSWER	S00194	refuse		0.000
+ANSWER	S00195	refuse		0.000
+ANSWER	S00196	refuse		0.000
+ANSWER	S00197	refuse		0.000
+ANSWER	S00198	refuse		0.000
+ANSWER	S00199	refuse		0.000
+ANSWER	S00200	refuse		0.000
+ANSWER	S00201	refuse		0.000
+ANSWER	S00202	refuse		0.000
+ANSWER	S00203	refuse		0.000
+ANSWER	S00204	refuse		0.000
+ANSWER	S00205	refuse		0.000
+ANSWER	S00206	refuse		0.000
+ANSWER	S00207	refuse		0.000
+ANSWER	S00208	refuse		0.000
+ANSWER	S00209	refuse		0.000
+ANSWER	S00210	refuse		0.000
+ANSWER	S00211	refuse		0.000
+ANSWER	S00212	refuse		0.000
+ANSWER	S00213	refuse		0.000
+ANSWER	S00214	refuse		0.000
+ANSWER	S00215	refuse		0.000
+ANSWER	S00216	refuse		0.000
+ANSWER	S00217	refuse		0.000
+ANSWER	S00218	refuse		0.000
+ANSWER	S00219	refuse		0.000
+ANSWER	S00220	refuse		0.000
+ANSWER	S00221	refuse		0.000
+ANSWER	S00222	refuse		0.000
+ANSWER	S00223	refuse		0.000
+ANSWER	S00224	refuse		0.000
+ANSWER	S00225	refuse		0.000
+ANSWER	S00226	refuse		0.000
+ANSWER	S00227	refuse		0.000
+ANSWER	S00228	refuse		0.000
+ANSWER	S00229	refuse		0.000
+ANSWER	S00230	refuse		0.000
+ANSWER	S00231	refuse		0.000
+ANSWER	S00232	refuse		0.000
+ANSWER	S00233	refuse		0.000
+ANSWER	S00234	refuse		0.000
+ANSWER	S00235	refuse		0.000
+ANSWER	S00236	refuse		0.000
+ANSWER	S00237	refuse		0.000
+ANSWER	S00238	refuse		0.000
+ANSWER	S00239	refuse		0.000
+ANSWER	S00240	refuse		0.000
+ANSWER	S00241	refuse		0.000
+ANSWER	S00242	refuse		0.000
+ANSWER	S00243	refuse		0.000
+ANSWER	S00244	refuse		0.000
+ANSWER	S00245	refuse		0.000
+ANSWER	S00246	refuse		0.000
+ANSWER	S00247	refuse		0.000
+ANSWER	S00248	refuse		0.000
+ANSWER	S00249	refuse		0.000
+ANSWER	S00250	refuse		0.000
+ANSWER	S00251	refuse		0.000
+ANSWER	S00252	refuse		0.000
+ANSWER	S00253	refuse		0.000
+ANSWER	S00254	refuse		0.000
+ANSWER	S00255	refuse		0.000
+ANSWER	S00256	refuse		0.000
+ANSWER	S00257	refuse		0.000
+ANSWER	S00258	refuse		0.000
+ANSWER	S00259	refuse		0.000
+ANSWER	S00260	refuse		0.000
+ANSWER	S00261	refuse		0.000
+ANSWER	S00262	refuse		0.000
+ANSWER	S00263	refuse		0.000
+ANSWER	S00264	refuse		0.000
+ANSWER	S00265	refuse		0.000
+ANSWER	S00266	refuse		0.000
+ANSWER	S00267	refuse		0.000
+ANSWER	S00268	refuse		0.000
+ANSWER	S00269	refuse		0.000
+ANSWER	S00270	refuse		0.000
+ANSWER	S00271	refuse		0.000
+ANSWER	S00272	refuse		0.000
+ANSWER	S00273	refuse		0.000
+ANSWER	S00274	refuse		0.000
+ANSWER	S00275	refuse		0.000
+ANSWER	S00276	refuse		0.000
+ANSWER	S00277	refuse		0.000
+ANSWER	S00278	refuse		0.000
+ANSWER	S00279	refuse		0.000
+ANSWER	S00280	refuse		0.000
+ANSWER	S00281	refuse		0.000
+ANSWER	S00282	refuse		0.000
+ANSWER	S00283	refuse		0.000
+ANSWER	S00284	refuse		0.000
+ANSWER	S00285	refuse		0.000
+ANSWER	S00286	refuse		0.000
+ANSWER	S00287	refuse		0.000
+ANSWER	S00288	refuse		0.000
+ANSWER	S00289	refuse		0.000
+ANSWER	S00290	refuse		0.000
+ANSWER	S00291	refuse		0.000
+ANSWER	S00292	refuse		0.000
+ANSWER	S00293	refuse		0.000
+ANSWER	S00294	refuse		0.000
+ANSWER	S00295	refuse		0.000
+ANSWER	S00296	refuse		0.000
+ANSWER	S00297	refuse		0.000
+ANSWER	S00298	refuse		0.000
+ANSWER	S00299	refuse		0.000
+ANSWER	S00300	refuse		0.000
+ANSWER	S00301	refuse		0.000
+ANSWER	S00302	refuse		0.000
+ANSWER	S00303	refuse		0.000
+ANSWER	S00304	refuse		0.000
+ANSWER	S00305	refuse		0.000
+ANSWER	S00306	refuse		0.000
+ANSWER	S00307	refuse		0.000
+ANSWER	S00308	refuse		0.000
+ANSWER	S00309	refuse		0.000
+ANSWER	S00310	refuse		0.000
+ANSWER	S00311	refuse		0.000
+ANSWER	S00312	refuse		0.000
+ANSWER	S00313	refuse		0.000
+ANSWER	S00314	refuse		0.000
+ANSWER	S00315	refuse		0.000
+ANSWER	S00316	refuse		0.000
+ANSWER	S00317	refuse		0.000
+ANSWER	S00318	refuse		0.000
+ANSWER	S00319	refuse		0.000
+ANSWER	S00320	refuse		0.000
+ANSWER	S00321	refuse		0.000
+ANSWER	S00322	refuse		0.000
+ANSWER	S00323	refuse		0.000
+ANSWER	S00324	refuse		0.000
+ANSWER	S00325	refuse		0.000
+ANSWER	S00326	guess	29	0.500
+ANSWER	S00327	refuse		0.000
+ANSWER	S00328	refuse		0.000
+ANSWER	S00329	refuse		0.000
+ANSWER	S00330	refuse		0.000
+ANSWER	S00331	refuse		0.000
+ANSWER	S00332	refuse		0.000
+ANSWER	S00333	refuse		0.000
+ANSWER	S00334	refuse		0.000
+ANSWER	S00335	refuse		0.000
+ANSWER	S00336	refuse		0.000
+ANSWER	S00337	refuse		0.000
+ANSWER	S00338	refuse		0.000
+ANSWER	S00339	refuse		0.000
+ANSWER	S00340	refuse		0.000
+ANSWER	S00341	refuse		0.000
+ANSWER	S00342	refuse		0.000
+ANSWER	S00343	refuse		0.000
+ANSWER	S00344	refuse		0.000
+ANSWER	S00345	refuse		0.000
+ANSWER	S00346	refuse		0.000
+ANSWER	S00347	refuse		0.000
+ANSWER	S00348	refuse		0.000
+ANSWER	S00349	refuse		0.000
+ANSWER	S00350	refuse		0.000
+ANSWER	S00351	refuse		0.000
+ANSWER	S00352	refuse		0.000
+ANSWER	S00353	refuse		0.000
+ANSWER	S00354	refuse		0.000
+ANSWER	S00355	refuse		0.000
+ANSWER	S00356	refuse		0.000
+ANSWER	S00357	refuse		0.000
+ANSWER	S00358	refuse		0.000
+ANSWER	S00359	refuse		0.000
+ANSWER	S00360	refuse		0.000
+ANSWER	S00361	refuse		0.000
+ANSWER	S00362	refuse		0.000
+ANSWER	S00363	refuse		0.000
+ANSWER	S00364	refuse		0.000
+ANSWER	S00365	refuse		0.000
+ANSWER	S00366	refuse		0.000
+ANSWER	S00367	refuse		0.000
+ANSWER	S00368	refuse		0.000
+ANSWER	S00369	refuse		0.000
+ANSWER	S00370	refuse		0.000
+ANSWER	S00371	refuse		0.000
+ANSWER	S00372	refuse		0.000
+ANSWER	S00373	refuse		0.000
+ANSWER	S00374	refuse		0.000
+ANSWER	S00375	refuse		0.000
+ANSWER	S00376	refuse		0.000
+ANSWER	S00377	refuse		0.000
+ANSWER	S00378	refuse		0.000
+ANSWER	S00379	refuse		0.000
+ANSWER	S00380	refuse		0.000
+ANSWER	S00381	refuse		0.000
+ANSWER	S00382	refuse		0.000
+ANSWER	S00383	refuse		0.000
+ANSWER	S00384	refuse		0.000
+ANSWER	S00385	refuse		0.000
+ANSWER	S00386	refuse		0.000
+ANSWER	S00387	refuse		0.000
+ANSWER	S00388	refuse		0.000
+ANSWER	S00389	refuse		0.000
+ANSWER	S00390	refuse		0.000
+ANSWER	S00391	refuse		0.000
+ANSWER	S00392	refuse		0.000
+ANSWER	S00393	refuse		0.000
+ANSWER	S00394	refuse		0.000
+ANSWER	S00395	refuse		0.000
+ANSWER	S00396	refuse		0.000
+ANSWER	S00397	refuse		0.000
+ANSWER	S00398	refuse		0.000
+ANSWER	S00399	refuse		0.000
+ANSWER	S00400	refuse		0.000
+ANSWER	S00401	refuse		0.000
+ANSWER	S00402	refuse		0.000
+ANSWER	S00403	refuse		0.000
+ANSWER	S00404	refuse		0.000
+ANSWER	S00405	refuse		0.000
+ANSWER	S00406	refuse		0.000
+ANSWER	S00407	refuse		0.000
+ANSWER	S00408	refuse		0.000
+ANSWER	S00409	refuse		0.000
+ANSWER	S00410	refuse		0.000
+ANSWER	S00411	refuse		0.000
+ANSWER	S00412	refuse		0.000
+ANSWER	S00413	refuse		0.000
+ANSWER	S00414	refuse		0.000
+ANSWER	S00415	refuse		0.000
+ANSWER	S00416	refuse		0.000
+ANSWER	S00417	refuse		0.000
+ANSWER	S00418	refuse		0.000
+ANSWER	S00419	refuse		0.000
+ANSWER	S00420	refuse		0.000
+ANSWER	S00421	refuse		0.000
+ANSWER	S00422	refuse		0.000
+ANSWER	S00423	refuse		0.000
+ANSWER	S00424	refuse		0.000
+ANSWER	S00425	refuse		0.000
+ANSWER	S00426	refuse		0.000
+ANSWER	S00427	refuse		0.000
+ANSWER	S00428	refuse		0.000
+ANSWER	S00429	refuse		0.000
+ANSWER	S00430	refuse		0.000
+ANSWER	S00431	refuse		0.000
+ANSWER	S00432	refuse		0.000
+ANSWER	S00433	refuse		0.000
+ANSWER	S00434	refuse		0.000
+ANSWER	S00435	refuse		0.000
+ANSWER	S00436	refuse		0.000
+ANSWER	S00437	refuse		0.000
+ANSWER	S00438	refuse		0.000
+ANSWER	S00439	refuse		0.000
+ANSWER	S00440	refuse		0.000
+ANSWER	S00441	refuse		0.000
+ANSWER	S00442	refuse		0.000
+ANSWER	S00443	refuse		0.000
+ANSWER	S00444	refuse		0.000
+ANSWER	S00445	refuse		0.000
+ANSWER	S00446	refuse		0.000
+ANSWER	S00447	refuse		0.000
+ANSWER	S00448	refuse		0.000
+ANSWER	S00449	refuse		0.000
+ANSWER	S00450	refuse		0.000
+ANSWER	S00451	refuse		0.000
+ANSWER	S00452	refuse		0.000
+ANSWER	S00453	refuse		0.000
+ANSWER	S00454	refuse		0.000
+ANSWER	S00455	refuse		0.000
+ANSWER	S00456	refuse		0.000
+ANSWER	S00457	refuse		0.000
+ANSWER	S00458	refuse		0.000
+ANSWER	S00459	refuse		0.000
+ANSWER	S00460	refuse		0.000
+ANSWER	S00461	refuse		0.000
+ANSWER	S00462	refuse		0.000
+ANSWER	S00463	refuse		0.000
+ANSWER	S00464	refuse		0.000
+ANSWER	S00465	refuse		0.000
+ANSWER	S00466	refuse		0.000
+ANSWER	S00467	refuse		0.000
+ANSWER	S00468	refuse		0.000
+ANSWER	S00469	refuse		0.000
+ANSWER	S00470	refuse		0.000
+ANSWER	S00471	refuse		0.000
+ANSWER	S00472	refuse		0.000
+ANSWER	S00473	refuse		0.000
+ANSWER	S00474	refuse		0.000
+ANSWER	S00475	refuse		0.000
+ANSWER	S00476	refuse		0.000
+ANSWER	S00477	refuse		0.000
+ANSWER	S00478	refuse		0.000
+ANSWER	S00479	refuse		0.000
+ANSWER	S00480	refuse		0.000
+ANSWER	S00481	refuse		0.000
+ANSWER	S00482	refuse		0.000
+ANSWER	S00483	refuse		0.000
+ANSWER	S00484	refuse		0.000
+ANSWER	S00485	refuse		0.000
+ANSWER	S00486	refuse		0.000
+ANSWER	S00487	refuse		0.000
+ANSWER	S00488	refuse		0.000
+ANSWER	S00489	refuse		0.000
+ANSWER	S00490	refuse		0.000
+ANSWER	S00491	refuse		0.000
+ANSWER	S00492	refuse		0.000
+ANSWER	S00493	refuse		0.000
+ANSWER	S00494	refuse		0.000
+ANSWER	S00495	refuse		0.000
+ANSWER	S00496	refuse		0.000
+ANSWER	S00497	refuse		0.000
+ANSWER	S00498	refuse		0.000
+ANSWER	S00499	refuse		0.000
+ANSWER	S00500	refuse		0.000
+ANSWER	S00501	refuse		0.000
+ANSWER	S00502	refuse		0.000
+ANSWER	S00503	refuse		0.000
+ANSWER	S00504	refuse		0.000
+ANSWER	S00505	refuse		0.000
+ANSWER	S00506	guess	30	0.500
+ANSWER	S00507	refuse		0.000
+ANSWER	S00508	refuse		0.000
+ANSWER	S00509	refuse		0.000
+ANSWER	S00510	refuse		0.000
+ANSWER	S00511	refuse		0.000
+ANSWER	S00512	refuse		0.000
+ANSWER	S00513	refuse		0.000
+ANSWER	S00514	refuse		0.000
+ANSWER	S00515	refuse		0.000
+ANSWER	S00516	refuse		0.000
+ANSWER	S00517	refuse		0.000
+ANSWER	S00518	refuse		0.000
+ANSWER	S00519	refuse		0.000
+ANSWER	S00520	refuse		0.000
+ANSWER	S00521	refuse		0.000
+ANSWER	S00522	refuse		0.000
+ANSWER	S00523	refuse		0.000
+ANSWER	S00524	guess	29	0.500
+ANSWER	S00525	refuse		0.000
+ANSWER	S00526	refuse		0.000
+ANSWER	S00527	refuse		0.000
+ANSWER	S00528	refuse		0.000
+ANSWER	S00529	refuse		0.000
+ANSWER	S00530	refuse		0.000
+ANSWER	S00531	refuse		0.000
+ANSWER	S00532	refuse		0.000
+ANSWER	S00533	refuse		0.000
+ANSWER	S00534	refuse		0.000
+ANSWER	S00535	refuse		0.000
+ANSWER	S00536	refuse		0.000
+ANSWER	S00537	refuse		0.000
+ANSWER	S00538	refuse		0.000
+ANSWER	S00539	refuse		0.000
+ANSWER	S00540	refuse		0.000
+ANSWER	S00541	refuse		0.000
+ANSWER	S00542	refuse		0.000
+ANSWER	S00543	refuse		0.000
+ANSWER	S00544	refuse		0.000
+ANSWER	S00545	refuse		0.000
+ANSWER	S00546	refuse		0.000
+ANSWER	S00547	refuse		0.000
+ANSWER	S00548	refuse		0.000
+ANSWER	S00549	refuse		0.000
+ANSWER	S00550	refuse		0.000
+ANSWER	S00551	refuse		0.000
+ANSWER	S00552	refuse		0.000
+ANSWER	S00553	refuse		0.000
+ANSWER	S00554	refuse		0.000
+ANSWER	S00555	refuse		0.000
+ANSWER	S00556	refuse		0.000
+ANSWER	S00557	refuse		0.000
+ANSWER	S00558	refuse		0.000
+ANSWER	S00559	refuse		0.000
+ANSWER	S00560	refuse		0.000
+ANSWER	S00561	refuse		0.000
+ANSWER	S00562	refuse		0.000
+ANSWER	S00563	refuse		0.000
+ANSWER	S00564	refuse		0.000
+ANSWER	S00565	refuse		0.000
+ANSWER	S00566	refuse		0.000
+ANSWER	S00567	refuse		0.000
+ANSWER	S00568	refuse		0.000
+ANSWER	S00569	refuse		0.000
+ANSWER	S00570	refuse		0.000
+ANSWER	S00571	refuse		0.000
+ANSWER	S00572	refuse		0.000
+ANSWER	S00573	refuse		0.000
+ANSWER	S00574	refuse		0.000
+ANSWER	S00575	refuse		0.000
+ANSWER	S00576	refuse		0.000
+ANSWER	S00577	refuse		0.000
+ANSWER	S00578	refuse		0.000
+ANSWER	S00579	refuse		0.000
+ANSWER	S00580	refuse		0.000
+ANSWER	S00581	refuse		0.000
+ANSWER	S00582	refuse		0.000
+ANSWER	S00583	refuse		0.000
+ANSWER	S00584	refuse		0.000
+ANSWER	S00585	refuse		0.000
+ANSWER	S00586	refuse		0.000
+ANSWER	S00587	refuse		0.000
+ANSWER	S00588	refuse		0.000
+ANSWER	S00589	refuse		0.000
+ANSWER	S00590	refuse		0.000
+ANSWER	S00591	refuse		0.000
+ANSWER	S00592	refuse		0.000
+ANSWER	S00593	refuse		0.000
+ANSWER	S00594	refuse		0.000
+ANSWER	S00595	refuse		0.000
+ANSWER	S00596	refuse		0.000
+ANSWER	S00597	refuse		0.000
+ANSWER	S00598	refuse		0.000
+ANSWER	S00599	refuse		0.000
+ANSWER	S00600	refuse		0.000
+ANSWER	S00601	refuse		0.000
+ANSWER	S00602	refuse		0.000
+ANSWER	S00603	refuse		0.000
+ANSWER	S00604	refuse		0.000
+ANSWER	S00605	refuse		0.000
+ANSWER	S00606	refuse		0.000
+ANSWER	S00607	refuse		0.000
+ANSWER	S00608	refuse		0.000
+ANSWER	S00609	refuse		0.000
+ANSWER	S00610	refuse		0.000
+ANSWER	S00611	refuse		0.000
+ANSWER	S00612	refuse		0.000
+ANSWER	S00613	refuse		0.000
+ANSWER	S00614	refuse		0.000
+ANSWER	S00615	refuse		0.000
+ANSWER	S00616	refuse		0.000
+ANSWER	S00617	refuse		0.000
+ANSWER	S00618	refuse		0.000
+ANSWER	S00619	refuse		0.000
+ANSWER	S00620	refuse		0.000
+ANSWER	S00621	guess	29	0.500
+ANSWER	S00622	refuse		0.000
+ANSWER	S00623	refuse		0.000
+ANSWER	S00624	refuse		0.000
+ANSWER	S00625	refuse		0.000
+ANSWER	S00626	refuse		0.000
+ANSWER	S00627	refuse		0.000
+ANSWER	S00628	refuse		0.000
+ANSWER	S00629	refuse		0.000
+ANSWER	S00630	refuse		0.000
+ANSWER	S00631	refuse		0.000
+ANSWER	S00632	refuse		0.000
+ANSWER	S00633	refuse		0.000
+ANSWER	S00634	refuse		0.000
+ANSWER	S00635	refuse		0.000
+ANSWER	S00636	refuse		0.000
+ANSWER	S00637	refuse		0.000
+ANSWER	S00638	refuse		0.000
+ANSWER	S00639	refuse		0.000
+ANSWER	S00640	refuse		0.000
+ANSWER	S00641	refuse		0.000
+ANSWER	S00642	refuse		0.000
+ANSWER	S00643	refuse		0.000
+ANSWER	S00644	refuse		0.000
+ANSWER	S00645	refuse		0.000
+ANSWER	S00646	refuse		0.000
+ANSWER	S00647	refuse		0.000
+ANSWER	S00648	refuse		0.000
+ANSWER	S00649	refuse		0.000
+ANSWER	S00650	refuse		0.000
+ANSWER	S00651	refuse		0.000
+ANSWER	S00652	refuse		0.000
+ANSWER	S00653	refuse		0.000
+ANSWER	S00654	refuse		0.000
+ANSWER	S00655	refuse		0.000
+ANSWER	S00656	refuse		0.000
+ANSWER	S00657	refuse		0.000
+ANSWER	S00658	refuse		0.000
+ANSWER	S00659	refuse		0.000
+ANSWER	S00660	refuse		0.000
+ANSWER	S00661	refuse		0.000
+ANSWER	S00662	refuse		0.000
+ANSWER	S00663	refuse		0.000
+ANSWER	S00664	refuse		0.000
+ANSWER	S00665	refuse		0.000
+ANSWER	S00666	refuse		0.000
+ANSWER	S00667	refuse		0.000
+ANSWER	S00668	refuse		0.000
+ANSWER	S00669	refuse		0.000
+ANSWER	S00670	refuse		0.000
+ANSWER	S00671	refuse		0.000
+ANSWER	S00672	refuse		0.000
+ANSWER	S00673	refuse		0.000
+ANSWER	S00674	refuse		0.000
+ANSWER	S00675	refuse		0.000
+ANSWER	S00676	refuse		0.000
+ANSWER	S00677	refuse		0.000
+ANSWER	S00678	refuse		0.000
+ANSWER	S00679	refuse		0.000
+ANSWER	S00680	refuse		0.000
+ANSWER	S00681	refuse		0.000
+ANSWER	S00682	refuse		0.000
+ANSWER	S00683	refuse		0.000
+ANSWER	S00684	refuse		0.000
+ANSWER	S00685	refuse		0.000
+ANSWER	S00686	guess	29	0.500
+ANSWER	S00687	refuse		0.000
+ANSWER	S00688	refuse		0.000
+ANSWER	S00689	refuse		0.000
+ANSWER	S00690	refuse		0.000
+ANSWER	S00691	refuse		0.000
+ANSWER	S00692	refuse		0.000
+ANSWER	S00693	refuse		0.000
+ANSWER	S00694	refuse		0.000
+ANSWER	S00695	refuse		0.000
+ANSWER	S00696	refuse		0.000
+ANSWER	S00697	refuse		0.000
+ANSWER	S00698	refuse		0.000
+ANSWER	S00699	refuse		0.000
+ANSWER	S00700	refuse		0.000
+ANSWER	S00701	refuse		0.000
+ANSWER	S00702	refuse		0.000
+ANSWER	S00703	refuse		0.000
+ANSWER	S00704	refuse		0.000
+ANSWER	S00705	refuse		0.000
+ANSWER	S00706	refuse		0.000
+ANSWER	S00707	refuse		0.000
+ANSWER	S00708	refuse		0.000
+ANSWER	S00709	refuse		0.000
+ANSWER	S00710	refuse		0.000
+ANSWER	S00711	refuse		0.000
+ANSWER	S00712	refuse		0.000
+ANSWER	S00713	refuse		0.000
+ANSWER	S00714	refuse		0.000
+ANSWER	S00715	refuse		0.000
+ANSWER	S00716	refuse		0.000
+ANSWER	S00717	refuse		0.000
+ANSWER	S00718	refuse		0.000
+ANSWER	S00719	refuse		0.000
+ANSWER	S00720	refuse		0.000
+ANSWER	S00721	refuse		0.000
+ANSWER	S00722	refuse		0.000
+ANSWER	S00723	refuse		0.000
+ANSWER	S00724	refuse		0.000
+ANSWER	S00725	refuse		0.000

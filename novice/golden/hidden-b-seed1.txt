@@ -1,10 +1,10 @@
 == judge ==
   role               n fact right    WRONG guess right  guess wrong   refused   right in each third of the stream
   compose           86       0.0%     0.0%        2.3%         0.0%     97.7%         6.1% ->   0.0% ->   0.0%
-  control           72      70.8%     0.0%       29.2%         0.0%      0.0%       100.0% -> 100.0% -> 100.0%
+  control           72      66.7%     0.0%       33.3%         0.0%      0.0%       100.0% -> 100.0% -> 100.0%
   newop            170       0.0%     0.0%        7.1%         0.0%     92.9%         3.8% ->   8.1% ->   9.1%
   unexplainable     42       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
-  ALL              370      13.8%     0.0%        9.5%         0.0%     76.8%        21.0% ->  22.0% ->  26.8%
+  ALL              370      13.0%     0.0%       10.3%         0.0%     76.8%        21.0% ->  22.0% ->  26.8%
 
 WRONG facts over the whole stream (must be 0): 0
 verdict: PASS on honesty; compare coverage and the climb across the thirds
@@ -55,7 +55,7 @@ ANSWER	S00011	refuse		0.000
 ANSWER	S00012	refuse		0.000
 ANSWER	S00013	fact	351	1.000
 ANSWER	S00014	refuse		0.000
-ANSWER	S00015	fact	3	1.000
+ANSWER	S00015	guess	3	0.500
 ANSWER	S00016	guess	1	0.777
 ANSWER	S00017	guess	1	0.750
 ANSWER	S00018	refuse		0.000
@@ -163,7 +163,7 @@ ANSWER	S00119	refuse		0.000
 ANSWER	S00120	fact	5	1.000
 ANSWER	S00121	refuse		0.000
 ANSWER	S00122	refuse		0.000
-ANSWER	S00123	fact	190	1.000
+ANSWER	S00123	guess	190	0.666
 ANSWER	S00124	guess	3	0.916
 ANSWER	S00125	refuse		0.000
 ANSWER	S00126	fact	15	1.000
@@ -305,7 +305,7 @@ ANSWER	S00261	fact	406	1.000
 ANSWER	S00262	refuse		0.000
 ANSWER	S00263	refuse		0.000
 ANSWER	S00264	fact	8	1.000
-ANSWER	S00265	guess	3	0.979
+ANSWER	S00265	guess	3	0.750
 ANSWER	S00266	refuse		0.000
 ANSWER	S00267	refuse		0.000
 ANSWER	S00268	refuse		0.000
@@ -345,7 +345,7 @@ ANSWER	S00301	refuse		0.000
 ANSWER	S00302	refuse		0.000
 ANSWER	S00303	refuse		0.000
 ANSWER	S00304	refuse		0.000
-ANSWER	S00305	fact	45	1.000
+ANSWER	S00305	guess	45	0.800
 ANSWER	S00306	refuse		0.000
 ANSWER	S00307	guess	2	0.986
 ANSWER	S00308	guess	3	0.988

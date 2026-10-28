@@ -1,10 +1,10 @@
 == judge ==
   role               n fact right    WRONG guess right  guess wrong   refused   right in each third of the stream
   compose           56       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
-  control           72      72.2%     0.0%       27.8%         0.0%      0.0%       100.0% -> 100.0% -> 100.0%
+  control           72      68.1%     0.0%       31.9%         0.0%      0.0%       100.0% -> 100.0% -> 100.0%
   newop            186       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
   unexplainable     50       0.0%     0.0%        0.0%         0.0%    100.0%         0.0% ->   0.0% ->   0.0%
-  ALL              364      14.3%     0.0%        5.5%         0.0%     80.2%        13.1% ->  24.0% ->  22.3%
+  ALL              364      13.5%     0.0%        6.3%         0.0%     80.2%        13.1% ->  24.0% ->  22.3%
 
 WRONG facts over the whole stream (must be 0): 0
 verdict: PASS on honesty; compare coverage and the climb across the thirds
@@ -280,7 +280,7 @@ ANSWER	S00237	refuse		0.000
 ANSWER	S00238	refuse		0.000
 ANSWER	S00239	refuse		0.000
 ANSWER	S00240	refuse		0.000
-ANSWER	S00241	fact	39	1.000
+ANSWER	S00241	guess	39	0.500
 ANSWER	S00242	refuse		0.000
 ANSWER	S00243	refuse		0.000
 ANSWER	S00244	refuse		0.000
@@ -320,7 +320,7 @@ ANSWER	S00277	fact	3	1.000
 ANSWER	S00278	refuse		0.000
 ANSWER	S00279	refuse		0.000
 ANSWER	S00280	refuse		0.000
-ANSWER	S00281	fact	1	1.000
+ANSWER	S00281	guess	1	0.666
 ANSWER	S00282	refuse		0.000
 ANSWER	S00283	fact	17576	1.000
 ANSWER	S00284	refuse		0.000
@@ -382,7 +382,7 @@ ANSWER	S00339	refuse		0.000
 ANSWER	S00340	refuse		0.000
 ANSWER	S00341	refuse		0.000
 ANSWER	S00342	refuse		0.000
-ANSWER	S00343	fact	8	1.000
+ANSWER	S00343	guess	8	0.750
 ANSWER	S00344	refuse		0.000
 ANSWER	S00345	refuse		0.000
 ANSWER	S00346	refuse		0.000
