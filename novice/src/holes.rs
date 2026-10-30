@@ -343,7 +343,6 @@ pub fn solve(inputs: &[Vec<i64>], target: &[i64], arity: usize, pool: &[(Expr, C
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::program;
 
     /// A reproducible spread of points (no randomness library: a mixing function).
     fn points(arity: usize, n: usize, top: i64) -> Vec<Vec<i64>> {

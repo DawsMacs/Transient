@@ -18,3 +18,7 @@ novice/golden/check.sh update     # regenerate on purpose; the commit says why
 ```
 
 Exit status: 0 every golden matches; 1 at least one differs; 2 an output could not be generated; 3 the runs on this machine disagree with each other. A difference is never adopted silently: it is either a platform difference or a logic change that was not followed by an update. A change meant to change answers runs `update` in the same commit and says why. Run `update` on the reference platform only.
+
+## 2026-10-30 publication correction
+
+The Novice 0.0.1 research snapshot removes answer-dependent exclusions from recurrence validation. A reachable held-out error now rejects the recurrence; acquisition can decrease and work or replies can change. Goldens regenerated for this correction pin the stricter behavior. They do not reclassify any already-read exam as blind, and they do not provide an independent outer evaluation of recurrence-shape selection.

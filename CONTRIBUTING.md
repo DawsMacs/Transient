@@ -32,6 +32,9 @@ New source files start with:
 
 ## Before opening a pull request
 
+For Novice, run `cargo test --manifest-path novice/Cargo.toml --release --offline` and `bash novice/golden/check.sh`. Keep its own workspace and goldens separate from the frozen Baby reference. The following checks cover Baby and the shared judge.
+
+
 ```bash
 cargo build --release --offline
 cargo test --release --offline
@@ -43,4 +46,4 @@ The goldens record what Matter answers on the reference platform (Linux x86_64).
 
 ## Pull requests and CI
 
-Work on a branch and open a pull request; the maintainer merges. CI builds and tests every change on fourteen platform rows (Linux in several flavors, macOS, Windows, four BSDs, WebAssembly, and 32-bit and big-endian Linux). The reference row (Linux x86_64) must be green, and a golden difference there fails the build. On any other row a failure is a **finding**: say what the platform did and why, rather than widening a threshold or skipping the row. [`docs/Running.md`](docs/Running.md) explains how to build and run Matter on each platform. A pull request template and issue templates ask for the details that matter (platform, `rustc -Vv`, the exact question).
+Work on a branch and open a pull request; the maintainer merges. Novice has its own workflow: Linux x86_64 and aarch64 checks on relevant changes, with macOS, Windows, and musl builds weekly and on demand. Baby's broader platform matrix runs on Baby changes and weekly. The reference row (Linux x86_64) must be green, and a golden difference there fails the build. On any other row a failure is a **finding**: say what the platform did and why, rather than widening a threshold or skipping the row. [`docs/Running.md`](docs/Running.md) explains how to build and run Matter on each platform. A pull request template and issue templates ask for the details that matter (platform, `rustc -Vv`, the exact question).

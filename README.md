@@ -5,7 +5,7 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="License: AGPL-3.0-only" src="https://img.shields.io/badge/license-AGPL--3.0--only-blue"></a>
-  <a href="https://github.com/Matterworm/Matter/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Matterworm/Matter/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/Matterworm/Matter/actions/workflows/novice.yml"><img alt="Novice CI" src="https://github.com/Matterworm/Matter/actions/workflows/novice.yml/badge.svg"></a>
   <img alt="Rust, zero dependencies" src="https://img.shields.io/badge/rust-zero%20dependencies-orange">
 </p>
 
@@ -13,19 +13,28 @@
 *recursive meta-adaptive learning*, an ambition and not a claim: a system that keeps learning while it is used, decides for itself
 *how* to learn each kind of thing, and in the long run revises that process itself. It is measured by what it costs (operations, memory, estimated joules) rather than by parameter count alone.
 
-The current artifact is `baby/`: about 18k lines of Rust, **no dependencies**, builds offline, 153 tests. It is a research prototype
-evaluated mostly on a synthetic curriculum, with a first look at real word problems (SVAMP, ASDiv) and an entry exam that any
-other system can take. It is not a language model and makes no claim to be one yet.
+The main line is **[Novice](novice/README.md)**, a dependency-free Rust system rebuilt from scratch. It finds question kinds without the exam's labels, searches for explanations priced in bits, learns reusable program pieces and numeral grammars, and tracks its sources. **[Baby](baby/README.md) is preserved as the frozen reference**, including its code, results, and experiment history.
 
-Matter is made by the **[Matterworm Foundation](https://matterworm.github.io)**, an independent research effort run by its founder, Daws Macs, and a founding member. Its
-website has an overview, documentation, a progress page and a blog.
+Matter is made by the **[Matterworm Foundation](https://matterworm.org/)**, an independent research effort run by its founder, Daws Macs, and a founding member.
 
-> **Where the work is:** `baby/` is the frozen reference. The main line is [`novice/`](novice/README.md), rebuilt from scratch, which explains what it
-> is told in one currency (bits), is built to rewrite its own language, and has a joule budget for every milestone. It has just started: see its README.
+> **Status (2026-10-30): Novice research snapshot; development is pausing.** Research and foundation maintenance continue. This is experimental software, not a general-purpose assistant. See the [Novice release notes](docs/NoviceRelease.md) for how to run it and its known limitations, and the [sparse generative learning retrospective](docs/SparseGenerativeLearning.md) for what the next research attempt taught us.
 
-> **Status:** active research. Unless a line says otherwise, the numbers below come from tidy synthetic lessons; energy is
-> *measured* with the CPU's own counter where stated, and *estimated* from counted operations where not. Read
-> [Limitations](#limitations) before drawing conclusions.
+## Novice: current evidence
+
+- The latest blind exam (set K, three seeds) recorded **zero wrong facts and zero answered traps**, but **0 of 12 hard kinds acquired on every seed**. Control questions answered correctly as facts: 15.5%, 14.5%, and 14.5%; most questions were refused.
+- Constant inference transferred narrowly: one additional kind per seed. The earlier 19% development-set reduction in evaluations did **not** transfer; total evaluations on K rose 1.8%.
+- This release removes answer-dependent exclusions from recurrence validation: every reachable held-out prediction now counts. Recurrence shapes are still selected on the full table, so the internal check is not an independent outer evaluation. Historical acquisition counts retain that limitation.
+- No falling lifetime energy cost per useful answer, broad reasoning, or general language understanding has been demonstrated.
+
+These are historical measurements, with the full protocol and caveats in [Novice's experiment log](novice/README.md). Previously blind sets are now development material. Build and verify the research snapshot:
+
+```bash
+cargo test --manifest-path novice/Cargo.toml --release --offline
+cargo build --manifest-path novice/Cargo.toml --release --offline
+bash novice/golden/check.sh
+```
+
+The root Cargo workspace still builds Baby; Novice has its own workspace. The following sections preserve Baby's historical results and usage. **Their numbers describe Baby, not Novice.**
 
 ## What `baby` does
 
@@ -97,7 +106,7 @@ Requires a stable Rust toolchain (edition 2021). No other dependencies, no netwo
 Download options, checking your build, updating, troubleshooting and what is tested where are in [`docs/Running.md`](docs/Running.md). With Rust and git already installed, on Linux, macOS or a BSD:
 
 ```bash
-cargo test --release --offline         # 153 tests (about 15 s)
+cargo test --release --offline         # Baby reference and judge: 155 tests
 cargo build --release --offline
 ./target/release/baby school           # teach 13 units (~4 s), print how each was learned and the scorecard
 ./target/release/baby ask "how far apart are two and nine"   # answers, and says how it knew
@@ -150,8 +159,7 @@ All under `baby/src/`.
 | `examples/mathprint.rs` | (an example, not part of the baby) a fingerprint and an accuracy audit of the platform's math library |
 | `golden/` | the answers pinned on the reference platform, and the shell scripts that check them (see below) |
 
-**Languages.** The system is Rust (about 97.6 % of the repository by size, with no dependencies). Python and shell are used for three narrow reasons, and none of them is part of what the baby is: **Python** (`tools/`, three small files) holds the *foreign systems* the entry exam must be able to judge: `exam_baseline.py` and `exam_adapt_baseline.py` are deliberately naive memorizers written in another language to show that the exam's plain files and line protocol work for any system, and `pytorch_baseline.py` is the tuned PyTorch comparison, which needs PyTorch and so cannot be Rust. **Shell** (`golden/check.sh`, `golden/check-wrong-teacher.sh`) is the glue that runs the same commands on every platform (Linux, macOS, Windows through Git Bash, the BSDs, WebAssembly) and compares their output with the pinned answers; it is shell because it only starts programs and compares files. The CI workflows are YAML, and the documents are Markdown.
-## How results are judged
+**Languages.** The Baby and Novice learning and answering cores are dependency-free Rust. Python in `tools/` supplies independent exam-world generators, evaluation and experience-curve tools, deliberately naive memorizer baselines, and the optional PyTorch comparison. It is evaluation infrastructure rather than a Python learner runtime. Shell runs the commands and compares pinned outputs for the separate Baby and Novice goldens. The CI workflows are YAML, and the documents are Markdown. Repository language percentages describe source-file sizes, not runtime work or energy use.
 
 - **WRONG is reported apart from refused.** Accuracy alone hides bluffing.
 - **Adversarial batteries are part of the tests.** The same trap (`|a-b|`, `a-b` and `10-n` agree on every taught lesson) caught
@@ -213,7 +221,7 @@ to find out by measurement. The strategy and the hardware terrain are in [`docs/
 | [`docs/Running.md`](docs/Running.md) | get, build, run and check Matter on each platform; what is tested where |
 | [`docs/Direction.md`](docs/Direction.md) | strategy, hardware terrain, language choice, candidate architectures |
 
-The website, [matterworm.github.io](https://matterworm.github.io), is a separate repository ([`Matterworm/matterworm.github.io`](https://github.com/Matterworm/matterworm.github.io)): overview, documentation, progress and a blog.
+The website, [matterworm.org](https://matterworm.org/), is a separate repository ([`Matterworm/matterworm.github.io`](https://github.com/Matterworm/matterworm.github.io)): overview, documentation, progress and a blog.
 
 ## License
 

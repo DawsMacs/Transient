@@ -1,4 +1,6 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
+**Current release:** [Novice](NoviceRelease.md) has its own dependency-free Cargo workspace. Start with its source-release instructions. The platform guide below describes the frozen Baby reference and shared exam judge.
 <!-- Copyright (C) 2026 DawsMacs -->
 
 # Running Matter

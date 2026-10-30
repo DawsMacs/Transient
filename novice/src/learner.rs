@@ -194,6 +194,7 @@ pub struct Stats {
     /// Recurrences accepted after holding out part of the table: without, and with, held-out points that the refitted step gets wrong and that
     /// were skipped as base cases for it.
     pub validations_clean: u64,
+    // Legacy report field: strict validation no longer accepts any target-dependent skips.
     pub validations_with_skips: u64,
 }
 
@@ -1123,6 +1124,7 @@ impl Novice {
     /// Whether a recurrence found on the whole table is also right about points it has not seen. Four times, a different quarter of the points is
     /// hidden; the step is found again from the other three quarters and must give the right value, through the chain of reductions, at the hidden
     /// points the chain reaches. Over the four rounds it must reach at least three of them and be right at every one.
+    /// The recurrence shape was selected on the full table; this is a refitted-step check, not an independent outer evaluation.
     fn holds_out(&mut self, fix: &Rc<program::FixDef>, known: &BTreeMap<Vec<i64>, i64>, arity: usize) -> bool {
         let fold_of = |p: &Vec<i64>| -> u64 {
             let mut h: u64 = 0x9E37_79B9_7F4A_7C15;
@@ -1134,22 +1136,7 @@ impl Novice {
             }
             h % 4
         };
-        // The points the recurrence does not account for even with the whole table are base cases: they are given, not predicted.
-        let base_points: std::collections::BTreeSet<Vec<i64>> = known
-            .iter()
-            .filter(|(p, &t)| {
-                let mut row = (*p).clone();
-                for step in &fix.steps {
-                    match step.iter().map(|g| g.eval(p)).collect::<Option<Vec<i64>>>().and_then(|next| known.get(&next).copied()) {
-                        Some(r) => row.push(r),
-                        None => return false,
-                    }
-                }
-                fix.e.eval(&row) != Some(t)
-            })
-            .map(|(p, _)| p.clone())
-            .collect();
-        let (mut reached, mut right, mut skipped_wrong) = (0usize, 0usize, 0usize);
+        let (mut reached, mut right) = (0usize, 0usize);
         for fold in 0..4 {
             let training: BTreeMap<Vec<i64>, i64> = known.iter().filter(|(p, _)| fold_of(p) != fold).map(|(p, t)| (p.clone(), *t)).collect();
             let (mut rows, mut ts) = (Vec::new(), Vec::new());
@@ -1171,25 +1158,10 @@ impl Novice {
             let Some(step) = self.find_step(&rows, &ts, arity, fix.steps.len(), fix.e.size().max(5), 1) else { return false };
             let again = program::FixDef { arity, steps: fix.steps.clone(), e: step, table: Rc::new(std::cell::RefCell::new(training)), base_cost: 0 };
             for (p, &t) in known {
-                if fold_of(p) != fold || base_points.contains(p) {
+                if fold_of(p) != fold {
                     continue;
                 }
-                // A point this step does not explain even from its true predecessors is a base case for it, not something it failed to predict.
-                let mut row = p.clone();
-                let mut complete = true;
-                for step in &fix.steps {
-                    match step.iter().map(|g| g.eval(p)).collect::<Option<Vec<i64>>>().and_then(|next| known.get(&next).copied()) {
-                        Some(r) => row.push(r),
-                        None => complete = false,
-                    }
-                }
-                if complete && again.e.eval(&row) != Some(t) {
-                    // (counted, so that a rule accepted only because of such skips shows as that)
-                    if again.apply(p, program::FIX_DEPTH).is_some_and(|v| v != t) {
-                        skipped_wrong += 1;
-                    }
-                    continue;
-                }
+                // Score every reachable held-out point. Its answer may judge the prediction, never choose whether it counts.
                 if let Some(v) = again.apply(p, program::FIX_DEPTH) {
                     reached += 1;
                     right += usize::from(v == t);
@@ -1204,11 +1176,7 @@ impl Novice {
         }
         let accepted = reached >= 3 && right == reached;
         if accepted {
-            if skipped_wrong == 0 {
-                self.stats.validations_clean += 1;
-            } else {
-                self.stats.validations_with_skips += 1;
-            }
+            self.stats.validations_clean += 1;
         }
         accepted
     }
@@ -2655,7 +2623,7 @@ mod recurrence_tests {
     #[test]
     fn what_a_failing_kind_costs_falls_with_the_failures_that_came_before_it() {
         let (spent, kinds) = spends_on_failing_after_successes();
-        assert_eq!(kinds, (12, 4), "four recurrences found, eight kinds of arbitrary codes left unexplained");
+        assert_eq!(kinds, (12, 3), "three recurrences found; sparse popcount fails strict validation and arbitrary codes stay unexplained");
         // Same kind of data, same size: the dear stages (larger steps, two earlier values) have never paid, so after seven failures they get
         // little. Before this was a fall of a quarter; the first stage and the closed forms are paid in full every time.
         assert!(spent[7] * 10 < spent[0] * 6, "the eighth failing kind cost {} against {} for the first", spent[7], spent[0]);
@@ -2875,22 +2843,20 @@ mod recurrence_tests {
     }
 
     #[test]
-    fn a_recurrence_accepted_only_by_skipping_points_it_gets_wrong_is_counted_as_such() {
-        // The number of ones in the binary form of 1 to 22 (but 8): the validation refits the step on part of the table, and a refit that does not
-        // explain a held-out point even from its true predecessors used to be skipped without a trace. The count of such skips is now kept.
+    fn a_recurrence_that_mispredicts_a_held_out_point_is_rejected() {
+        // This sparse table previously passed only because the held-out answer chose which predictions to exclude.
         let mut n = Novice::default();
         teach_unary(&mut n, "zarbosido", popcount, (1..=22).filter(|x| *x != 8));
         n.ready();
-        assert_eq!(n.kinds(), (1, 1));
-        let (clean, skipped) = (n.stats.validations_clean, n.stats.validations_with_skips);
-        assert_eq!(clean + skipped, 1, "one recurrence accepted");
-        assert_eq!(skipped, 1, "this one only because points the refit gets wrong were skipped");
-        // A table with enough points for every part to identify the step is accepted without skipping a thing.
+        assert_eq!(n.kinds(), (1, 0), "a failed held-out prediction must reject the recurrence");
+        assert_eq!(n.stats.validations_clean + n.stats.validations_with_skips, 0);
+        // A larger table can identify a step that predicts the held-out points without exclusions.
         let mut big = Novice::default();
         teach_unary(&mut big, "zarbosido", popcount, (1..=200).filter(|x| x % 9 != 8));
         big.ready();
         assert_eq!(big.kinds(), (1, 1));
-        assert_eq!(big.stats.validations_with_skips, 0, "a large table needs no skipped points");
+        assert!(big.stats.validations_clean > 0);
+        assert_eq!(big.stats.validations_with_skips, 0);
     }
 
     #[test]
@@ -2937,7 +2903,8 @@ mod recurrence_tests {
         // One record for each kind that reached the recurrence search.
         let of = |key: &str| on.shadow.iter().find(|r| r.key == key).unwrap_or_else(|| panic!("no record for {key}: {:?}", on.shadow.iter().map(|r| r.key.clone()).collect::<Vec<_>>()));
         let (real, noise) = (of("zarbosido"), of("noiseyarn"));
-        assert!(real.found && !noise.found);
+        assert!(!real.found, "sparse popcount must fail strict validation even with the shadow audit enabled");
+        assert!(!noise.found, "arbitrary codes must remain unexplained");
         assert!(real.evaluations > 0 && noise.evaluations > 0, "the work spent inside the search is recorded");
         // A real recurrence is never what the sound check rejects.
         assert!(!real.cost_bound_rejects);
